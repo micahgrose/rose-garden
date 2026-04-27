@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>AUTOMATA</title>
+		<link rel="stylesheet" href="automata.css">
+	</head>
+	<body>
+		<div id='topBarZone'>
+			<div id='topBar'>
+				<div class='bar-group'>
+					<a href='/' class='back-link'>◀ R G</a>
+				</div>
+				<div class='bar-group'>
+					<button id='stopGo' onclick='start();'>G O</button>
+					<button id='stepBack' onclick='stepBack();' disabled>◀ B A C K</button>
+					<button id='step' onclick='stepGo();'>F W D ▶</button>
+					<button id='resetBtn' onclick='resetToPreGo();' disabled>R E S E T</button>
+				</div>
+				<div class='bar-group'>
+					<button id='randGen' onclick='prepGen();'>G E N E R A T E</button>
+					<input id='randGenIn' placeholder='# of cells'/>
+					<select id='overlaySelect'>
+						<option>O V E R L A Y</option>
+						<option>R E P L A C E</option>
+					</select>
+				</div>
+				<div class='bar-group'>
+					<button onclick='clearAll()'>C L E A R</button>
+				</div>
+				<div class='bar-group'>
+					<button id='saveBtn' onclick='saveGrid()'>S A V E</button>
+					<select id='saveSelect'><option value=''>-- saves --</option></select>
+					<button id='loadBtn' onclick='loadGrid()'>L O A D</button>
+					<button id='deleteSaveBtn' onclick='deleteSave()'>D E L E T E</button>
+				</div>
+			</div>
+		</div>
+
+		<div id='inventory'>
+			<div class='inv-item' data-type='mobile'>
+				<div class='inv-cell mobile'></div>
+				<span class='inv-key'>1</span>
+				<span class='inv-label'>Move</span>
+			</div>
+			<div class='inv-item' data-type='push'>
+				<div class='inv-cell push'></div>
+				<span class='inv-key'>2</span>
+				<span class='inv-label'>Push</span>
+			</div>
+			<div class='inv-item' data-type='rotate'>
+				<div class='inv-cell rotate'></div>
+				<span class='inv-key'>3</span>
+				<span class='inv-label'>Spin</span>
+			</div>
+			<div class='inv-item' data-type='static'>
+				<div class='inv-cell static'></div>
+				<span class='inv-key'>4</span>
+				<span class='inv-label'>Wall</span>
+			</div>
+			<div class='inv-item' data-type='generator'>
+				<div class='inv-cell generator'></div>
+				<span class='inv-key'>5</span>
+				<span class='inv-label'>Gen</span>
+			</div>
+			<div class='inv-item' data-type='delete'>
+				<div class='inv-cell delete-cell'></div>
+				<span class='inv-key'>6</span>
+				<span class='inv-label'>Delete</span>
+			</div>
+		</div>
+
+		<div id='ghostCell'></div>
+
+		<div id='xLine'></div>
+		<div id='yLine'></div>
+		<div id='xyLabel'><p>x</p><p>y</p></div>
+
+		<div id='dialogOverlay' class='hidden'></div>
+
+		<div id='gameConfirm' class='game-dialog hidden'>
+			<p id='confirmMsg'></p>
+			<div class='dialog-btns'>
+				<button id='confirmYes'>Y E S</button>
+				<button id='confirmNo'>N O</button>
+			</div>
+		</div>
+
+		<div id='gamePrompt' class='game-dialog hidden'>
+			<p id='promptMsg'></p>
+			<input id='promptInput' type='text'/>
+			<div class='dialog-btns'>
+				<button id='promptOk'>O K</button>
+				<button id='promptCancel'>C A N C E L</button>
+			</div>
+		</div>
+
+		<!-- Tutorial panel -->
+		<div id='tutorialPanel' class='hidden'>
+			<div id='tutDemoNum'></div>
+			<div id='tutTitle'></div>
+			<p id='tutText'></p>
+			<button id='tutBtn'></button>
+		</div>
+
+		<script src='automata.js'></script>
+	</body>
+</html>

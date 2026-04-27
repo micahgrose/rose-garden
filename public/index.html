@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoseGarden</title>
+    <link rel="icon" type="image/png" href="/RoseGardenIcon.png">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- ── Landing ── -->
+    <div id="landingPage">
+        <div class="hero">
+            <div class="hero-text">
+                <img src="/RoseGardenIcon.png" alt="RoseGarden" class="hero-logo">
+                <p>A Growing Garden of Games.</p>
+                <div class="hero-btns" id="heroBtns">
+                    <button id="showLoginBtn" class="btn primary">Log In</button>
+                    <button id="showRegisterBtn" class="btn outline">Create Account</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="games-preview hidden" id="gamesSection">
+            <h2>Games</h2>
+            <div class="games-grid" id="gamesGrid">
+                <div class="game-card" id="automataCard">
+                    <div class="game-thumb automata-thumb">⚙️</div>
+                    <div class="game-info">
+                        <h3>AUTOMATA</h3>
+                        <p>A cellular sandbox. Place Pushers, Spinners, Generators and watch the chaos unfold.</p>
+                        <span class="badge free">Free</span>
+                    </div>
+                </div>
+                <div class="game-card coming-soon">
+                    <div class="game-thumb">🎮</div>
+                    <div class="game-info">
+                        <h3>More coming soon</h3>
+                        <p>New games added regularly.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Auth Modal ── -->
+    <div id="authModal" class="modal hidden">
+        <div class="modal-box">
+            <button class="modal-close" id="closeModal">✕</button>
+
+            <!-- Login -->
+            <div id="loginForm">
+                <h2>Log In</h2>
+                <input type="text" id="loginUsername" placeholder="Username" autocomplete="username">
+                <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+                <div class="error" id="loginError"></div>
+                <button class="btn primary full" id="loginBtn">Log In</button>
+                <p class="switch-link">No account? <span id="switchToRegister">Create one</span></p>
+                <p class="switch-link" style="margin-top:6px;"><span id="forgotPasswordLink">Forgot password?</span></p>
+            </div>
+
+            <!-- Forgot password -->
+            <div id="forgotForm" class="hidden">
+                <h2>Reset Password</h2>
+                <p style="font-size:0.85rem;color:#888;margin-bottom:14px;display:block;">Enter your username to receive a reset code.</p>
+                <input type="text" id="forgotUsername" placeholder="Username">
+                <div class="error"   id="forgotError"></div>
+                <div class="success" id="forgotSuccess"></div>
+                <button class="btn primary full" id="forgotSendBtn">Send Reset Code</button>
+
+                <div id="forgotCodeSection" class="hidden" style="margin-top:14px;">
+                    <p style="font-size:0.85rem;color:#cceeff;margin-bottom:8px;display:block;">Enter the 8-digit code from your email:</p>
+                    <input type="text" id="forgotCode" placeholder="00000000" maxlength="8" autocomplete="off">
+                    <div class="error" id="resetError"></div>
+                    <button class="btn primary full" id="resetSubmitBtn" style="margin-top:4px;">Submit Code</button>
+                </div>
+
+                <p class="switch-link" style="margin-top:12px;"><span id="backToLogin">← Back to login</span></p>
+            </div>
+
+            <!-- Register -->
+            <div id="registerForm" class="hidden">
+                <h2>Create Account</h2>
+
+                <div id="registerInputs">
+                    <input type="text"     id="regUsername" placeholder="Username (3–20 chars)" autocomplete="username">
+                    <input type="email"    id="regEmail"    placeholder="Email address"         autocomplete="email">
+                    <input type="password" id="regPassword" placeholder="Password (min 6 chars)" autocomplete="new-password">
+                    <div class="error"   id="registerError"></div>
+                    <div class="success" id="registerSuccess"></div>
+                    <button class="btn primary full" id="registerBtn">Create Account</button>
+                </div>
+
+                <!-- Verification code entry (shown after successful register) -->
+                <div id="verifySection" class="hidden" style="margin-top:4px;">
+                    <p style="font-size:0.85rem;color:#cceeff;margin-bottom:8px;display:block;">Enter the 6-digit code sent to your email:</p>
+                    <input type="text" id="verifyCode" placeholder="000000" maxlength="6" autocomplete="off">
+                    <div class="error"   id="verifyError"></div>
+                    <div class="success" id="verifySuccess"></div>
+                    <button class="btn primary full" id="verifyBtn" style="margin-top:4px;">Verify Email</button>
+                    <p class="switch-link" style="margin-top:8px;"><span id="resendCodeLink">Resend code</span></p>
+                </div>
+
+                <p class="switch-link" style="margin-top:12px;">Have an account? <span id="switchToLogin">Log in</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Logged-in header ── -->
+    <div id="userHeader" class="user-header hidden">
+        <span id="userGreeting"></span>
+        <button class="btn small outline" id="accountBtn">Account</button>
+        <button class="btn small" id="logoutBtn">Log Out</button>
+    </div>
+
+    <!-- ── Account Panel ── -->
+    <div id="accountModal" class="modal hidden">
+        <div class="modal-box">
+            <button class="modal-close" id="closeAccount">✕</button>
+            <h2>Your Account</h2>
+            <p id="accountUsername"></p>
+            <p id="accountEmail"></p>
+            <p id="accountCreated"></p>
+            <hr>
+            <h3 style="color:#c0394b;">Delete Account</h3>
+            <p style="font-size:0.85rem;color:#888;">This is permanent and cannot be undone.</p>
+            <input type="password" id="deletePassword" placeholder="Confirm your password">
+            <div class="error" id="deleteError"></div>
+            <button class="btn danger full" id="deleteBtn">Delete My Account</button>
+        </div>
+    </div>
+
+    <!-- ── Banner ── -->
+    <div id="verifiedBanner" class="banner hidden"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
