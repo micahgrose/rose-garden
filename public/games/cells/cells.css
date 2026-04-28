@@ -1,0 +1,403 @@
+* {
+	box-sizing: border-box;
+}
+
+body {
+	overflow: hidden;
+	background-color: black;
+	user-select: none;
+}
+
+.ccw {
+	filter: hue-rotate(180deg) brightness(1.15);
+}
+
+div {
+	width: 50px;
+	height: 50px;
+	border-radius: 5px;
+	transition: all .35s;
+	position: absolute;
+}
+
+button, select {
+	width: auto;
+	min-width: 70px;
+	height: 30px;
+	padding: 0 10px;
+	background-color: lightgrey;
+	border: 2.5px solid #0088bb;
+	border-radius: 6px;
+	box-shadow: 0 0 10px #0099cc99, 0 0 20px #0077aa44;
+	font-family: Courier New, monospace;
+	font-size: 11px;
+	white-space: nowrap;
+	text-align: center;
+	cursor: pointer;
+}
+
+button:hover, select:hover, option:hover {
+	border: 2.5px solid #0088bb;
+	box-shadow: 0 0 14px #00aaddbb, 0 0 28px #0088aa66;
+	background-color: grey;
+}
+
+button:active, select:active, option:active {
+	border: 2.5px solid #0088bb;
+	background-color: black;
+	color: white;
+}
+
+input {
+	width: 120px;
+	height: 28px;
+	padding: 0 8px;
+	background-color: lightgrey;
+	border: 2.5px solid #0088bb;
+	border-radius: 6px;
+	box-shadow: 0 0 10px #0099cc99, 0 0 20px #0077aa44;
+	font-size: 11px;
+}
+
+p, h3, h4 {
+	color: white;
+	display: inline;
+}
+
+label {
+	color: white;
+	font-size: 10px;
+}
+
+button:disabled {
+	opacity: 0.3;
+	cursor: default;
+	pointer-events: none;
+}
+
+/* ── Top bar ── */
+#topBarZone {
+	position: fixed !important;
+	top: 0;
+	left: 0;
+	right: 0;
+	width: 100vw !important;
+	height: 12px;
+	background: rgba(0, 4, 36, 0.94);
+	border-bottom: 2px solid #0088bb77;
+	box-shadow: 0 2px 18px rgba(0, 0, 0, 0.7);
+	backdrop-filter: blur(8px);
+	overflow: visible;
+	z-index: 100;
+	border-radius: 0 !important;
+	transition: none !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+#topBarZone::after {
+	content: '▼';	
+	font-size: 30px;
+	color: #aabbddcc;
+	position: static !important;
+	width: auto !important;
+	height: auto !important;
+	border-radius: 0 !important;
+	transition: none !important;
+	line-height: 0;
+}
+
+#topBar {
+	position: absolute !important;
+	top: 0;
+	left: 0;
+	right: 0;
+	width: 100vw !important;
+	height: 50px !important;
+	border-radius: 0 !important;
+	background: rgba(0, 4, 36, 0.94);
+	border-bottom: 2px solid #0088bb77;
+	box-shadow: 0 2px 18px rgba(0, 0, 0, 0.7);
+	transform: translateY(-100%);
+	transition: transform 0.25s ease !important;
+	display: flex;
+	align-items: center;
+	justify-content: space-evenly;
+	padding: 0 16px;
+	backdrop-filter: blur(8px);
+}
+
+.bar-group {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	position: static !important;
+	width: auto !important;
+	height: auto !important;
+	border-radius: 0 !important;
+	transition: none !important;
+}
+
+#topBarZone:hover #topBar,
+#topBar:hover {
+	transform: translateY(0);
+}
+
+.bar-sep {
+	width: 1px !important;
+	height: 28px !important;
+	background: #0088bb55;
+	margin: 0 4px;
+	border-radius: 0 !important;
+	position: static !important;
+	transition: none !important;
+	flex-shrink: 0;
+}
+
+#xLine {
+	width: 100vw;
+	height: .15vh;
+	background-color: white;
+	position: absolute;
+	top: 99.5vh;
+}
+
+#yLine {
+	position: absolute;
+	height: 100vh;
+	width: .15vw;
+	background-color: white;
+	left: 99.5vw;
+}
+
+#xyLabel > p {
+	color: green;
+	position: absolute;
+	top: 1.5vh;
+	left: 1vw;
+}
+
+#xyLabel > p + p {
+	color: red;
+	position: absolute;
+	left: 1.5vw;
+	top: 0vh;
+}
+
+#xyLabel {
+	position: absolute;
+	left: 97vw;
+	top: 94vh;
+}
+
+.referenceCoords {
+	position: absolute;
+	color: white;
+}
+
+.push {
+	background-image: url('Images/push.png');
+}
+
+.rotate {
+	background-image: url('Images/rotate.png');
+}
+
+.static {
+	background-color: #3a3a3a;
+}
+
+.mobile {
+	background-color: lightgrey;
+}
+
+.generator {
+	background-image: url('Images/generator.png');
+}
+
+/* ── Inventory ── */
+#inventory {
+	position: fixed;
+	left: 12px;
+	top: 50%;
+	transform: translateY(-50%);
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: auto;
+	height: auto;
+	border-radius: 0;
+	transition: none;
+}
+
+#inventory.disabled {
+	opacity: 0.35;
+	pointer-events: none;
+}
+
+.inv-item {
+	width: 68px;
+	height: 68px;
+	position: relative;
+	background: #111;
+	border: 2px solid #333;
+	border-radius: 8px;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.inv-item:hover {
+	border-color: #00cfff;
+	background: #0a1a2a;
+}
+
+.inv-item.active {
+	border-color: #00cfff;
+	background: #0a1522;
+	box-shadow: 0 0 12px #00cfff55;
+}
+
+.inv-cell {
+	width: 34px;
+	height: 34px;
+	border-radius: 4px;
+	position: relative;
+	background-size: cover;
+	background-position: center;
+	transition: none;
+}
+
+.inv-item[data-type='delete'] {
+	border-color: #442222;
+}
+.inv-item[data-type='delete']:hover {
+	border-color: #ff4444;
+	background: #2a0a0a;
+}
+.inv-item[data-type='delete'].active {
+	border-color: #ff4444;
+	background: #1a0505;
+	box-shadow: 0 0 12px #ff444455;
+}
+
+.inv-cell.delete-cell {
+	background-color: #aa2222;
+	background-image: url('Images/trash.png');
+	background-size: 65%;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+
+/* ── Delete cell (placed + ghost) ── */
+.delete, .eraser {
+	background-color: rgba(180, 20, 20, 0.85);
+	background-image: url('Images/trash.png');
+	background-size: 65%;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+
+.inv-key {
+	position: absolute;
+	top: 4px;
+	left: 6px;
+	font-size: 10px;
+	color: #555;
+	font-family: 'Courier New', monospace;
+}
+
+.inv-label {
+	font-size: 9px;
+	color: #777;
+	font-family: 'Courier New', monospace;
+	letter-spacing: 0.05em;
+}
+
+/* ── Ghost cell ── */
+#ghostCell {
+	display: none;
+	pointer-events: none;
+	opacity: 0.55;
+	z-index: 50;
+	transition: none !important;
+}
+
+
+/* ── Dialogs ── */
+#dialogOverlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.55);
+	z-index: 199;
+}
+#dialogOverlay.hidden { display: none; }
+
+.game-dialog {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	background: #0d0d0d;
+	border: 2.5px solid #0088bb;
+	border-radius: 10px;
+	box-shadow: 0 0 18px #0099ccaa, 0 0 36px #0077aa55;
+	padding: 22px 28px;
+	z-index: 200;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	min-width: 260px;
+	font-family: 'Courier New', monospace;
+	color: white;
+	width: auto;
+	height: auto;
+	border-radius: 10px;
+	transition: none;
+}
+.game-dialog.hidden { display: none; }
+.game-dialog p {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: #cceeff;
+	display: block;
+}
+.game-dialog input {
+	width: 100%;
+	box-sizing: border-box;
+}
+.dialog-btns {
+	display: flex;
+	gap: 10px;
+	justify-content: center;
+	position: static;
+	width: auto;
+	height: auto;
+	border-radius: 0;
+	transition: none;
+}
+
+/* ── messages ── */
+.message {
+	font-size:20px;
+	position:absolute;
+	top: 95vh;
+	left:43vw;
+	color: red;
+	font-family: 'Courier New', monospace;
+	letter-spacing: 0.05em;
+	animation: fadeOut 2s forwards;
+}
+
+@keyframes fadeOut {
+	0% { opacity: 1; top:95vh;}
+	50% { opacity: 1; top:90vh;}
+	100% { opacity: 0; top: 85vh;}
+}

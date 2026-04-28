@@ -1,15 +1,11 @@
 <!DOCTYPE html>
 <html>
 	<head>
-		<title>AUTOMATA</title>
-		<link rel="stylesheet" href="automata.css">
+		<link rel="stylesheet" href="cells.css">
 	</head>
 	<body>
 		<div id='topBarZone'>
 			<div id='topBar'>
-				<div class='bar-group'>
-					<a href='/' class='back-link'>◀ Rose Garden</a>
-				</div>
 				<div class='bar-group'>
 					<button id='stopGo' onclick='start();'>G O</button>
 					<button id='stepBack' onclick='stepBack();' disabled>◀ B A C K</button>
@@ -26,7 +22,6 @@
 				</div>
 				<div class='bar-group'>
 					<button onclick='clearAll()'>C L E A R</button>
-				<button onclick='showControls()'>C O N T R O L S</button>
 				</div>
 				<div class='bar-group'>
 					<button id='saveBtn' onclick='saveGrid()'>S A V E</button>
@@ -95,23 +90,6 @@
 			</div>
 		</div>
 
-		<!-- Controls dialog -->
-		<div id='controlsDialog' class='game-dialog hidden'>
-			<p style='font-size:13px;font-weight:bold;letter-spacing:0.1em;color:#00ddff;'>CONTROLS</p>
-			<p><b>1–6</b> — Select cell type<br><b>R</b> — Rotate / flip spinner<br><b>Esc</b> — Cancel placement<br><b>Enter</b> — Generate random cells<br><b>Left click</b> — Place cell<br><b>Right click / drag</b> — Erase cell<br><b>Left click cell</b> — Pick up cell</p>
-			<div class='dialog-btns'>
-				<button id='controlsClose'>C L O S E</button>
-			</div>
-		</div>
-
-		<!-- Tutorial panel -->
-		<div id='tutorialPanel' class='hidden'>
-			<div id='tutDemoNum'></div>
-			<div id='tutTitle'></div>
-			<p id='tutText'></p>
-			<button id='tutBtn'></button>
-		</div>
-
-		<script src='automata.js'></script>
+		<script src='cells.js'></script>
 	</body>
 </html>

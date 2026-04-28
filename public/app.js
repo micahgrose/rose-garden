@@ -286,13 +286,48 @@ document.getElementById('accountBtn').addEventListener('click', () => {
     document.getElementById('accountEmail').textContent    = `Email: ${currentUser.email}`;
     const date = new Date(currentUser.created_at).toLocaleDateString();
     document.getElementById('accountCreated').textContent  = `Member since: ${date}`;
-    document.getElementById('deleteError').textContent     = '';
-    document.getElementById('deletePassword').value        = '';
+    document.getElementById('deleteError').textContent      = '';
+    document.getElementById('deletePassword').value         = '';
+    document.getElementById('changePassError').textContent  = '';
+    document.getElementById('changePassSuccess').textContent = '';
+    document.getElementById('currentPassword').value        = '';
+    document.getElementById('newPassword').value            = '';
     accountModal.classList.remove('hidden');
 });
 
 document.getElementById('closeAccount').addEventListener('click', () => {
     accountModal.classList.add('hidden');
+});
+
+// ── Change password ───────────────────────────────────
+document.getElementById('changePassBtn').addEventListener('click', async () => {
+    const current = document.getElementById('currentPassword').value;
+    const newPass = document.getElementById('newPassword').value;
+    const errEl   = document.getElementById('changePassError');
+    const okEl    = document.getElementById('changePassSuccess');
+    errEl.textContent = '';
+    okEl.textContent  = '';
+
+    if (!current || !newPass) { errEl.textContent = 'Both fields are required.'; return; }
+    if (newPass.length < 6)   { errEl.textContent = 'New password must be at least 6 characters.'; return; }
+
+    try {
+        const res  = await fetch('/api/account/password', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ current, newPassword: newPass })
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error; return; }
+        okEl.textContent = 'Password changed!';
+        document.getElementById('currentPassword').value = '';
+        document.getElementById('newPassword').value = '';
+    } catch {
+        errEl.textContent = 'Something went wrong. Try again.';
+    }
 });
 
 // ── Delete account ────────────────────────────────────

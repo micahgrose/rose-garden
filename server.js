@@ -95,11 +95,12 @@ function genCode(digits) {
     return String(Math.floor(Math.random() * Math.pow(10, digits))).padStart(digits, '0');
 }
 
-function genPassword(len = 12) {
-    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    let p = '';
-    for (let i = 0; i < len; i++) p += chars[Math.floor(Math.random() * chars.length)];
-    return p;
+function genPassword() {
+    const words = ['rose','garden','bloom','petal','thorn','ember','stone','river','cloud','storm','flame','cedar'];
+    const w1 = words[Math.floor(Math.random() * words.length)];
+    const w2 = words[Math.floor(Math.random() * words.length)];
+    const num = Math.floor(Math.random() * 900) + 100;
+    return w1 + w2 + num;
 }
 
 // ── Routes ─────────────────────────────────────────────
@@ -256,6 +257,25 @@ app.get('/api/me', requireAuth, async (req, res) => {
     const user = await dbFind({ _id: req.user.id });
     if (!user) return res.status(404).json({ error: 'User not found.' });
     res.json({ username: user.username, email: user.email, created_at: user.created_at });
+});
+
+// Change password
+app.put('/api/account/password', requireAuth, async (req, res) => {
+    const { current, newPassword } = req.body;
+    if (!current || !newPassword)
+        return res.status(400).json({ error: 'Both fields are required.' });
+    if (newPassword.length < 6)
+        return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+
+    const user = await dbFind({ _id: req.user.id });
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    const match = await bcrypt.compare(current, user.password_hash);
+    if (!match) return res.status(401).json({ error: 'Current password is incorrect.' });
+
+    const password_hash = await bcrypt.hash(newPassword, 12);
+    await dbUpdate({ _id: user._id }, { $set: { password_hash } });
+    res.json({ message: 'Password changed.' });
 });
 
 // Delete account

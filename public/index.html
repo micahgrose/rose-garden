@@ -123,6 +123,13 @@
             <p id="accountEmail"></p>
             <p id="accountCreated"></p>
             <hr>
+            <h3>Change Password</h3>
+            <input type="password" id="currentPassword" placeholder="Current password">
+            <input type="password" id="newPassword" placeholder="New password (min 6 chars)">
+            <div class="error" id="changePassError"></div>
+            <div class="success" id="changePassSuccess"></div>
+            <button class="btn primary full" id="changePassBtn">Change Password</button>
+            <hr>
             <h3 style="color:#c0394b;">Delete Account</h3>
             <p style="font-size:0.85rem;color:#888;">This is permanent and cannot be undone.</p>
             <input type="password" id="deletePassword" placeholder="Confirm your password">

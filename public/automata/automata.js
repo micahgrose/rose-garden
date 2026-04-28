@@ -688,6 +688,16 @@ function gamePrompt(message, callback) {
 }
 
 
+function showControls() {
+	const box = document.getElementById('controlsDialog');
+	box.classList.remove('hidden');
+	_showOverlay();
+	document.getElementById('controlsClose').onclick = () => {
+		box.classList.add('hidden');
+		_hideOverlay();
+	};
+}
+
 // ── Inventory / Placement ─────────────────────────────
 let placingType    = null;
 let ghostDir       = 4;
