@@ -1,3 +1,14 @@
+// ── Helpers ───────────────────────────────────────────
+function setLoading(btn, loading) {
+    if (loading) {
+        btn.classList.add('sending');
+        btn.disabled = true;
+    } else {
+        btn.classList.remove('sending');
+        btn.disabled = false;
+    }
+}
+
 // ── State ─────────────────────────────────────────────
 let authToken   = localStorage.getItem('rg_token') || null;
 let currentUser = null;
@@ -74,9 +85,11 @@ document.getElementById('registerBtn').addEventListener('click', async () => {
     const password = document.getElementById('regPassword').value;
     const errEl    = document.getElementById('registerError');
     const okEl     = document.getElementById('registerSuccess');
+    const btn      = document.getElementById('registerBtn');
 
     errEl.textContent = '';
     okEl.textContent  = '';
+    setLoading(btn, true);
 
     try {
         const res  = await fetch('/api/register', {
@@ -88,14 +101,15 @@ document.getElementById('registerBtn').addEventListener('click', async () => {
         if (!res.ok) { errEl.textContent = data.error; return; }
 
         pendingVerifyEmail = email;
-        okEl.textContent   = data.message;
+        okEl.textContent   = data.message + ' (Check spam if you don\'t see it.)';
 
-        // Show code entry, hide inputs
         document.getElementById('registerInputs').classList.add('hidden');
         document.getElementById('verifySection').classList.remove('hidden');
         document.getElementById('verifyCode').focus();
     } catch {
         errEl.textContent = 'Something went wrong. Try again.';
+    } finally {
+        setLoading(btn, false);
     }
 });
 
@@ -135,8 +149,11 @@ document.getElementById('resendCodeLink').addEventListener('click', async () => 
     if (!pendingVerifyEmail) return;
     const errEl = document.getElementById('verifyError');
     const okEl  = document.getElementById('verifySuccess');
+    const link  = document.getElementById('resendCodeLink');
     errEl.textContent = '';
     okEl.textContent  = '';
+    link.style.pointerEvents = 'none';
+    link.style.opacity = '0.5';
     try {
         const res  = await fetch('/api/resend-verification', {
             method: 'POST',
@@ -145,9 +162,12 @@ document.getElementById('resendCodeLink').addEventListener('click', async () => 
         });
         const data = await res.json();
         if (!res.ok) { errEl.textContent = data.error; return; }
-        okEl.textContent = data.message;
+        okEl.textContent = data.message + ' (Check spam if you don\'t see it.)';
     } catch {
         errEl.textContent = 'Failed to resend. Try again.';
+    } finally {
+        link.style.pointerEvents = '';
+        link.style.opacity = '';
     }
 });
 
@@ -196,11 +216,13 @@ document.getElementById('forgotSendBtn').addEventListener('click', async () => {
     const username = document.getElementById('forgotUsername').value.trim();
     const errEl    = document.getElementById('forgotError');
     const okEl     = document.getElementById('forgotSuccess');
+    const btn      = document.getElementById('forgotSendBtn');
     errEl.textContent = '';
     okEl.textContent  = '';
 
     if (!username) { errEl.textContent = 'Enter your username.'; return; }
 
+    setLoading(btn, true);
     try {
         const res  = await fetch('/api/forgot-password', {
             method: 'POST',
@@ -210,11 +232,13 @@ document.getElementById('forgotSendBtn').addEventListener('click', async () => {
         const data = await res.json();
         if (!res.ok) { errEl.textContent = data.error; return; }
 
-        okEl.textContent = data.message;
+        okEl.textContent = data.message + ' (Check spam if you don\'t see it.)';
         document.getElementById('forgotCodeSection').classList.remove('hidden');
         document.getElementById('forgotCode').focus();
     } catch {
         errEl.textContent = 'Something went wrong. Try again.';
+    } finally {
+        setLoading(btn, false);
     }
 });
 
