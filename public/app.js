@@ -359,7 +359,10 @@ document.getElementById('deleteBtn').addEventListener('click', async () => {
     }
 });
 
-// ── AUTOMATA game card ────────────────────────────────
+// ── Game cards ────────────────────────────────────────
 document.getElementById('automataCard').addEventListener('click', () => {
     window.location.href = '/automata';
+});
+document.getElementById('marbleRunCard').addEventListener('click', () => {
+    window.location.href = '/marble-run';
 });
