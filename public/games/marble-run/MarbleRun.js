@@ -547,7 +547,7 @@ function getSelectionBounds() {
 }
 
 function inSelectionBounds(wx, wy) {
-	if (selected.size < 2) return false;
+	if (selected.size < 1) return false;
 	const b = getSelectionBounds();
 	if (!b) return false;
 	const pad = 10 / camScale;
@@ -604,7 +604,7 @@ document.addEventListener('mousemove', e => {
 		draggingNode.obj[draggingNode.px] = worldX;
 		draggingNode.obj[draggingNode.py] = worldY;
 		if (draggingNode.inv) draggingNode.obj.invalidate();
-	} else if (mode === 'select' && selectBox && rightMouseDown) {
+	} else if (selectBox && rightMouseDown) {
 		selectBox.ex = worldX; selectBox.ey = worldY;
 	}
 	if (mode === 'paint' && isPainting && currentSq) currentSq.addPoint(worldX, worldY);
@@ -613,12 +613,10 @@ document.addEventListener('mousemove', e => {
 document.addEventListener('mousedown', e => {
 	if (e.button === 2) {
 		if (isOverPanel(e)) return;
-		if (mode === 'select') {
-			if (inSelectionBounds(worldX, worldY)) return;
-			rightMouseDown = true;
-			selected.clear(); updatePanels();
-			selectBox = { sx: worldX, sy: worldY, ex: worldX, ey: worldY };
-		}
+		if (mode === 'select' && inSelectionBounds(worldX, worldY)) return;
+		rightMouseDown = true;
+		if (mode === 'select') { selected.clear(); updatePanels(); }
+		selectBox = { sx: worldX, sy: worldY, ex: worldX, ey: worldY };
 		return;
 	}
 	if (e.button !== 0) return;
@@ -644,6 +642,15 @@ document.addEventListener('mousedown', e => {
 				updatePanels();
 			}
 			return;
+		}
+		if (selected.size === 1 && !e.shiftKey) {
+			if (inSelectionBounds(worldX, worldY)) {
+				isDraggingGroup = true;
+				groupDragStartX = worldX; groupDragStartY = worldY;
+				groupDragSnapshot = snapshotSelected();
+				return;
+			}
+			selected.clear(); updatePanels();
 		}
 		const obj = hitObject(worldX, worldY);
 		if (obj) {
@@ -696,7 +703,7 @@ document.addEventListener('mousedown', e => {
 document.addEventListener('mouseup', e => {
 	if (e.button === 2) {
 		rightMouseDown = false;
-		if (mode === 'select' && selectBox) {
+		if (selectBox) {
 			for (const o of objectsInBox(selectBox.sx, selectBox.sy, selectBox.ex, selectBox.ey))
 				selected.add(o);
 			selectBox = null;
@@ -892,16 +899,7 @@ function draw() {
 			ctx.beginPath(); ctx.arc(b.x, b.y, b.getRadius() + 3 / camScale, 0, Math.PI * 2); ctx.stroke();
 			ctx.setLineDash([]);
 		}
-		if (selectBox) {
-			const bx = Math.min(selectBox.sx, selectBox.ex), by = Math.min(selectBox.sy, selectBox.ey);
-			const bw = Math.abs(selectBox.ex - selectBox.sx), bh = Math.abs(selectBox.ey - selectBox.sy);
-			ctx.setLineDash([4 / camScale, 4 / camScale]);
-			ctx.strokeStyle = '#e8a030'; ctx.lineWidth = 1 / camScale;
-			ctx.fillStyle = 'rgba(232,160,48,0.07)';
-			ctx.fillRect(bx, by, bw, bh); ctx.strokeRect(bx, by, bw, bh);
-			ctx.setLineDash([]);
-		}
-		if (selected.size >= 2) {
+		if (selected.size >= 1) {
 			const b = getSelectionBounds();
 			if (b) {
 				const pad = 10 / camScale;
@@ -982,6 +980,17 @@ function draw() {
 		ctx.lineWidth = 1.5;
 		ctx.setLineDash([3 / camScale, 3 / camScale]);
 		ctx.beginPath(); ctx.arc(worldX, worldY, r, 0, Math.PI * 2); ctx.stroke();
+		ctx.setLineDash([]);
+	}
+
+	// Right-click select box (all modes)
+	if (selectBox) {
+		const bx = Math.min(selectBox.sx, selectBox.ex), by = Math.min(selectBox.sy, selectBox.ey);
+		const bw = Math.abs(selectBox.ex - selectBox.sx), bh = Math.abs(selectBox.ey - selectBox.sy);
+		ctx.setLineDash([4 / camScale, 4 / camScale]);
+		ctx.strokeStyle = '#e8a030'; ctx.lineWidth = 1 / camScale;
+		ctx.fillStyle = 'rgba(232,160,48,0.07)';
+		ctx.fillRect(bx, by, bw, bh); ctx.strokeRect(bx, by, bw, bh);
 		ctx.setLineDash([]);
 	}
 
