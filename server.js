@@ -2,7 +2,7 @@ require('dotenv').config();
 const express    = require('express');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 const { MongoClient, ObjectId } = require('mongodb');
 const path       = require('path');
 
@@ -22,11 +22,14 @@ MongoClient.connect(process.env.MONGODB_URI)
     .catch(err => { console.error('MongoDB connection failed:', err); process.exit(1); });
 
 // ── Email setup ────────────────────────────────────────
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }
+});
 
 async function sendEmail(to, subject, html) {
-    await resend.emails.send({
-        from: 'RoseGarden <onboarding@resend.dev>',
+    await transporter.sendMail({
+        from: `RoseGarden <${process.env.GMAIL_USER}>`,
         to, subject, html
     });
 }
