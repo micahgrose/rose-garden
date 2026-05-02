@@ -2,8 +2,7 @@ require('dotenv').config();
 const express    = require('express');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
-const dns        = require('dns');
+const dns = require('dns');
 dns.setDefaultResultOrder('ipv4first');
 const { MongoClient, ObjectId } = require('mongodb');
 const path       = require('path');
@@ -24,22 +23,21 @@ MongoClient.connect(process.env.MONGODB_URI)
     .catch(err => { console.error('MongoDB connection failed:', err); process.exit(1); });
 
 // ── Email setup ────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    pool: true,
-    maxConnections: 3,
-    auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }
-});
-
-transporter.verify().then(() => console.log('Mail ready')).catch(err => console.error('Mail error:', err));
-
 async function sendEmail(to, subject, html) {
-    await transporter.sendMail({
-        from: `RoseGarden <${process.env.GMAIL_USER}>`,
-        to, subject, html
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+            sender:      { name: 'RoseGarden', email: 'rosegarden.noreply@gmail.com' },
+            to:          [{ email: to }],
+            subject,
+            htmlContent: html
+        })
     });
+    if (!res.ok) throw new Error(`Brevo: ${await res.text()}`);
 }
 
 function verifyEmailHtml(username, code) {
