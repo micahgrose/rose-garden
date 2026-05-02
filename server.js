@@ -27,9 +27,13 @@ const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
     secure: true,
+    pool: true,
+    maxConnections: 3,
     dnsLookup: (host, options, cb) => dns.lookup(host, { ...options, family: 4 }, cb),
     auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }
 });
+
+transporter.verify().then(() => console.log('Mail ready')).catch(err => console.error('Mail error:', err));
 
 async function sendEmail(to, subject, html) {
     await transporter.sendMail({
