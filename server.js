@@ -3,31 +3,23 @@ const express    = require('express');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const { Resend } = require('resend');
-const Datastore  = require('@seald-io/nedb');
-const crypto     = require('crypto');
+const { MongoClient, ObjectId } = require('mongodb');
 const path       = require('path');
-const fs         = require('fs');
 
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Database setup ─────────────────────────────────────
-if (!fs.existsSync(path.join(__dirname, 'data'))) {
-    fs.mkdirSync(path.join(__dirname, 'data'));
-}
-
-const users = new Datastore({
-    filename: path.join(__dirname, 'data', 'users.db'),
-    autoload: true
-});
-const saves = new Datastore({
-    filename: path.join(__dirname, 'data', 'saves.db'),
-    autoload: true
-});
-
-users.ensureIndex({ fieldName: 'username', unique: true });
-users.ensureIndex({ fieldName: 'email',    unique: true });
+let db;
+MongoClient.connect(process.env.MONGODB_URI)
+    .then(client => {
+        db = client.db();
+        db.collection('users').createIndex({ username: 1 }, { unique: true });
+        db.collection('users').createIndex({ email: 1 },    { unique: true });
+        console.log('Connected to MongoDB');
+    })
+    .catch(err => { console.error('MongoDB connection failed:', err); process.exit(1); });
 
 // ── Email setup ────────────────────────────────────────
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -82,14 +74,18 @@ function requireAuth(req, res, next) {
 }
 
 // ── Helpers ────────────────────────────────────────────
-const dbFind   = (q)    => new Promise((res, rej) => users.findOne(q, (e, d)  => e ? rej(e) : res(d)));
-const dbInsert = (doc)  => new Promise((res, rej) => users.insert(doc, (e, d) => e ? rej(e) : res(d)));
-const dbUpdate = (q, u) => new Promise((res, rej) => users.update(q, u, {}, e => e ? rej(e) : res()));
-const dbRemove = (q)    => new Promise((res, rej) => users.remove(q, { multi: true }, e => e ? rej(e) : res()));
+function uid(id) { return new ObjectId(id); }
 
-const svFind   = (q)    => new Promise((res, rej) => saves.find(q,    (e, d)  => e ? rej(e) : res(d)));
-const svInsert = (doc)  => new Promise((res, rej) => saves.insert(doc, (e, d) => e ? rej(e) : res(d)));
-const svRemove = (q)    => new Promise((res, rej) => saves.remove(q, {}, e    => e ? rej(e) : res()));
+const dbFind   = q           => db.collection('users').findOne(q);
+const dbInsert = doc         => db.collection('users').insertOne(doc).then(r => ({ ...doc, _id: r.insertedId }));
+const dbUpdate = (q, u)      => db.collection('users').updateOne(q, u);
+const dbRemove = q           => db.collection('users').deleteMany(q);
+
+const svFind      = q        => db.collection('saves').find(q).toArray();
+const svFindOne   = q        => db.collection('saves').findOne(q);
+const svInsert    = doc      => db.collection('saves').insertOne(doc).then(r => ({ ...doc, _id: r.insertedId }));
+const svRemove    = q        => db.collection('saves').deleteOne(q);
+const svRemoveAll = q        => db.collection('saves').deleteMany(q);
 
 function genCode(digits) {
     return String(Math.floor(Math.random() * Math.pow(10, digits))).padStart(digits, '0');
@@ -203,7 +199,7 @@ app.post('/api/login', async (req, res) => {
             email: user.email
         });
 
-    const token = jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ id: user._id.toString(), username: user.username }, process.env.JWT_SECRET, { expiresIn: '30d' });
     res.json({ token, username: user.username });
 });
 
@@ -240,7 +236,7 @@ app.post('/api/reset-password', async (req, res) => {
     if (user.reset_code !== code.trim())
         return res.status(400).json({ error: 'Incorrect code.' });
 
-    const newPassword   = genPassword(12);
+    const newPassword   = genPassword();
     const password_hash = await bcrypt.hash(newPassword, 12);
     await dbUpdate({ _id: user._id }, { $set: { password_hash, reset_code: null, reset_expires: null } });
 
@@ -254,7 +250,7 @@ app.post('/api/reset-password', async (req, res) => {
 
 // Get current user
 app.get('/api/me', requireAuth, async (req, res) => {
-    const user = await dbFind({ _id: req.user.id });
+    const user = await dbFind({ _id: uid(req.user.id) });
     if (!user) return res.status(404).json({ error: 'User not found.' });
     res.json({ username: user.username, email: user.email, created_at: user.created_at });
 });
@@ -267,7 +263,7 @@ app.put('/api/account/password', requireAuth, async (req, res) => {
     if (newPassword.length < 6)
         return res.status(400).json({ error: 'New password must be at least 6 characters.' });
 
-    const user = await dbFind({ _id: req.user.id });
+    const user = await dbFind({ _id: uid(req.user.id) });
     if (!user) return res.status(404).json({ error: 'User not found.' });
 
     const match = await bcrypt.compare(current, user.password_hash);
@@ -281,21 +277,21 @@ app.put('/api/account/password', requireAuth, async (req, res) => {
 // Delete account
 app.delete('/api/account', requireAuth, async (req, res) => {
     const { password } = req.body;
-    const user = await dbFind({ _id: req.user.id });
+    const user = await dbFind({ _id: uid(req.user.id) });
     if (!user) return res.status(404).json({ error: 'User not found.' });
 
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Incorrect password.' });
 
     await dbRemove({ _id: user._id });
-    await svRemove({ userId: user._id });
+    await svRemoveAll({ userId: user._id });
     res.json({ message: 'Account deleted.' });
 });
 
 // ── AUTOMATA saves ─────────────────────────────────────
 
 app.get('/api/automata/saves', requireAuth, async (req, res) => {
-    const list = await svFind({ userId: req.user.id });
+    const list = await svFind({ userId: uid(req.user.id) });
     res.json(list.map(s => ({ id: s._id, name: s.name, created_at: s.created_at })));
 });
 
@@ -303,7 +299,7 @@ app.post('/api/automata/saves', requireAuth, async (req, res) => {
     const { name, cells } = req.body;
     if (!name || !cells) return res.status(400).json({ error: 'Name and cells required.' });
     const doc = await svInsert({
-        userId: req.user.id,
+        userId: uid(req.user.id),
         name,
         cells,
         created_at: new Date().toISOString()
@@ -312,14 +308,22 @@ app.post('/api/automata/saves', requireAuth, async (req, res) => {
 });
 
 app.get('/api/automata/saves/:id', requireAuth, async (req, res) => {
-    const list = await svFind({ _id: req.params.id, userId: req.user.id });
-    if (!list.length) return res.status(404).json({ error: 'Save not found.' });
-    res.json(list[0]);
+    try {
+        const save = await svFindOne({ _id: uid(req.params.id), userId: uid(req.user.id) });
+        if (!save) return res.status(404).json({ error: 'Save not found.' });
+        res.json(save);
+    } catch {
+        res.status(400).json({ error: 'Invalid save ID.' });
+    }
 });
 
 app.delete('/api/automata/saves/:id', requireAuth, async (req, res) => {
-    await svRemove({ _id: req.params.id, userId: req.user.id });
-    res.json({ message: 'Deleted.' });
+    try {
+        await svRemove({ _id: uid(req.params.id), userId: uid(req.user.id) });
+        res.json({ message: 'Deleted.' });
+    } catch {
+        res.status(400).json({ error: 'Invalid save ID.' });
+    }
 });
 
 // ── Serve automata game ────────────────────────────────
