@@ -1,6 +1,3 @@
-// ── Wipe old localStorage saves (migrated to server) ──
-localStorage.removeItem('cells_saves');
-
 const goBtn    = document.getElementById('stopGo');
 const stepper  = document.getElementById('step');
 const randBtn  = document.getElementById('randGen');
