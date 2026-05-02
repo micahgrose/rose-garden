@@ -111,6 +111,7 @@ body {
 }
 .crp-thumb      { background: linear-gradient(135deg, #1a0a0a, #3a1020); }
 .automata-thumb { background: linear-gradient(135deg, #0a0a1a, #102030); }
+.game-thumb img { width: 100%; height: 100%; object-fit: cover; }
 
 .game-info {
     padding: 16px;
