@@ -4,6 +4,7 @@ const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const dns        = require('dns');
+dns.setDefaultResultOrder('ipv4first');
 const { MongoClient, ObjectId } = require('mongodb');
 const path       = require('path');
 
@@ -29,7 +30,6 @@ const transporter = nodemailer.createTransport({
     secure: true,
     pool: true,
     maxConnections: 3,
-    dnsLookup: (host, options, cb) => dns.lookup(host, { ...options, family: 4 }, cb),
     auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }
 });
 
