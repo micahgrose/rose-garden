@@ -178,8 +178,8 @@ app.post('/api/resend-verification', async (req, res) => {
     try {
         await sendEmail(email, 'Verify your RoseGarden account', verifyEmailHtml(user.username, verify_code));
         res.json({ message: 'Code resent! Check your email.' });
-    } catch {
-        res.status(500).json({ error: 'Failed to send email.' });
+    } catch (err) {
+        console.error('Email error (resend-verification):', err);
     }
 });
 
@@ -221,7 +221,8 @@ app.post('/api/forgot-password', async (req, res) => {
     try {
         await sendEmail(user.email, 'RoseGarden Password Reset', resetCodeHtml(user.username, reset_code));
         res.json({ message: 'Reset code sent to your email.' });
-    } catch {
+    } catch (err) {
+        console.error('Email error (forgot-password):', err);
         res.status(500).json({ error: 'Failed to send email.' });
     }
 });
@@ -246,7 +247,8 @@ app.post('/api/reset-password', async (req, res) => {
     try {
         await sendEmail(user.email, 'Your new RoseGarden password', newPasswordHtml(user.username, newPassword));
         res.json({ message: 'New password sent to your email!' });
-    } catch {
+    } catch (err) {
+        console.error('Email error (reset-password):', err);
         res.status(500).json({ error: 'Failed to send email.' });
     }
 });
