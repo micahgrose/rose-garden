@@ -323,9 +323,7 @@ app.delete('/api/automata/saves/:id', requireAuth, async (req, res) => {
 });
 
 // ── Serve automata game ────────────────────────────────
-app.get('/automata', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'games', 'automata', 'index.html'));
-});
+app.get('/automata', (req, res) => res.redirect('/games/automata/'));
 
 // ── Serve marble run game ─────────────────────────────
 app.get('/marble-run', (req, res) => res.redirect('/games/marble-run/'));
