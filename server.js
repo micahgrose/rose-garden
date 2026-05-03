@@ -2,12 +2,17 @@ require('dotenv').config();
 const express    = require('express');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
+const http       = require('http');
+const { Server: IOServer } = require('socket.io');
 const dns = require('dns');
 dns.setDefaultResultOrder('ipv4first');
 const { MongoClient, ObjectId } = require('mongodb');
 const path       = require('path');
 
-const app = express();
+const app        = express();
+const httpServer = http.createServer(app);
+const io         = new IOServer(httpServer);
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -108,7 +113,274 @@ function genPassword() {
     return w1 + w2 + num;
 }
 
-// ── Routes ─────────────────────────────────────────────
+// ── Amoeba Multiplayer ────────────────────────────────
+
+const AMOEBA_BOT_NAMES = [
+    'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
+    'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
+    'Amoebius','Rhizopod','Plasmodex','Goobert','Dribbles'
+];
+
+const AG = {
+    WORLD_W:   4000,
+    WORLD_H:   4000,
+    BASE_SIZE: 10,
+    MAX_FOOD:  800,
+    MAX_TOTAL: 35,
+    TICK_MS:   50
+};
+
+function agSpeed(size)  { return Math.pow(AG.BASE_SIZE / size, 0.45) * 3; }
+function agColor()      { return `hsl(${Math.floor(Math.random() * 360)},70%,55%)`; }
+function agBotName()    { return AMOEBA_BOT_NAMES[Math.floor(Math.random() * AMOEBA_BOT_NAMES.length)]; }
+function agId()         { return Math.random().toString(36).slice(2, 9); }
+
+function agNewFood() {
+    return {
+        id:    agId(),
+        x:     Math.random() * AG.WORLD_W,
+        y:     Math.random() * AG.WORLD_H,
+        size:  Math.random() * 3 + 1,
+        color: `rgb(${Math.floor(Math.random()*101)+155},${Math.floor(Math.random()*101)+155},${Math.floor(Math.random()*101)+155})`
+    };
+}
+
+function agNewBot() {
+    return {
+        id:    agId(),
+        name:  agBotName(),
+        size:  AG.BASE_SIZE,
+        speed: agSpeed(AG.BASE_SIZE),
+        x:     Math.random() * AG.WORLD_W,
+        y:     Math.random() * AG.WORLD_H,
+        goalX: Math.random() * AG.WORLD_W,
+        goalY: Math.random() * AG.WORLD_H,
+        color: agColor(),
+        velX: 0, velY: 0,
+        phase: Math.random() * Math.PI * 2
+    };
+}
+
+const agFood    = [];
+const agBots    = [];
+const agPlayers = new Map();
+
+let agFoodAdded   = [];
+let agFoodRemoved = new Set();
+
+for (let i = 0; i < 400; i++) agFood.push(agNewFood());
+for (let i = 0; i < 5;   i++) agBots.push(agNewBot());
+
+let agFoodFrames = 0, agBotFrames = 0;
+
+function agUpdateBotGoal(b) {
+    let fleeX = 0, fleeY = 0, flee = false;
+    for (const [, p] of agPlayers) {
+        const d = Math.hypot(p.x - b.x, p.y - b.y);
+        if (p.size >= b.size * 1.1 && d < 300) { fleeX += b.x - p.x; fleeY += b.y - p.y; flee = true; }
+    }
+    for (const o of agBots) {
+        if (o === b) continue;
+        const d = Math.hypot(o.x - b.x, o.y - b.y);
+        if (o.size >= b.size * 1.1 && d < 300) { fleeX += b.x - o.x; fleeY += b.y - o.y; flee = true; }
+    }
+    if (flee) {
+        const mag = Math.hypot(fleeX, fleeY) || 1;
+        b.goalX = Math.max(0, Math.min(AG.WORLD_W, b.x + (fleeX / mag) * 300));
+        b.goalY = Math.max(0, Math.min(AG.WORLD_H, b.y + (fleeY / mag) * 300));
+        return;
+    }
+    let best = -Infinity, bestX = b.goalX, bestY = b.goalY;
+    for (const f of agFood) {
+        const s = f.size / (Math.hypot(f.x - b.x, f.y - b.y) + 1);
+        if (s > best) { best = s; bestX = f.x; bestY = f.y; }
+    }
+    for (const o of agBots) {
+        if (o === b || b.size < o.size * 1.1) continue;
+        const s = o.size / (Math.hypot(o.x - b.x, o.y - b.y) + 1) * 3;
+        if (s > best) { best = s; bestX = o.x; bestY = o.y; }
+    }
+    for (const [, p] of agPlayers) {
+        if (b.size < p.size * 1.1) continue;
+        const s = p.size / (Math.hypot(p.x - b.x, p.y - b.y) + 1) * 3;
+        if (s > best) { best = s; bestX = p.x; bestY = p.y; }
+    }
+    b.goalX = bestX; b.goalY = bestY;
+}
+
+function agMoveBots() {
+    for (const b of agBots) {
+        agUpdateBotGoal(b);
+        const dx = b.goalX - b.x, dy = b.goalY - b.y, d = Math.hypot(dx, dy);
+        if (d > b.speed) {
+            b.velX = (dx / d) * b.speed; b.velY = (dy / d) * b.speed;
+            b.x = Math.max(0, Math.min(AG.WORLD_W, b.x + b.velX));
+            b.y = Math.max(0, Math.min(AG.WORLD_H, b.y + b.velY));
+        } else {
+            b.velX = b.velY = 0;
+            b.goalX = Math.random() * AG.WORLD_W;
+            b.goalY = Math.random() * AG.WORLD_H;
+        }
+    }
+}
+
+function agMovePlayers() {
+    for (const [, p] of agPlayers) {
+        const mag = Math.hypot(p.dirX, p.dirY);
+        if (mag < 0.1) { p.velX = p.velY = 0; continue; }
+        p.velX = (p.dirX / mag) * p.speed;
+        p.velY = (p.dirY / mag) * p.speed;
+        p.x = Math.max(0, Math.min(AG.WORLD_W, p.x + p.velX));
+        p.y = Math.max(0, Math.min(AG.WORLD_H, p.y + p.velY));
+    }
+}
+
+function agEatFood() {
+    for (let i = agFood.length - 1; i >= 0; i--) {
+        const f = agFood[i];
+        let eaten = false;
+        for (const [, p] of agPlayers) {
+            if (Math.hypot(f.x - p.x, f.y - p.y) <= p.size + f.size) {
+                p.size += f.size / 10; p.speed = agSpeed(p.size);
+                agFoodRemoved.add(f.id); agFood.splice(i, 1); eaten = true; break;
+            }
+        }
+        if (eaten) continue;
+        for (const b of agBots) {
+            if (Math.hypot(f.x - b.x, f.y - b.y) <= b.size + f.size) {
+                b.size += f.size / 10; b.speed = agSpeed(b.size);
+                agFoodRemoved.add(f.id); agFood.splice(i, 1); break;
+            }
+        }
+    }
+}
+
+function agRespawn(p) {
+    p.size = AG.BASE_SIZE; p.speed = agSpeed(AG.BASE_SIZE);
+    p.x = Math.random() * AG.WORLD_W; p.y = Math.random() * AG.WORLD_H;
+    p.velX = p.velY = p.dirX = p.dirY = 0;
+}
+
+function agEatBots() {
+    for (let i = agBots.length - 1; i >= 0; i--) {
+        const b = agBots[i]; let dead = false;
+        for (const [sid, p] of agPlayers) {
+            const d = Math.hypot(b.x - p.x, b.y - p.y);
+            if (p.size >= b.size * 1.1 && d < p.size) {
+                p.size += b.size * 0.5; p.speed = agSpeed(p.size);
+                agBots.splice(i, 1); dead = true; break;
+            } else if (b.size >= p.size * 1.1 && d < b.size) {
+                b.size += p.size * 0.5; b.speed = agSpeed(b.size);
+                agRespawn(p);
+                io.of('/amoeba').to(sid).emit('died', { killedBy: b.name });
+            }
+        }
+        if (dead) continue;
+        for (let j = i - 1; j >= 0; j--) {
+            const a = agBots[j], d = Math.hypot(b.x - a.x, b.y - a.y);
+            if (b.size >= a.size * 1.1 && d < b.size) {
+                b.size += a.size * 0.5; b.speed = agSpeed(b.size);
+                agBots.splice(j, 1); i--;
+            } else if (a.size >= b.size * 1.1 && d < a.size) {
+                a.size += b.size * 0.5; a.speed = agSpeed(a.size);
+                agBots.splice(i, 1); dead = true; break;
+            }
+        }
+    }
+}
+
+function agEatPlayers() {
+    const list = [...agPlayers.entries()];
+    for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+            const [sidA, a] = list[i], [sidB, b] = list[j];
+            const d = Math.hypot(a.x - b.x, a.y - b.y);
+            if (a.size >= b.size * 1.1 && d < a.size) {
+                a.size += b.size * 0.5; a.speed = agSpeed(a.size);
+                agRespawn(b);
+                io.of('/amoeba').to(sidB).emit('died', { killedBy: a.username });
+            } else if (b.size >= a.size * 1.1 && d < b.size) {
+                b.size += a.size * 0.5; b.speed = agSpeed(b.size);
+                agRespawn(a);
+                io.of('/amoeba').to(sidA).emit('died', { killedBy: b.username });
+            }
+        }
+    }
+}
+
+setInterval(() => {
+    agFoodFrames++; agBotFrames++;
+
+    if (agFoodFrames >= 25 && agFood.length < AG.MAX_FOOD) {
+        agFoodFrames = 0;
+        const f = agNewFood(); agFood.push(f); agFoodAdded.push(f);
+    }
+
+    const maxBots = Math.max(0, AG.MAX_TOTAL - agPlayers.size);
+    if (agBotFrames >= 100 && agBots.length < maxBots) {
+        agBots.push(agNewBot()); agBotFrames = 0;
+    }
+
+    agMoveBots();
+    agMovePlayers();
+    agEatFood();
+    agEatBots();
+    agEatPlayers();
+
+    io.of('/amoeba').emit('tick', {
+        players: [...agPlayers.values()].map(p => ({
+            id: p.id, x: p.x, y: p.y, size: p.size, color: p.color,
+            velX: p.velX, velY: p.velY, phase: p.phase, username: p.username
+        })),
+        bots: agBots.map(b => ({
+            id: b.id, x: b.x, y: b.y, size: b.size, color: b.color,
+            velX: b.velX, velY: b.velY, phase: b.phase, name: b.name
+        })),
+        foodAdded:   agFoodAdded.splice(0),
+        foodRemoved: [...agFoodRemoved]
+    });
+    agFoodRemoved.clear();
+}, AG.TICK_MS);
+
+io.of('/amoeba').on('connection', socket => {
+    let username = `Guest_${socket.id.slice(0, 4)}`;
+    const token  = socket.handshake.auth?.token;
+    if (token) {
+        try { username = jwt.verify(token, process.env.JWT_SECRET).username; } catch {}
+    }
+
+    const player = {
+        id: socket.id, username,
+        size: AG.BASE_SIZE, speed: agSpeed(AG.BASE_SIZE),
+        x: AG.WORLD_W / 2 + (Math.random() - 0.5) * 500,
+        y: AG.WORLD_H / 2 + (Math.random() - 0.5) * 500,
+        color: agColor(), velX: 0, velY: 0, dirX: 0, dirY: 0,
+        phase: Math.random() * Math.PI * 2
+    };
+    agPlayers.set(socket.id, player);
+
+    socket.emit('init', {
+        youId: socket.id,
+        food:  agFood,
+        bots:  agBots.map(b => ({
+            id: b.id, x: b.x, y: b.y, size: b.size, color: b.color,
+            velX: b.velX, velY: b.velY, phase: b.phase, name: b.name
+        })),
+        players: [...agPlayers.values()].map(p => ({
+            id: p.id, x: p.x, y: p.y, size: p.size, color: p.color,
+            velX: p.velX, velY: p.velY, phase: p.phase, username: p.username
+        }))
+    });
+
+    socket.on('input', ({ dirX, dirY }) => {
+        const p = agPlayers.get(socket.id);
+        if (p) { p.dirX = dirX || 0; p.dirY = dirY || 0; }
+    });
+
+    socket.on('disconnect', () => agPlayers.delete(socket.id));
+});
+
+// ── Routes ─────────────────────────────────────
 
 // Register
 app.post('/api/register', async (req, res) => {
@@ -337,15 +609,14 @@ app.delete('/api/automata/saves/:id', requireAuth, async (req, res) => {
     }
 });
 
-// ── Serve automata game ────────────────────────────────
-app.get('/automata', (req, res) => res.redirect('/games/automata/'));
-
-// ── Serve marble run game ─────────────────────────────
+// ── Serve games ────────────────────────────────────────
+app.get('/automata',   (req, res) => res.redirect('/games/automata/'));
 app.get('/marble-run', (req, res) => res.redirect('/games/marble-run/'));
 app.get('/physics',    (req, res) => res.redirect('/marble-run'));
+app.get('/amoeba',     (req, res) => res.redirect('/games/amoeba/'));
 
 // ── Catch-all (SPA) ───────────────────────────────────
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`RoseGarden running at http://localhost:${PORT}`));
+httpServer.listen(PORT, () => console.log(`RoseGarden running at http://localhost:${PORT}`));
