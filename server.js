@@ -202,13 +202,19 @@ function agUpdateBotGoal(b) {
     for (const o of agBots) {
         if (o === b || b.size < o.size * 1.1) continue;
         const dx = o.x - b.x, dy = o.y - b.y;
-        const s = o.size / (Math.sqrt(dx*dx + dy*dy) + 1) * 3;
+        const dist2 = dx*dx + dy*dy;
+        const diff = b.size - o.size;
+        const lazy = diff > 100 && dist2 > 150*150 ? Math.max(0.1, 1 - (diff - 100) / 400) : 1;
+        const s = o.size / (Math.sqrt(dist2) + 1) * 3 * lazy;
         if (s > best) { best = s; bestX = o.x; bestY = o.y; }
     }
     for (const [, p] of agPlayers) {
         if (b.size < p.size * 1.1) continue;
         const dx = p.x - b.x, dy = p.y - b.y;
-        const s = p.size / (Math.sqrt(dx*dx + dy*dy) + 1) * 3;
+        const dist2 = dx*dx + dy*dy;
+        const diff = b.size - p.size;
+        const lazy = diff > 100 && dist2 > 150*150 ? Math.max(0.1, 1 - (diff - 100) / 400) : 1;
+        const s = p.size / (Math.sqrt(dist2) + 1) * 3 * lazy;
         if (s > best) { best = s; bestX = p.x; bestY = p.y; }
     }
     b.goalX = bestX; b.goalY = bestY;
@@ -248,7 +254,7 @@ function agEatFood() {
         const f = agFood[i];
         let eaten = false;
         for (const [, p] of agPlayers) {
-            const dx = f.x - p.x, dy = f.y - p.y, t = p.size + f.size;
+            const dx = f.x - p.x, dy = f.y - p.y, t = p.size * 0.6;
             if (dx*dx + dy*dy <= t*t) {
                 p.size += f.size / 10; p.speed = agSpeed(p.size);
                 agFoodRemoved.add(f.id); agFood.splice(i, 1); eaten = true; break;
@@ -256,7 +262,7 @@ function agEatFood() {
         }
         if (eaten) continue;
         for (const b of agBots) {
-            const dx = f.x - b.x, dy = f.y - b.y, t = b.size + f.size;
+            const dx = f.x - b.x, dy = f.y - b.y, t = b.size * 0.6;
             if (dx*dx + dy*dy <= t*t) {
                 b.size += f.size / 10; b.speed = agSpeed(b.size);
                 agFoodRemoved.add(f.id); agFood.splice(i, 1); break;
