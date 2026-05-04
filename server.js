@@ -263,7 +263,7 @@ function agEatFood() {
         const f = agFood[i];
         let eaten = false;
         for (const [, p] of agPlayers) {
-            const dx = f.x - p.x, dy = f.y - p.y, t = p.size * 0.9 + f.size;
+            const dx = f.x - p.x, dy = f.y - p.y, t = p.size * 1.5 + f.size;
             if (dx*dx + dy*dy <= t*t) {
                 p.size += 1; p.speed = agSpeed(p.size);
                 agFoodRemoved.add(f.id); agFood.splice(i, 1); eaten = true; break;
@@ -271,7 +271,7 @@ function agEatFood() {
         }
         if (eaten) continue;
         for (const b of agBots) {
-            const dx = f.x - b.x, dy = f.y - b.y, t = b.size * 0.9 + f.size;
+            const dx = f.x - b.x, dy = f.y - b.y, t = b.size * 1.5 + f.size;
             if (dx*dx + dy*dy <= t*t) {
                 b.size += 1; b.speed = agSpeed(b.size);
                 agFoodRemoved.add(f.id); agFood.splice(i, 1); break;
