@@ -13,8 +13,8 @@ const WORLD_H      = 4000;
 const BASE_SIZE    = 10;
 const TICK_MS      = 50;   // must match server AG.TICK_MS
 
-const CAM_MIN      = 0.15; // smallest zoom (biggest player)
-const CAM_MAX      = 1;    // largest zoom (smallest player)
+const CAM_MIN      = 0.1; // smallest zoom (biggest player)
+const CAM_MAX      = 2;    // largest zoom (smallest player)
 const CAM_LERP     = 0.05; // how fast zoom transitions
 
 const SNAP_HARD    = 200;  // px: hard-snap to server position
