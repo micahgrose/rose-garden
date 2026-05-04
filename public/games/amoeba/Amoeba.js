@@ -7,11 +7,21 @@ window.addEventListener('resize', () => { c.width = window.innerWidth; c.height 
 let mouseX = c.width / 2, mouseY = c.height / 2;
 document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 
-const WORLD_W   = 4000;
-const WORLD_H   = 4000;
-const BASE_SIZE = 10;
+// ── Game constants ────────────────────────────────────
+const WORLD_W      = 4000;
+const WORLD_H      = 4000;
+const BASE_SIZE    = 10;
+const TICK_MS      = 50;   // must match server AG.TICK_MS
 
-let camScale       = 1;
+const CAM_MIN      = 0.15; // smallest zoom (biggest player)
+const CAM_MAX      = 1;    // largest zoom (smallest player)
+const CAM_LERP     = 0.05; // how fast zoom transitions
+
+const SNAP_HARD    = 200;  // px: hard-snap to server position
+const SNAP_SOFT    = 40;   // px: gentle correction toward server
+const SNAP_LERP    = 0.25; // correction strength (0–1)
+
+let camScale       = CAM_MAX;
 let time           = 0;
 let lastInput      = 0;
 let lastFrameTime  = performance.now();
@@ -48,16 +58,13 @@ socket.on('tick', data => {
     const serverMe = players.find(p => p.id === youId);
     if (serverMe && myLocal) {
         const d = Math.hypot(serverMe.x - myLocal.x, serverMe.y - myLocal.y);
-        if (d > 200) {
-            // Hard snap — respawn or large desync
+        if (d > SNAP_HARD) {
             myLocal.x = serverMe.x;
             myLocal.y = serverMe.y;
-        } else if (d > 40) {
-            // Soft correction only when meaningfully off
-            myLocal.x += (serverMe.x - myLocal.x) * 0.25;
-            myLocal.y += (serverMe.y - myLocal.y) * 0.25;
+        } else if (d > SNAP_SOFT) {
+            myLocal.x += (serverMe.x - myLocal.x) * SNAP_LERP;
+            myLocal.y += (serverMe.y - myLocal.y) * SNAP_LERP;
         }
-        // Ignore < 40px drift — normal prediction ahead of server tick
         myLocal.size     = serverMe.size;
         myLocal.username = serverMe.username;
     } else if (serverMe) {
@@ -78,7 +85,7 @@ function calcSpeed(size) { return Math.pow(BASE_SIZE / size, 0.45) * 3; }
 
 function loop() {
     const now = performance.now();
-    const dtScale = Math.min((now - lastFrameTime) / 50, 3); // clamp so tab-hidden spikes don't teleport
+    const dtScale = Math.min((now - lastFrameTime) / TICK_MS, 3);
     lastFrameTime = now;
     time++;
 
@@ -98,15 +105,15 @@ function loop() {
         }
 
         // Send input at 20Hz — sending every frame wastes bandwidth
-        if (now - lastInput >= 50) {
+        if (now - lastInput >= TICK_MS) {
             lastInput = now;
             socket.emit('input', dist > 1
                 ? { dirX: dx / dist, dirY: dy / dist }
                 : { dirX: 0, dirY: 0 });
         }
 
-        const target = Math.max(0.15, Math.min(1, Math.pow(BASE_SIZE / myLocal.size, 0.5)));
-        camScale += (target - camScale) * 0.05;
+        const target = Math.max(CAM_MIN, Math.min(CAM_MAX, Math.pow(BASE_SIZE / myLocal.size, 0.5)));
+        camScale += (target - camScale) * CAM_LERP;
 
         document.getElementById('sizeText').textContent   = `Size: ${Math.floor(myLocal.size)}`;
         document.getElementById('playerText').textContent = `Players: ${players.length}`;
@@ -234,16 +241,6 @@ function draw() {
         ctx.fill();
     }
 
-    // Collect nearby food that could overlap the local player's boundary
-    const myNearby = [];
-    for (const f of food) {
-        const dx = f.x - myLocal.x, dy = f.y - myLocal.y;
-        const reach = myLocal.size * 1.4 + f.size;
-        if (dx * dx + dy * dy < reach * reach) myNearby.push({ x: f.x, y: f.y, r: f.size });
-    }
-
-    const playerObj = { x: myLocal.x, y: myLocal.y, r: myLocal.size };
-
     // Others — sorted by size (bigger behind), viewport-culled
     const maxR  = 200; // generous max amoeba radius for culling
     const others = [
@@ -254,16 +251,12 @@ function draw() {
     for (const e of others) {
         if (e.x + maxR < vMinX || e.x - maxR > vMaxX ||
             e.y + maxR < vMinY || e.y - maxR > vMaxY) continue;
-        const edx = e.x - myLocal.x, edy = e.y - myLocal.y;
-        const eReach = myLocal.size + e.size;
-        const eClose = edx * edx + edy * edy < eReach * eReach;
-        drawAmoeba(e.x, e.y, e.size, e.color, e.velX, e.velY, e.phase, eClose ? [playerObj] : []);
-        if (eClose) myNearby.push({ x: e.x, y: e.y, r: e.size });
+        drawAmoeba(e.x, e.y, e.size, e.color, e.velX, e.velY, e.phase);
         drawLabel(e.x, e.y, e.size, e.label);
     }
 
     // Local player always on top
-    drawAmoeba(myLocal.x, myLocal.y, myLocal.size, myLocal.color, myLocal.velX || 0, myLocal.velY || 0, myLocal.phase, myNearby);
+    drawAmoeba(myLocal.x, myLocal.y, myLocal.size, myLocal.color, myLocal.velX || 0, myLocal.velY || 0, myLocal.phase);
     drawLabel(myLocal.x, myLocal.y, myLocal.size, myLocal.username || '(you)');
 
     ctx.restore();

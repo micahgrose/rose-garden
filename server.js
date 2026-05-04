@@ -115,24 +115,24 @@ function genPassword() {
 
 // ── Amoeba Multiplayer ────────────────────────────────
 
-const AMOEBA_BOT_NAMES = [
-    'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
-    'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
-    'Amoebius','Rhizopod','Plasmodex','Goobert','Dribbles'
-];
-
 const AG = {
     WORLD_W:   4000,
     WORLD_H:   4000,
     BASE_SIZE: 10,
     MAX_FOOD:  800,
     MAX_TOTAL: 35,
-    TICK_MS:   50
+    TICK_MS:   50,
+    EAT_RATIO: 1.1,
+    BOT_NAMES: [
+        'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
+        'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
+        'Amoebius','Rhizopod','Plasmodex','Goobert','Dribbles'
+    ]
 };
 
 function agSpeed(size)  { return Math.pow(AG.BASE_SIZE / size, 0.45) * 3; }
 function agColor()      { return `hsl(${Math.floor(Math.random() * 360)},70%,55%)`; }
-function agBotName()    { return AMOEBA_BOT_NAMES[Math.floor(Math.random() * AMOEBA_BOT_NAMES.length)]; }
+function agBotName()    { return AG.BOT_NAMES[Math.floor(Math.random() * AG.BOT_NAMES.length)]; }
 function agId()         { return Math.random().toString(36).slice(2, 9); }
 
 function agNewFood() {
@@ -178,12 +178,12 @@ function agUpdateBotGoal(b) {
     // Use squared distance for flee checks — no sqrt needed
     for (const [, p] of agPlayers) {
         const dx = p.x - b.x, dy = p.y - b.y;
-        if (p.size >= b.size * 1.1 && dx*dx + dy*dy < 90000) { fleeX -= dx; fleeY -= dy; flee = true; }
+        if (p.size >= b.size * AG.EAT_RATIO && dx*dx + dy*dy < 90000) { fleeX -= dx; fleeY -= dy; flee = true; }
     }
     for (const o of agBots) {
         if (o === b) continue;
         const dx = o.x - b.x, dy = o.y - b.y;
-        if (o.size >= b.size * 1.1 && dx*dx + dy*dy < 90000) { fleeX -= dx; fleeY -= dy; flee = true; }
+        if (o.size >= b.size * AG.EAT_RATIO && dx*dx + dy*dy < 90000) { fleeX -= dx; fleeY -= dy; flee = true; }
     }
     if (flee) {
         const mag = Math.hypot(fleeX, fleeY) || 1;
@@ -200,7 +200,7 @@ function agUpdateBotGoal(b) {
         if (s > best) { best = s; bestX = f.x; bestY = f.y; }
     }
     for (const o of agBots) {
-        if (o === b || b.size < o.size * 1.1) continue;
+        if (o === b || b.size < o.size * AG.EAT_RATIO) continue;
         const dx = o.x - b.x, dy = o.y - b.y;
         const dist2 = dx*dx + dy*dy;
         const diff = b.size - o.size;
@@ -209,7 +209,7 @@ function agUpdateBotGoal(b) {
         if (s > best) { best = s; bestX = o.x; bestY = o.y; }
     }
     for (const [, p] of agPlayers) {
-        if (b.size < p.size * 1.1) continue;
+        if (b.size < p.size * AG.EAT_RATIO) continue;
         const dx = p.x - b.x, dy = p.y - b.y;
         const dist2 = dx*dx + dy*dy;
         const diff = b.size - p.size;
@@ -282,10 +282,10 @@ function agEatBots() {
         const b = agBots[i]; let dead = false;
         for (const [sid, p] of agPlayers) {
             const dx = b.x - p.x, dy = b.y - p.y, dsq = dx*dx + dy*dy;
-            if (p.size >= b.size * 1.1 && dsq < p.size * p.size) {
+            if (p.size >= b.size * AG.EAT_RATIO && dsq < p.size * p.size) {
                 p.size += b.size * 0.5; p.speed = agSpeed(p.size);
                 agBots.splice(i, 1); dead = true; break;
-            } else if (b.size >= p.size * 1.1 && dsq < b.size * b.size) {
+            } else if (b.size >= p.size * AG.EAT_RATIO && dsq < b.size * b.size) {
                 b.size += p.size * 0.5; b.speed = agSpeed(b.size);
                 agRespawn(p);
                 io.of('/amoeba').to(sid).emit('died', { killedBy: b.name });
@@ -294,10 +294,10 @@ function agEatBots() {
         if (dead) continue;
         for (let j = i - 1; j >= 0; j--) {
             const a = agBots[j]; const dx = b.x - a.x, dy = b.y - a.y, dsq = dx*dx + dy*dy;
-            if (b.size >= a.size * 1.1 && dsq < b.size * b.size) {
+            if (b.size >= a.size * AG.EAT_RATIO && dsq < b.size * b.size) {
                 b.size += a.size * 0.5; b.speed = agSpeed(b.size);
                 agBots.splice(j, 1); i--;
-            } else if (a.size >= b.size * 1.1 && dsq < a.size * a.size) {
+            } else if (a.size >= b.size * AG.EAT_RATIO && dsq < a.size * a.size) {
                 a.size += b.size * 0.5; a.speed = agSpeed(a.size);
                 agBots.splice(i, 1); dead = true; break;
             }
@@ -311,11 +311,11 @@ function agEatPlayers() {
         for (let j = i + 1; j < list.length; j++) {
             const [sidA, a] = list[i], [sidB, b] = list[j];
             const dx = a.x - b.x, dy = a.y - b.y, dsq = dx*dx + dy*dy;
-            if (a.size >= b.size * 1.1 && dsq < a.size * a.size) {
+            if (a.size >= b.size * AG.EAT_RATIO && dsq < a.size * a.size) {
                 a.size += b.size * 0.5; a.speed = agSpeed(a.size);
                 agRespawn(b);
                 io.of('/amoeba').to(sidB).emit('died', { killedBy: a.username });
-            } else if (b.size >= a.size * 1.1 && dsq < b.size * b.size) {
+            } else if (b.size >= a.size * AG.EAT_RATIO && dsq < b.size * b.size) {
                 b.size += a.size * 0.5; b.speed = agSpeed(b.size);
                 agRespawn(a);
                 io.of('/amoeba').to(sidA).emit('died', { killedBy: b.username });
