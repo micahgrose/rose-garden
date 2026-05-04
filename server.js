@@ -136,7 +136,7 @@ const AG = {
     ]
 };
 
-function agSpeed(size)  { return Math.pow(AG.BASE_SIZE / size, 0.45) * 3; }
+function agSpeed(size)  { return Math.pow(AG.BASE_SIZE / size, 0.45) * 9; }
 function agColor()      { return `hsl(${Math.floor(Math.random() * 360)},70%,55%)`; }
 function agBotName()    { return AG.BOT_NAMES[Math.floor(Math.random() * AG.BOT_NAMES.length)]; }
 function agId()         { return Math.random().toString(36).slice(2, 9); }
@@ -262,7 +262,7 @@ function agEatFood() {
         for (const [, p] of agPlayers) {
             const dx = f.x - p.x, dy = f.y - p.y, t = p.size * 0.85;
             if (dx*dx + dy*dy <= t*t) {
-                p.size += f.size / 10; p.speed = agSpeed(p.size);
+                p.size += 1; p.speed = agSpeed(p.size);
                 agFoodRemoved.add(f.id); agFood.splice(i, 1); eaten = true; break;
             }
         }
@@ -270,7 +270,7 @@ function agEatFood() {
         for (const b of agBots) {
             const dx = f.x - b.x, dy = f.y - b.y, t = b.size * 0.85;
             if (dx*dx + dy*dy <= t*t) {
-                b.size += f.size / 10; b.speed = agSpeed(b.size);
+                b.size += 1; b.speed = agSpeed(b.size);
                 agFoodRemoved.add(f.id); agFood.splice(i, 1); break;
             }
         }

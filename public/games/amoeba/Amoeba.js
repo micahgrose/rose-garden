@@ -16,6 +16,7 @@ const TICK_MS      = 50;   // must match server AG.TICK_MS
 const CAM_MIN      = 0.1; // smallest zoom (biggest player)
 const CAM_MAX      = 4;    // largest zoom (smallest player)
 const CAM_LERP     = 0.05; // how fast zoom transitions
+const CAM_ZOOM     = 3;    // overall zoom multiplier
 
 const SNAP_HARD    = 200;  // px: hard-snap to server position
 const SNAP_SOFT    = 40;   // px: gentle correction toward server
@@ -81,7 +82,7 @@ socket.on('died', ({ killedBy }) => {
 });
 
 // ── Game logic ────────────────────────────────────────
-function calcSpeed(size) { return Math.pow(BASE_SIZE / size, 0.45) * 3; }
+function calcSpeed(size) { return Math.pow(BASE_SIZE / size, 0.45) * 9; }
 
 function loop() {
     const now = performance.now();
@@ -112,7 +113,7 @@ function loop() {
                 : { dirX: 0, dirY: 0 });
         }
 
-        const target = Math.max(CAM_MIN, Math.min(CAM_MAX, Math.pow(BASE_SIZE / myLocal.size, 0.5)));
+        const target = Math.max(CAM_MIN, Math.min(CAM_MAX, Math.pow(BASE_SIZE / myLocal.size, 0.5) * CAM_ZOOM));
         camScale += (target - camScale) * CAM_LERP;
 
         document.getElementById('sizeText').textContent   = `Size: ${Math.floor(myLocal.size)}`;
