@@ -179,23 +179,24 @@ function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
         pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
     }
 
-    // Dent boundary inward to the near surface of any overlapping collider.
-    // Uses ray-circle intersection so the dent curves correctly to the collider's shape.
+    // Soft inward deformation: each collider pulls nearby boundary points
+    // toward the amoeba center, creating a visible dent that grows with proximity.
     for (const obj of nearby) {
-        const dx = x - obj.x, dy = y - obj.y; // amoeba center relative to collider
-        const D2  = dx*dx + dy*dy;
-        const fr2 = obj.r * obj.r;
+        const infR = obj.r * 2; // influence radius — wider than the collider itself
+        const infR2 = infR * infR;
         for (let i = 0; i < N; i++) {
             const pdx = pts[i].x - obj.x, pdy = pts[i].y - obj.y;
-            if (pdx*pdx + pdy*pdy >= fr2) continue; // point not inside collider
-            const a   = (i / N) * Math.PI * 2;
-            const rx  = Math.cos(a), ry = Math.sin(a);
-            const dot  = dx*rx + dy*ry;
-            const disc = dot*dot - D2 + fr2;
-            if (disc >= 0) {
-                const t = -dot - Math.sqrt(disc); // near-surface intersection
-                if (t > 0) { pts[i].x = x + rx*t; pts[i].y = y + ry*t; }
-            }
+            const d2  = pdx*pdx + pdy*pdy;
+            if (d2 >= infR2) continue;
+            const d   = Math.sqrt(d2);
+            const inf = 1 - d / infR;           // 1 at collider center, 0 at edge
+            const ax  = pts[i].x - x, ay = pts[i].y - y;
+            const aD  = Math.sqrt(ax*ax + ay*ay);
+            if (aD < 0.001) continue;
+            const push  = obj.r * inf * 1.2;    // how far to push inward
+            const newR  = Math.max(aD * 0.1, aD - push);
+            pts[i].x = x + (ax / aD) * newR;
+            pts[i].y = y + (ay / aD) * newR;
         }
     }
 
@@ -273,8 +274,18 @@ function draw() {
         ctx.fill();
     }
 
+    // Nearby food that could deform the local player's boundary
+    const myNearby = [];
+    for (const f of food) {
+        const dx = f.x - myLocal.x, dy = f.y - myLocal.y;
+        const reach = myLocal.size * 1.7 + f.size * 2;
+        if (dx*dx + dy*dy < reach*reach) myNearby.push({ x: f.x, y: f.y, r: f.size });
+    }
+
+    const playerObj = { x: myLocal.x, y: myLocal.y, r: myLocal.size };
+
     // Others — sorted by size (bigger behind), viewport-culled
-    const maxR  = 200; // generous max amoeba radius for culling
+    const maxR  = 200;
     const others = [
         ...players.filter(p => p.id !== youId).map(p => ({ ...p, label: p.username })),
         ...[...botRender.values()].map(b => ({ ...b, label: b.name }))
@@ -283,12 +294,16 @@ function draw() {
     for (const e of others) {
         if (e.x + maxR < vMinX || e.x - maxR > vMaxX ||
             e.y + maxR < vMinY || e.y - maxR > vMaxY) continue;
-        drawAmoeba(e.x, e.y, e.size, e.color, e.velX, e.velY, e.phase);
+        const edx = e.x - myLocal.x, edy = e.y - myLocal.y;
+        const eReach = (myLocal.size + e.size) * 2;
+        const eClose = edx*edx + edy*edy < eReach*eReach;
+        drawAmoeba(e.x, e.y, e.size, e.color, e.velX || 0, e.velY || 0, e.phase, eClose ? [playerObj] : []);
+        if (eClose) myNearby.push({ x: e.x, y: e.y, r: e.size });
         drawLabel(e.x, e.y, e.size, e.label);
     }
 
     // Local player always on top
-    drawAmoeba(myLocal.x, myLocal.y, myLocal.size, myLocal.color, myLocal.velX || 0, myLocal.velY || 0, myLocal.phase);
+    drawAmoeba(myLocal.x, myLocal.y, myLocal.size, myLocal.color, myLocal.velX || 0, myLocal.velY || 0, myLocal.phase, myNearby);
     drawLabel(myLocal.x, myLocal.y, myLocal.size, myLocal.username || '(you)');
 
     ctx.restore();
