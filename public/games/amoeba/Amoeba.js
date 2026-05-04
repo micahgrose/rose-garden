@@ -26,6 +26,7 @@ let camScale       = CAM_MAX;
 let time           = 0;
 let lastInput      = 0;
 let lastFrameTime  = performance.now();
+let lastTickTime   = performance.now();
 
 // ── Server state ──────────────────────────────────────
 let youId      = null;
@@ -54,6 +55,7 @@ socket.on('tick', data => {
     for (const f of data.foodAdded) food.push(f);
 
     players = data.players;
+    lastTickTime = performance.now();
 
     // Update bot render targets; add new bots, remove gone ones
     const activeIds = new Set();
@@ -137,11 +139,15 @@ function loop() {
         document.getElementById('playerText').textContent = `Players: ${players.length}`;
     }
 
-    // Interpolate bot visual positions every frame
+    // Extrapolate bot positions: project forward from last server tick using velocity
+    // so the visual position approximates where the server currently has them
+    const tickElapsed = Math.min((now - lastTickTime) / TICK_MS, 1.5);
     for (const v of botRender.values()) {
         if (v.tx !== undefined) {
-            v.x += (v.tx - v.x) * 0.25;
-            v.y += (v.ty - v.y) * 0.25;
+            const extraX = v.tx + (v.velX || 0) * tickElapsed;
+            const extraY = v.ty + (v.velY || 0) * tickElapsed;
+            v.x += (extraX - v.x) * 0.4;
+            v.y += (extraY - v.y) * 0.4;
         }
     }
 
