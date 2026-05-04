@@ -16,7 +16,7 @@ const TICK_MS      = 50;   // must match server AG.TICK_MS
 const CAM_MIN      = 0.1; // smallest zoom (biggest player)
 const CAM_MAX      = 4;    // largest zoom (smallest player)
 const CAM_LERP     = 0.05; // how fast zoom transitions
-const CAM_ZOOM     = 3;    // overall zoom multiplier
+const CAM_ZOOM     = 2.5;  // overall zoom multiplier
 
 const SNAP_HARD    = 200;  // px: hard-snap to server position
 const SNAP_SOFT    = 40;   // px: gentle correction toward server
@@ -188,7 +188,7 @@ function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
     // Soft inward deformation: each collider pulls nearby boundary points
     // toward the amoeba center, creating a visible dent that grows with proximity.
     for (const obj of nearby) {
-        const infR = obj.r * 2; // influence radius — wider than the collider itself
+        const infR = obj.r * 1.6; // influence radius — wider than the collider itself
         const infR2 = infR * infR;
         for (let i = 0; i < N; i++) {
             const pdx = pts[i].x - obj.x, pdy = pts[i].y - obj.y;
@@ -199,7 +199,7 @@ function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
             const ax  = pts[i].x - x, ay = pts[i].y - y;
             const aD  = Math.sqrt(ax*ax + ay*ay);
             if (aD < 0.001) continue;
-            const push  = obj.r * inf * 1.2;    // how far to push inward
+            const push  = obj.r * inf * 0.7;    // how far to push inward
             const newR  = Math.max(aD * 0.1, aD - push);
             pts[i].x = x + (ax / aD) * newR;
             pts[i].y = y + (ay / aD) * newR;
@@ -300,11 +300,26 @@ function draw() {
     for (const e of others) {
         if (e.x + maxR < vMinX || e.x - maxR > vMaxX ||
             e.y + maxR < vMinY || e.y - maxR > vMaxY) continue;
+
+        const eNearby = [];
+
+        // Player influence on this entity
         const edx = e.x - myLocal.x, edy = e.y - myLocal.y;
         const eReach = (myLocal.size + e.size) * 2;
-        const eClose = edx*edx + edy*edy < eReach*eReach;
-        drawAmoeba(e.x, e.y, e.size, e.color, e.velX || 0, e.velY || 0, e.phase, eClose ? [playerObj] : []);
-        if (eClose) myNearby.push({ x: e.x, y: e.y, r: e.size });
+        if (edx*edx + edy*edy < eReach*eReach) {
+            eNearby.push(playerObj);
+            myNearby.push({ x: e.x, y: e.y, r: e.size });
+        }
+
+        // Other entities' influence on this entity
+        for (const o of others) {
+            if (o === e) continue;
+            const odx = o.x - e.x, ody = o.y - e.y;
+            const oReach = (e.size + o.size) * 2;
+            if (odx*odx + ody*ody < oReach*oReach) eNearby.push({ x: o.x, y: o.y, r: o.size });
+        }
+
+        drawAmoeba(e.x, e.y, e.size, e.color, e.velX || 0, e.velY || 0, e.phase, eNearby);
         drawLabel(e.x, e.y, e.size, e.label);
     }
 
