@@ -122,7 +122,7 @@ const AG = {
     MAX_FOOD:  5000,
     MAX_TOTAL: 35,
     TICK_MS:   50,
-    EAT_RATIO: 1.1,
+    EAT_RATIO: 1.75,
     BOT_NAMES: [
         'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
 	    'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
