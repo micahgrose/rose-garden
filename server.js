@@ -228,19 +228,22 @@ function agUpdateBotGoal(b) {
 
 function agMoveBots(updateGoals) {
     for (const b of agBots) {
-        if (updateGoals) agUpdateBotGoal(b); // only recalc target every 3rd tick
+        if (updateGoals) agUpdateBotGoal(b);
         const dx = b.goalX - b.x, dy = b.goalY - b.y;
         const dsq = dx*dx + dy*dy;
+        let tvx = 0, tvy = 0;
         if (dsq > b.speed * b.speed) {
             const inv = b.speed / Math.sqrt(dsq);
-            b.velX = dx * inv; b.velY = dy * inv;
-            b.x = Math.max(0, Math.min(AG.WORLD_W, b.x + b.velX));
-            b.y = Math.max(0, Math.min(AG.WORLD_H, b.y + b.velY));
+            tvx = dx * inv; tvy = dy * inv;
         } else {
-            b.velX = b.velY = 0;
             b.goalX = Math.random() * AG.WORLD_W;
             b.goalY = Math.random() * AG.WORLD_H;
         }
+        // Lerp velocity toward target so direction changes are smooth
+        b.velX += (tvx - b.velX) * 0.2;
+        b.velY += (tvy - b.velY) * 0.2;
+        b.x = Math.max(0, Math.min(AG.WORLD_W, b.x + b.velX));
+        b.y = Math.max(0, Math.min(AG.WORLD_H, b.y + b.velY));
     }
 }
 
@@ -343,7 +346,7 @@ setInterval(() => {
         agBots.push(agNewBot()); agBotFrames = 0;
     }
 
-    agMoveBots(agTickCount % 3 === 0);
+    agMoveBots(agTickCount % 6 === 0);
     agMovePlayers();
     agEatFood();
     agEatBots();
