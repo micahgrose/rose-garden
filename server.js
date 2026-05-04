@@ -119,14 +119,20 @@ const AG = {
     WORLD_W:   4000,
     WORLD_H:   4000,
     BASE_SIZE: 10,
-    MAX_FOOD:  800,
+    MAX_FOOD:  2500,
     MAX_TOTAL: 35,
     TICK_MS:   50,
     EAT_RATIO: 1.1,
     BOT_NAMES: [
         'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
-        'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
-        'Amoebius','Rhizopod','Plasmodex','Goobert','Dribbles'
+	    'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
+	    'Amoebius','Rhizopod','Plasmodex','Goobert','Dribbles',
+	    'Gelatrix','Sploobus','Mirello','Gunkle','Slorbin',
+    	'Viscora','Blorple','Oozington','Glumple','Squishard',
+	    'Dribblen','Mucor','Slatherby','Globulex','Glimbus',
+    	'Snotrix','Puddlox','Glarbo','Slimeon','Blobrick','Oozle'
+	    ,'Gorpheus','Sludgik','Plorp','Drizzleth','Gloobus','Squorp'
+	    ,'Mirex','Blobbington','Gunkus'
     ]
 };
 
