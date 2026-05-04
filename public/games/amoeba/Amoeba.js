@@ -28,11 +28,11 @@ let lastInput      = 0;
 let lastFrameTime  = performance.now();
 
 // ── Server state ──────────────────────────────────────
-let youId   = null;
-let food    = [];
-let bots    = [];
-let players = [];
-let myLocal = null;
+let youId      = null;
+let food       = [];
+let players    = [];
+let myLocal    = null;
+const botRender = new Map(); // id → visual bot (interpolated each frame)
 
 // ── Socket ────────────────────────────────────────────
 const socket = io('/amoeba', { auth: { token: localStorage.getItem('rg_token') } });
@@ -40,8 +40,8 @@ const socket = io('/amoeba', { auth: { token: localStorage.getItem('rg_token') }
 socket.on('init', data => {
     youId   = data.youId;
     food    = data.food;
-    bots    = data.bots;
     players = data.players;
+    for (const b of data.bots) botRender.set(b.id, { ...b });
     const me = players.find(p => p.id === youId);
     if (me) myLocal = { ...me };
 });
@@ -53,8 +53,25 @@ socket.on('tick', data => {
     }
     for (const f of data.foodAdded) food.push(f);
 
-    bots    = data.bots;
     players = data.players;
+
+    // Update bot render targets; add new bots, remove gone ones
+    const activeIds = new Set();
+    for (const b of data.bots) {
+        activeIds.add(b.id);
+        if (!botRender.has(b.id)) {
+            botRender.set(b.id, { ...b });
+        } else {
+            const v = botRender.get(b.id);
+            v.tx = b.x; v.ty = b.y;
+            v.size = b.size; v.color = b.color;
+            v.velX = b.velX; v.velY = b.velY;
+            v.phase = b.phase; v.name = b.name;
+        }
+    }
+    for (const id of botRender.keys()) {
+        if (!activeIds.has(id)) botRender.delete(id);
+    }
 
     const serverMe = players.find(p => p.id === youId);
     if (serverMe && myLocal) {
@@ -118,6 +135,14 @@ function loop() {
 
         document.getElementById('sizeText').textContent   = `Size: ${Math.floor(myLocal.size)}`;
         document.getElementById('playerText').textContent = `Players: ${players.length}`;
+    }
+
+    // Interpolate bot visual positions every frame
+    for (const v of botRender.values()) {
+        if (v.tx !== undefined) {
+            v.x += (v.tx - v.x) * 0.25;
+            v.y += (v.ty - v.y) * 0.25;
+        }
     }
 
     draw();
@@ -252,7 +277,7 @@ function draw() {
     const maxR  = 200; // generous max amoeba radius for culling
     const others = [
         ...players.filter(p => p.id !== youId).map(p => ({ ...p, label: p.username })),
-        ...bots.map(b => ({ ...b, label: b.name }))
+        ...[...botRender.values()].map(b => ({ ...b, label: b.name }))
     ].sort((a, b) => b.size - a.size);
 
     for (const e of others) {
