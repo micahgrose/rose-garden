@@ -117,7 +117,7 @@ function loop() {
 }
 
 // ── Drawing ───────────────────────────────────────────
-function drawAmoeba(x, y, radius, color, velX, velY, phase) {
+function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
     // Fewer points for small/distant cells — no visual difference at small screen size
     const screenR = radius * camScale;
     const N       = screenR < 15 ? 12 : 24;
@@ -144,6 +144,20 @@ function drawAmoeba(x, y, radius, color, velX, velY, phase) {
         }
 
         pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
+    }
+
+    // Push any boundary point that landed inside a collider back to its surface
+    for (const obj of nearby) {
+        for (let i = 0; i < N; i++) {
+            const pdx = pts[i].x - obj.x;
+            const pdy = pts[i].y - obj.y;
+            const pd2 = pdx * pdx + pdy * pdy;
+            if (pd2 > 0 && pd2 < obj.r * obj.r) {
+                const pd = Math.sqrt(pd2);
+                pts[i].x = obj.x + (pdx / pd) * obj.r;
+                pts[i].y = obj.y + (pdy / pd) * obj.r;
+            }
+        }
     }
 
     ctx.fillStyle = color;
@@ -220,6 +234,16 @@ function draw() {
         ctx.fill();
     }
 
+    // Collect nearby food that could overlap the local player's boundary
+    const myNearby = [];
+    for (const f of food) {
+        const dx = f.x - myLocal.x, dy = f.y - myLocal.y;
+        const reach = myLocal.size * 1.4 + f.size;
+        if (dx * dx + dy * dy < reach * reach) myNearby.push({ x: f.x, y: f.y, r: f.size });
+    }
+
+    const playerObj = { x: myLocal.x, y: myLocal.y, r: myLocal.size };
+
     // Others — sorted by size (bigger behind), viewport-culled
     const maxR  = 200; // generous max amoeba radius for culling
     const others = [
@@ -230,12 +254,16 @@ function draw() {
     for (const e of others) {
         if (e.x + maxR < vMinX || e.x - maxR > vMaxX ||
             e.y + maxR < vMinY || e.y - maxR > vMaxY) continue;
-        drawAmoeba(e.x, e.y, e.size, e.color, e.velX, e.velY, e.phase);
+        const edx = e.x - myLocal.x, edy = e.y - myLocal.y;
+        const eReach = myLocal.size + e.size;
+        const eClose = edx * edx + edy * edy < eReach * eReach;
+        drawAmoeba(e.x, e.y, e.size, e.color, e.velX, e.velY, e.phase, eClose ? [playerObj] : []);
+        if (eClose) myNearby.push({ x: e.x, y: e.y, r: e.size });
         drawLabel(e.x, e.y, e.size, e.label);
     }
 
     // Local player always on top
-    drawAmoeba(myLocal.x, myLocal.y, myLocal.size, myLocal.color, myLocal.velX || 0, myLocal.velY || 0, myLocal.phase);
+    drawAmoeba(myLocal.x, myLocal.y, myLocal.size, myLocal.color, myLocal.velX || 0, myLocal.velY || 0, myLocal.phase, myNearby);
     drawLabel(myLocal.x, myLocal.y, myLocal.size, myLocal.username || '(you)');
 
     ctx.restore();
