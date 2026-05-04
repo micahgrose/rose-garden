@@ -7,19 +7,20 @@ window.addEventListener('resize', () => { c.width = window.innerWidth; c.height 
 let mouseX = c.width / 2, mouseY = c.height / 2;
 document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 
-const WORLD_W  = 4000;
-const WORLD_H  = 4000;
+const WORLD_W   = 4000;
+const WORLD_H   = 4000;
 const BASE_SIZE = 10;
 
-let camScale = 1;
-let time     = 0;
+let camScale     = 1;
+let time         = 0;
+let lastInput    = 0; // throttle input sends to 20Hz
 
 // ── Server state ──────────────────────────────────────
 let youId   = null;
 let food    = [];
 let bots    = [];
 let players = [];
-let myLocal = null; // client-predicted local player
+let myLocal = null;
 
 // ── Socket ────────────────────────────────────────────
 const socket = io('/amoeba', { auth: { token: localStorage.getItem('rg_token') } });
@@ -34,7 +35,6 @@ socket.on('init', data => {
 });
 
 socket.on('tick', data => {
-    // Apply food deltas
     for (const id of data.foodRemoved) {
         const i = food.findIndex(f => f.id === id);
         if (i !== -1) food.splice(i, 1);
@@ -46,15 +46,17 @@ socket.on('tick', data => {
 
     const serverMe = players.find(p => p.id === youId);
     if (serverMe && myLocal) {
-        // Snap on large correction (respawn), else soft reconcile
         const d = Math.hypot(serverMe.x - myLocal.x, serverMe.y - myLocal.y);
-        if (d > 150) {
+        if (d > 200) {
+            // Hard snap — respawn or large desync
             myLocal.x = serverMe.x;
             myLocal.y = serverMe.y;
-        } else {
-            myLocal.x += (serverMe.x - myLocal.x) * 0.15;
-            myLocal.y += (serverMe.y - myLocal.y) * 0.15;
+        } else if (d > 40) {
+            // Soft correction only when meaningfully off
+            myLocal.x += (serverMe.x - myLocal.x) * 0.25;
+            myLocal.y += (serverMe.y - myLocal.y) * 0.25;
         }
+        // Ignore < 40px drift — normal prediction ahead of server tick
         myLocal.size     = serverMe.size;
         myLocal.username = serverMe.username;
     } else if (serverMe) {
@@ -87,10 +89,17 @@ function loop() {
             myLocal.velY = (dy / dist) * spd;
             myLocal.x = Math.max(0, Math.min(WORLD_W, myLocal.x + myLocal.velX));
             myLocal.y = Math.max(0, Math.min(WORLD_H, myLocal.y + myLocal.velY));
-            socket.emit('input', { dirX: dx / dist, dirY: dy / dist });
         } else {
             myLocal.velX = myLocal.velY = 0;
-            socket.emit('input', { dirX: 0, dirY: 0 });
+        }
+
+        // Send input at 20Hz — sending every frame wastes bandwidth
+        const now = performance.now();
+        if (now - lastInput >= 50) {
+            lastInput = now;
+            socket.emit('input', dist > 1
+                ? { dirX: dx / dist, dirY: dy / dist }
+                : { dirX: 0, dirY: 0 });
         }
 
         const target = Math.max(0.15, Math.min(1, Math.pow(BASE_SIZE / myLocal.size, 0.5)));
@@ -106,7 +115,9 @@ function loop() {
 
 // ── Drawing ───────────────────────────────────────────
 function drawAmoeba(x, y, radius, color, velX, velY, phase) {
-    const N         = 24;
+    // Fewer points for small/distant cells — no visual difference at small screen size
+    const screenR = radius * camScale;
+    const N       = screenR < 15 ? 12 : 24;
     const speed     = Math.hypot(velX, velY);
     const moveAngle = speed > 0.01 ? Math.atan2(velY, velX) : 0;
     const t         = time * 0.012;
@@ -171,36 +182,51 @@ function draw() {
     ctx.scale(camScale, camScale);
     ctx.translate(-myLocal.x, -myLocal.y);
 
-    // Grid
+    // Viewport bounds in world space (with margin so things don't pop in)
+    const hw    = (c.width  / 2) / camScale + 100;
+    const hh    = (c.height / 2) / camScale + 100;
+    const vMinX = myLocal.x - hw;
+    const vMaxX = myLocal.x + hw;
+    const vMinY = myLocal.y - hh;
+    const vMaxY = myLocal.y + hh;
+
+    // Grid — batch all lines into one path (80 → 1 stroke call)
+    const gx0 = Math.max(0,       Math.floor(vMinX / 100) * 100);
+    const gx1 = Math.min(WORLD_W, Math.ceil(vMaxX  / 100) * 100);
+    const gy0 = Math.max(0,       Math.floor(vMinY / 100) * 100);
+    const gy1 = Math.min(WORLD_H, Math.ceil(vMaxY  / 100) * 100);
+
     ctx.strokeStyle = '#111';
     ctx.lineWidth   = 1;
-    for (let x = 0; x <= WORLD_W; x += 100) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_H); ctx.stroke();
-    }
-    for (let y = 0; y <= WORLD_H; y += 100) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD_W, y); ctx.stroke();
-    }
+    ctx.beginPath();
+    for (let x = gx0; x <= gx1; x += 100) { ctx.moveTo(x, gy0); ctx.lineTo(x, gy1); }
+    for (let y = gy0; y <= gy1; y += 100) { ctx.moveTo(gx0, y); ctx.lineTo(gx1, y); }
+    ctx.stroke();
 
     // Border
     ctx.strokeStyle = '#c0394b';
     ctx.lineWidth   = 30;
     ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
 
-    // Food
+    // Food — skip anything outside the viewport
     for (const f of food) {
+        if (f.x < vMinX || f.x > vMaxX || f.y < vMinY || f.y > vMaxY) continue;
         ctx.fillStyle = f.color;
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // Other players and bots sorted by size (bigger = behind)
+    // Others — sorted by size (bigger behind), viewport-culled
+    const maxR  = 200; // generous max amoeba radius for culling
     const others = [
         ...players.filter(p => p.id !== youId).map(p => ({ ...p, label: p.username })),
         ...bots.map(b => ({ ...b, label: b.name }))
     ].sort((a, b) => b.size - a.size);
 
     for (const e of others) {
+        if (e.x + maxR < vMinX || e.x - maxR > vMaxX ||
+            e.y + maxR < vMinY || e.y - maxR > vMaxY) continue;
         drawAmoeba(e.x, e.y, e.size, e.color, e.velX, e.velY, e.phase);
         drawLabel(e.x, e.y, e.size, e.label);
     }
