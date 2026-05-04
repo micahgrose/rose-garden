@@ -11,9 +11,10 @@ const WORLD_W   = 4000;
 const WORLD_H   = 4000;
 const BASE_SIZE = 10;
 
-let camScale     = 1;
-let time         = 0;
-let lastInput    = 0; // throttle input sends to 20Hz
+let camScale       = 1;
+let time           = 0;
+let lastInput      = 0;
+let lastFrameTime  = performance.now();
 
 // ── Server state ──────────────────────────────────────
 let youId   = null;
@@ -76,6 +77,9 @@ socket.on('died', ({ killedBy }) => {
 function calcSpeed(size) { return Math.pow(BASE_SIZE / size, 0.45) * 3; }
 
 function loop() {
+    const now = performance.now();
+    const dtScale = Math.min((now - lastFrameTime) / 50, 3); // clamp so tab-hidden spikes don't teleport
+    lastFrameTime = now;
     time++;
 
     if (myLocal) {
@@ -85,8 +89,8 @@ function loop() {
 
         if (dist > 1) {
             const spd = calcSpeed(myLocal.size);
-            myLocal.velX = (dx / dist) * spd;
-            myLocal.velY = (dy / dist) * spd;
+            myLocal.velX = (dx / dist) * spd * dtScale;
+            myLocal.velY = (dy / dist) * spd * dtScale;
             myLocal.x = Math.max(0, Math.min(WORLD_W, myLocal.x + myLocal.velX));
             myLocal.y = Math.max(0, Math.min(WORLD_H, myLocal.y + myLocal.velY));
         } else {
@@ -94,7 +98,6 @@ function loop() {
         }
 
         // Send input at 20Hz — sending every frame wastes bandwidth
-        const now = performance.now();
         if (now - lastInput >= 50) {
             lastInput = now;
             socket.emit('input', dist > 1
