@@ -122,7 +122,7 @@ const AG = {
     MAX_FOOD:  5000,
     MAX_TOTAL: 35,
     TICK_MS:   50,
-    EAT_RATIO: 1.75,
+    EAT_RATIO: 1.2,
     BOT_NAMES: [
         'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
 	    'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
@@ -260,7 +260,7 @@ function agEatFood() {
         const f = agFood[i];
         let eaten = false;
         for (const [, p] of agPlayers) {
-            const dx = f.x - p.x, dy = f.y - p.y, t = p.size * 0.6;
+            const dx = f.x - p.x, dy = f.y - p.y, t = p.size * 0.85;
             if (dx*dx + dy*dy <= t*t) {
                 p.size += f.size / 10; p.speed = agSpeed(p.size);
                 agFoodRemoved.add(f.id); agFood.splice(i, 1); eaten = true; break;
@@ -268,7 +268,7 @@ function agEatFood() {
         }
         if (eaten) continue;
         for (const b of agBots) {
-            const dx = f.x - b.x, dy = f.y - b.y, t = b.size * 0.6;
+            const dx = f.x - b.x, dy = f.y - b.y, t = b.size * 0.85;
             if (dx*dx + dy*dy <= t*t) {
                 b.size += f.size / 10; b.speed = agSpeed(b.size);
                 agFoodRemoved.add(f.id); agFood.splice(i, 1); break;

@@ -14,7 +14,7 @@ const BASE_SIZE    = 10;
 const TICK_MS      = 50;   // must match server AG.TICK_MS
 
 const CAM_MIN      = 0.1; // smallest zoom (biggest player)
-const CAM_MAX      = 2;    // largest zoom (smallest player)
+const CAM_MAX      = 4;    // largest zoom (smallest player)
 const CAM_LERP     = 0.05; // how fast zoom transitions
 
 const SNAP_HARD    = 200;  // px: hard-snap to server position
@@ -153,16 +153,22 @@ function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
         pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
     }
 
-    // Push any boundary point that landed inside a collider back to its surface
+    // Dent boundary inward to the near surface of any overlapping collider.
+    // Uses ray-circle intersection so the dent curves correctly to the collider's shape.
     for (const obj of nearby) {
+        const dx = x - obj.x, dy = y - obj.y; // amoeba center relative to collider
+        const D2  = dx*dx + dy*dy;
+        const fr2 = obj.r * obj.r;
         for (let i = 0; i < N; i++) {
-            const pdx = pts[i].x - obj.x;
-            const pdy = pts[i].y - obj.y;
-            const pd2 = pdx * pdx + pdy * pdy;
-            if (pd2 > 0 && pd2 < obj.r * obj.r) {
-                const pd = Math.sqrt(pd2);
-                pts[i].x = obj.x + (pdx / pd) * obj.r;
-                pts[i].y = obj.y + (pdy / pd) * obj.r;
+            const pdx = pts[i].x - obj.x, pdy = pts[i].y - obj.y;
+            if (pdx*pdx + pdy*pdy >= fr2) continue; // point not inside collider
+            const a   = (i / N) * Math.PI * 2;
+            const rx  = Math.cos(a), ry = Math.sin(a);
+            const dot  = dx*rx + dy*ry;
+            const disc = dot*dot - D2 + fr2;
+            if (disc >= 0) {
+                const t = -dot - Math.sqrt(disc); // near-surface intersection
+                if (t > 0) { pts[i].x = x + rx*t; pts[i].y = y + ry*t; }
             }
         }
     }
