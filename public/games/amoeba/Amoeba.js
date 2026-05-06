@@ -208,6 +208,23 @@ function loop() {
             }
         }
 
+        // Client-side soft leash: mirrors server logic so predictions stay smooth
+        if (myLocals.size > 1) {
+            let lsumX = 0, lsumY = 0, ltotal = 0;
+            for (const cell of myLocals.values()) { lsumX += cell.x; lsumY += cell.y; ltotal += cell.size; }
+            const lcentX = lsumX / myLocals.size, lcentY = lsumY / myLocals.size;
+            const leashR = Math.max(200, ltotal * 1.5);
+            for (const cell of myLocals.values()) {
+                const ldx = cell.x - lcentX, ldy = cell.y - lcentY;
+                const ldist = Math.hypot(ldx, ldy);
+                if (ldist > leashR) {
+                    const excess = ldist - leashR;
+                    cell.x -= (ldx / ldist) * excess * 0.25;
+                    cell.y -= (ldy / ldist) * excess * 0.25;
+                }
+            }
+        }
+
         if (now - lastInput >= TICK_MS) {
             lastInput = now;
             socket.emit('input', dist > 1
@@ -514,18 +531,17 @@ function draw() {
             const animCx = (nA && nB) ? (nA.x + nB.x) / 2 : sc.cx;
             const animCy = (nA && nB) ? (nA.y + nB.y) / 2 : sc.cy;
 
-            // In the final "two circles" phase draw the real cells at their actual positions
-            const ss = s < 0.18 ? 0 : (s - 0.18) / 0.82;
-            if (ss > 0.84 && nA && nB) {
-                const emerge = (ss - 0.84) / 0.16;
-                const r = sc.size * 0.5 * (1 + emerge * 0.25);
-                ctx.fillStyle = myColor || '#fff';
-                ctx.beginPath(); ctx.arc(nA.x, nA.y, r, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(nB.x, nB.y, r, 0, Math.PI * 2); ctx.fill();
-                drawLabel(animCx, animCy, sc.size * 0.5, myUsername || '(you)');
-            } else {
+            // Fission shape plays until neck pinches, then actual amoeba blobs grow in
+            const SPLIT_PHASE = 0.62;
+            if (s < SPLIT_PHASE) {
                 drawFissionShape(animCx, animCy, sc.size, myColor || '#fff', sc.dir, s);
                 drawLabel(animCx, animCy, sc.size, myUsername || '(you)');
+            } else if (nA && nB) {
+                const emerge = (s - SPLIT_PHASE) / (1 - SPLIT_PHASE);
+                const rA = nA.size * emerge, rB = nB.size * emerge;
+                if (rA > 1) drawAmoeba(nA.x, nA.y, rA, myColor || '#fff', nA.velX||0, nA.velY||0, nA.phase||0, myNearbyFood);
+                if (rB > 1) drawAmoeba(nB.x, nB.y, rB, myColor || '#fff', nB.velX||0, nB.velY||0, nB.phase||0, myNearbyFood);
+                drawLabel(animCx, animCy, sc.size * 0.5, myUsername || '(you)');
             }
         }
 
@@ -552,12 +568,30 @@ function draw() {
             drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
         }
 
-        // Merge animations, tracking toward actual merged cell position
-        for (const pair of mergeAnim.pairs) {
-            const targetX = mergedCell ? mergedCell.x : (pair.ax + pair.bx) / 2;
-            const targetY = mergedCell ? mergedCell.y : (pair.ay + pair.by) / 2;
-            drawMergeAnim(pair.ax, pair.ay, pair.aSize, pair.bx, pair.by, pair.bSize,
-                myColor || '#fff', pair.dir, s, targetX, targetY);
+        // Approach phase: actual amoeba blobs converge and shrink
+        const MERGE_APPROACH = 0.5;
+        if (s < MERGE_APPROACH) {
+            const t = s / MERGE_APPROACH;
+            for (const pair of mergeAnim.pairs) {
+                const targetX = mergedCell ? mergedCell.x : (pair.ax + pair.bx) / 2;
+                const targetY = mergedCell ? mergedCell.y : (pair.ay + pair.by) / 2;
+                const curAx = pair.ax + (targetX - pair.ax) * t, curAy = pair.ay + (targetY - pair.ay) * t;
+                const curBx = pair.bx + (targetX - pair.bx) * t, curBy = pair.by + (targetY - pair.by) * t;
+                const rA = pair.aSize * (1 - t), rB = pair.bSize * (1 - t);
+                if (rA > 0.5) drawAmoeba(curAx, curAy, rA, myColor || '#fff', 0, 0, 0, []);
+                if (rB > 0.5) drawAmoeba(curBx, curBy, rB, myColor || '#fff', 0, 0, 0, []);
+            }
+        }
+
+        // Emergence phase: merged cell grows from nothing as actual amoeba blob
+        if (s >= MERGE_APPROACH && mergedCell) {
+            const emerge = (s - MERGE_APPROACH) / (1 - MERGE_APPROACH);
+            const r = mergedCell.size * emerge;
+            if (r > 0.5) {
+                drawAmoeba(mergedCell.x, mergedCell.y, r, myColor || '#fff',
+                    mergedCell.velX||0, mergedCell.velY||0, mergedCell.phase||0, myNearbyFood);
+                drawLabel(mergedCell.x, mergedCell.y, r, myUsername || '(you)');
+            }
         }
 
     } else {
