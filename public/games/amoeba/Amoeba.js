@@ -454,7 +454,7 @@ function draw() {
     ctx.stroke();
 
     ctx.strokeStyle = '#c0394b'; ctx.lineWidth = 30;
-    ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
+    ctx.strokeRect(-15, -15, WORLD_W + 30, WORLD_H + 30);
 
     // Food
     for (const f of food) {
