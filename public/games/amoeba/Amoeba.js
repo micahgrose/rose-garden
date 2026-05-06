@@ -485,7 +485,7 @@ function draw() {
         if (p.id === youId) continue;
         for (const cell of p.cells) others.push({ ...cell, color: p.color, label: p.username });
     }
-    for (const b of botRender.values()) others.push({ ...b, label: b.name });
+    for (const b of botRender.values()) others.push({ ...b, label: b.name, isBot: true });
     others.sort((a, b) => b.size - a.size);
 
     // Draw other entities
@@ -504,7 +504,7 @@ function draw() {
             if (odx*odx + ody*ody < (e.size + o.size) ** 2 * 4) eNearby.push({ x: o.x, y: o.y, r: o.size });
         }
         drawAmoeba(e.x, e.y, e.size, e.color, e.velX || 0, e.velY || 0, e.phase || 0, eNearby);
-        drawLabel(e.x, e.y, e.size, e.label);
+        drawLabel(e.x, e.y, e.size, e.isBot ? e.label : `${e.label}: ${Math.floor(e.size)}`);
     }
 
     // Draw my cells — with animation overrides
@@ -529,7 +529,7 @@ function draw() {
             }
             drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
                 cell.velX || 0, cell.velY || 0, cell.phase || 0, cn);
-            drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
+            drawLabel(cell.x, cell.y, cell.size, `${myUsername || '(you)'}: ${Math.floor(cell.size)}`);
         }
 
         // Fission animation for each splitting cell, anchored to actual new cell positions
@@ -546,13 +546,13 @@ function draw() {
             const SPLIT_PHASE = 0.62;
             if (s < SPLIT_PHASE) {
                 drawFissionShape(animCx, animCy, sc.size, myColor || '#fff', sc.dir, s);
-                drawLabel(animCx, animCy, sc.size, myUsername || '(you)');
+                drawLabel(animCx, animCy, sc.size, `${myUsername || '(you)'}: ${Math.floor(sc.size)}`);
             } else if (nA && nB) {
                 const emerge = (s - SPLIT_PHASE) / (1 - SPLIT_PHASE);
                 const rA = nA.size * emerge, rB = nB.size * emerge;
                 if (rA > 1) drawAmoeba(nA.x, nA.y, rA, myColor || '#fff', nA.velX||0, nA.velY||0, nA.phase||0, myNearbyFood);
                 if (rB > 1) drawAmoeba(nB.x, nB.y, rB, myColor || '#fff', nB.velX||0, nB.velY||0, nB.phase||0, myNearbyFood);
-                drawLabel(animCx, animCy, sc.size * 0.5, myUsername || '(you)');
+                drawLabel(animCx, animCy, sc.size * 0.5, `${myUsername || '(you)'}: ${Math.floor(nA.size)}`);
             }
         }
 
@@ -576,7 +576,7 @@ function draw() {
             }
             drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
                 cell.velX || 0, cell.velY || 0, cell.phase || 0, cn);
-            drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
+            drawLabel(cell.x, cell.y, cell.size, `${myUsername || '(you)'}: ${Math.floor(cell.size)}`);
         }
 
         // Approach phase: actual amoeba blobs converge and shrink
@@ -601,7 +601,7 @@ function draw() {
             if (r > 0.5) {
                 drawAmoeba(mergedCell.x, mergedCell.y, r, myColor || '#fff',
                     mergedCell.velX||0, mergedCell.velY||0, mergedCell.phase||0, myNearbyFood);
-                drawLabel(mergedCell.x, mergedCell.y, r, myUsername || '(you)');
+                drawLabel(mergedCell.x, mergedCell.y, r, `${myUsername || '(you)'}: ${Math.floor(mergedCell.size)}`);
             }
         }
 
@@ -623,7 +623,7 @@ function draw() {
             }
             drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
                 cell.velX || 0, cell.velY || 0, cell.phase || 0, cn);
-            drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
+            drawLabel(cell.x, cell.y, cell.size, `${myUsername || '(you)'}: ${Math.floor(cell.size)}`);
         }
     }
 
