@@ -122,7 +122,7 @@ const AG = {
     WORLD_H:   7500,
     BASE_SIZE: 10,
     MAX_FOOD:  10000,
-    FOOD_SPAWN_RATE: 15,
+    FOOD_SPAWN_RATE: 150,
     BOT_SPAWN_RATE: 100,
     MAX_TOTAL: 55,
     TICK_MS:   50,
@@ -433,9 +433,11 @@ function agEatPlayers() {
 setInterval(() => {
     agFoodFrames++; agBotFrames++; agTickCount++;
 
-    if (agFoodFrames >= AG.FOOD_SPAWN_RATE && agFood.length < AG.MAX_FOOD) {
+    if (agFoodFrames >= AG.FOOD_SPAWN_RATE && agFood.length < AG.MAX_FOOD*(12/13)) {
         agFoodFrames = 0;
-        const f = agNewFood(); agFood.push(f); agFoodAdded.push(f);
+        for(let i = 0; i < Math.floor(AG.MAX_FOOD / 13); i++){
+            const f = agNewFood(); agFood.push(f); agFoodAdded.push(f);
+        }
     }
 
     const maxBots = Math.max(0, AG.MAX_TOTAL - agPlayers.size);
