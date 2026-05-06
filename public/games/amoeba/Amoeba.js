@@ -23,6 +23,8 @@ const SNAP_HARD    = 200;
 const SNAP_SOFT    = 40;
 const SNAP_LERP    = 0.25;
 
+const ANIM_MS      = 1000; // split / merge animation duration (ms)
+
 let camScale       = CAM_MAX;
 let camX           = WORLD_W / 2;
 let camY           = WORLD_H / 2;
@@ -142,7 +144,7 @@ document.addEventListener('click', () => {
     }
 
     if (splittingCells.length > 0) {
-        splitAnim = { splittingCells, nonSplittingIds, preSplitIds, startedAt: performance.now(), duration: 500 };
+        splitAnim = { splittingCells, nonSplittingIds, preSplitIds, startedAt: performance.now(), duration: ANIM_MS };
         mergeAnim = null;
     }
     socket.emit('split');
@@ -172,7 +174,7 @@ document.addEventListener('contextmenu', e => {
     }
 
     if (pairs.length > 0) {
-        mergeAnim = { pairs, mergeIds, preMergeIds, startedAt: performance.now(), duration: 500 };
+        mergeAnim = { pairs, mergeIds, preMergeIds, startedAt: performance.now(), duration: ANIM_MS };
         splitAnim = null;
     }
     socket.emit('merge');
@@ -310,12 +312,13 @@ function drawFissionShape(cx, cy, radius, color, dir, splitS) {
 }
 
 // Merge: two cells converge then play reverse fission
-function drawMergeAnim(ax, ay, aSize, bx, by, bSize, color, dir, s) {
-    const centX    = (ax + bx) / 2, centY = (ay + by) / 2;
+// targetX/Y is the actual merged cell position so the animation tracks with it
+function drawMergeAnim(ax, ay, aSize, bx, by, bSize, color, dir, s, targetX, targetY) {
+    const centX    = targetX, centY = targetY;
     const halfSize = (aSize + bSize) / 2;
 
     if (s < 0.28) {
-        // Approach phase: cells slide toward centroid
+        // Approach phase: both cells slide toward the actual merged cell position
         const t = s / 0.28;
         const curAx = ax + (centX - ax) * t, curAy = ay + (centY - ay) * t;
         const curBx = bx + (centX - bx) * t, curBy = by + (centY - by) * t;
@@ -482,6 +485,12 @@ function draw() {
     if (splitAnim && now - splitAnim.startedAt < splitAnim.duration) {
         const s = (now - splitAnim.startedAt) / splitAnim.duration;
 
+        // Collect new cells created by split (not present before split)
+        const allNew = [];
+        for (const [id, cell] of myLocals) {
+            if (!splitAnim.preSplitIds.has(id)) allNew.push(cell);
+        }
+
         // Non-splitting cells render normally (same IDs, unchanged on server)
         for (const [id, cell] of myLocals) {
             if (!splitAnim.nonSplittingIds.has(id)) continue;
@@ -495,13 +504,39 @@ function draw() {
             drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
         }
 
-        // Fission animation for splitting cells
-        for (const sc of splitAnim.splittingCells) {
-            drawFissionShape(sc.cx, sc.cy, sc.size, myColor || '#fff', sc.dir, s);
+        // Fission animation for each splitting cell, anchored to actual new cell positions
+        for (let k = 0; k < splitAnim.splittingCells.length; k++) {
+            const sc  = splitAnim.splittingCells[k];
+            const nA  = allNew[k * 2];
+            const nB  = allNew[k * 2 + 1];
+
+            // Track the actual centroid of the two new cells so the shape moves with them
+            const animCx = (nA && nB) ? (nA.x + nB.x) / 2 : sc.cx;
+            const animCy = (nA && nB) ? (nA.y + nB.y) / 2 : sc.cy;
+
+            // In the final "two circles" phase draw the real cells at their actual positions
+            const ss = s < 0.18 ? 0 : (s - 0.18) / 0.82;
+            if (ss > 0.84 && nA && nB) {
+                const emerge = (ss - 0.84) / 0.16;
+                const r = sc.size * 0.5 * (1 + emerge * 0.25);
+                ctx.fillStyle = myColor || '#fff';
+                ctx.beginPath(); ctx.arc(nA.x, nA.y, r, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(nB.x, nB.y, r, 0, Math.PI * 2); ctx.fill();
+                drawLabel(animCx, animCy, sc.size * 0.5, myUsername || '(you)');
+            } else {
+                drawFissionShape(animCx, animCy, sc.size, myColor || '#fff', sc.dir, s);
+                drawLabel(animCx, animCy, sc.size, myUsername || '(you)');
+            }
         }
 
     } else if (mergeAnim && now - mergeAnim.startedAt < mergeAnim.duration) {
         const s = (now - mergeAnim.startedAt) / mergeAnim.duration;
+
+        // Find the actual merged cell so we can track its position
+        let mergedCell = null;
+        for (const [id, cell] of myLocals) {
+            if (!mergeAnim.preMergeIds.has(id)) { mergedCell = cell; break; }
+        }
 
         // Non-merging cells (in preMergeIds but not mergeIds) render normally
         for (const [id, cell] of myLocals) {
@@ -517,10 +552,12 @@ function draw() {
             drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
         }
 
-        // Merge animations
+        // Merge animations, tracking toward actual merged cell position
         for (const pair of mergeAnim.pairs) {
+            const targetX = mergedCell ? mergedCell.x : (pair.ax + pair.bx) / 2;
+            const targetY = mergedCell ? mergedCell.y : (pair.ay + pair.by) / 2;
             drawMergeAnim(pair.ax, pair.ay, pair.aSize, pair.bx, pair.by, pair.bSize,
-                myColor || '#fff', pair.dir, s);
+                myColor || '#fff', pair.dir, s, targetX, targetY);
         }
 
     } else {

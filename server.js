@@ -303,7 +303,7 @@ function agMovePlayers() {
                 }
             }
         }
-        // Leash: split cells can't stray beyond leashRadius from their centroid
+        // Soft leash: spring-pull cells back when they stray beyond leashRadius
         if (p.cells.length > 1) {
             let sumX = 0, sumY = 0, totalSize = 0;
             for (const c of p.cells) { sumX += c.x; sumY += c.y; totalSize += c.size; }
@@ -313,9 +313,10 @@ function agMovePlayers() {
                 const dx = c.x - centX, dy = c.y - centY;
                 const dist = Math.hypot(dx, dy);
                 if (dist > leashR) {
-                    const s = leashR / dist;
-                    c.x = centX + dx * s;
-                    c.y = centY + dy * s;
+                    const excess = dist - leashR;
+                    const pull   = excess * 0.25; // gentle spring: 25% of excess per tick
+                    c.x -= (dx / dist) * pull;
+                    c.y -= (dy / dist) * pull;
                 }
             }
         }
