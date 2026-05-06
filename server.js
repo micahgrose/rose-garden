@@ -121,13 +121,15 @@ const AG = {
     WORLD_W:   7500,
     WORLD_H:   7500,
     BASE_SIZE: 10,
+    MAX_SIZE:  1000,
     MAX_FOOD:  10000,
-    FOOD_SPAWN_RATE: 150,
+    FOOD_SPAWN_RATE: 500,
     BOT_SPAWN_RATE: 100,
     MAX_TOTAL: 55,
     TICK_MS:   50,
     EAT_RATIO: 1.2,
     SPLIT_MIN: 20,
+    SHOOT_DECAY: 0.1,
     BOT_NAMES: [
         'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
 	    'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
@@ -279,18 +281,19 @@ function agMoveBots(updateGoals) {
 
 function agMovePlayers() {
     for (const [, p] of agPlayers) {
-        const mag = Math.hypot(p.dirX, p.dirY);
         for (const cell of p.cells) {
-            if (mag < 0.1) { cell.velX = cell.velY = 0; continue; }
+            const dx = p.mouseX - cell.x, dy = p.mouseY - cell.y;
+            const mag = Math.hypot(dx, dy);
+            if (mag < 1) { cell.velX = cell.velY = 0; continue; }
             const spd = cell.speed * (cell.splitBoost ? 1.3 : 1);
-            cell.velX = (p.dirX / mag) * spd;
-            cell.velY = (p.dirY / mag) * spd;
+            cell.velX = (dx / mag) * spd;
+            cell.velY = (dy / mag) * spd;
             cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.velX));
             cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.velY));
             if (cell.shootX || cell.shootY) {
                 cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.shootX));
                 cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.shootY));
-                cell.shootX *= 0.50; cell.shootY *= 0.50;
+                cell.shootX *= AG.SHOOT_DECAY; cell.shootY *= AG.SHOOT_DECAY;
                 if (Math.abs(cell.shootX) < 0.1 && Math.abs(cell.shootY) < 0.1)
                     cell.shootX = cell.shootY = 0;
             }
@@ -340,7 +343,7 @@ function agEatFood() {
             for (const cell of p.cells) {
                 const dx = f.x - cell.x, dy = f.y - cell.y, t = cell.size * 1.5 + f.size;
                 if (dx*dx + dy*dy <= t*t) {
-                    cell.size += 1; cell.speed = agSpeed(cell.size);
+                    cell.size = Math.min(AG.MAX_SIZE, cell.size + 1); cell.speed = agSpeed(cell.size);
                     agFoodRemoved.add(f.id); agFood.splice(i, 1); eaten = true; break outer;
                 }
             }
@@ -349,7 +352,7 @@ function agEatFood() {
         for (const b of agBots) {
             const dx = f.x - b.x, dy = f.y - b.y, t = b.size * 1.5 + f.size;
             if (dx*dx + dy*dy <= t*t) {
-                b.size += 1; b.speed = agSpeed(b.size);
+                b.size = Math.min(AG.MAX_SIZE, b.size + 1); b.speed = agSpeed(b.size);
                 agFoodRemoved.add(f.id); agFood.splice(i, 1); break;
             }
         }
@@ -357,7 +360,7 @@ function agEatFood() {
 }
 
 function agRespawn(p) {
-    p.dirX = p.dirY = 0;
+    p.mouseX = AG.WORLD_W / 2; p.mouseY = AG.WORLD_H / 2;
     p.cells = [agNewCell(Math.random() * AG.WORLD_W, Math.random() * AG.WORLD_H, AG.BASE_SIZE)];
 }
 
@@ -369,10 +372,10 @@ function agEatBots() {
                 const cell = p.cells[ci];
                 const dx = b.x - cell.x, dy = b.y - cell.y, dsq = dx*dx + dy*dy;
                 if (cell.size >= b.size * AG.EAT_RATIO && dsq < cell.size * cell.size) {
-                    cell.size += b.size * 0.5; cell.speed = agSpeed(cell.size);
+                    cell.size = Math.min(AG.MAX_SIZE, cell.size + b.size * 0.5); cell.speed = agSpeed(cell.size);
                     agBots.splice(i, 1); dead = true; break;
                 } else if (b.size >= cell.size * AG.EAT_RATIO && dsq < b.size * b.size) {
-                    b.size += cell.size * 0.5; b.speed = agSpeed(b.size);
+                    b.size = Math.min(AG.MAX_SIZE, b.size + cell.size * 0.5); b.speed = agSpeed(b.size);
                     p.cells.splice(ci, 1);
                     if (p.cells.length === 0) {
                         agRespawn(p);
@@ -387,10 +390,10 @@ function agEatBots() {
         for (let j = i - 1; j >= 0; j--) {
             const a = agBots[j]; const dx = b.x - a.x, dy = b.y - a.y, dsq = dx*dx + dy*dy;
             if (b.size >= a.size * AG.EAT_RATIO && dsq < b.size * b.size) {
-                b.size += a.size * 0.5; b.speed = agSpeed(b.size);
+                b.size = Math.min(AG.MAX_SIZE, b.size + a.size * 0.5); b.speed = agSpeed(b.size);
                 agBots.splice(j, 1); i--;
             } else if (a.size >= b.size * AG.EAT_RATIO && dsq < a.size * a.size) {
-                a.size += b.size * 0.5; a.speed = agSpeed(a.size);
+                a.size = Math.min(AG.MAX_SIZE, a.size + b.size * 0.5); a.speed = agSpeed(a.size);
                 agBots.splice(i, 1); dead = true; break;
             }
         }
@@ -409,14 +412,14 @@ function agEatPlayers() {
                     const ca = a.cells[ci], cb = b.cells[cj];
                     const dx = ca.x - cb.x, dy = ca.y - cb.y, dsq = dx*dx + dy*dy;
                     if (ca.size >= cb.size * AG.EAT_RATIO && dsq < ca.size * ca.size) {
-                        ca.size += cb.size * 0.5; ca.speed = agSpeed(ca.size);
+                        ca.size = Math.min(AG.MAX_SIZE, ca.size + cb.size * 0.5); ca.speed = agSpeed(ca.size);
                         b.cells.splice(cj, 1);
                         if (b.cells.length === 0) {
                             agRespawn(b);
                             io.of('/amoeba').to(sidB).emit('died', { killedBy: a.username });
                         }
                     } else if (cb.size >= ca.size * AG.EAT_RATIO && dsq < cb.size * cb.size) {
-                        cb.size += ca.size * 0.5; cb.speed = agSpeed(cb.size);
+                        cb.size = Math.min(AG.MAX_SIZE, cb.size + ca.size * 0.5); cb.speed = agSpeed(cb.size);
                         a.cells.splice(ci, 1);
                         if (a.cells.length === 0) {
                             agRespawn(a);
@@ -480,7 +483,7 @@ io.of('/amoeba').on('connection', socket => {
 
     const player = {
         id: socket.id, username, color: agColor(),
-        dirX: 0, dirY: 0,
+        mouseX: AG.WORLD_W / 2, mouseY: AG.WORLD_H / 2,
         cells: [agNewCell(
             AG.WORLD_W / 2 + (Math.random() - 0.5) * 500,
             AG.WORLD_H / 2 + (Math.random() - 0.5) * 500,
@@ -509,9 +512,9 @@ io.of('/amoeba').on('connection', socket => {
         players: [...agPlayers.values()].map(mapPlayer)
     });
 
-    socket.on('input', ({ dirX, dirY }) => {
+    socket.on('input', ({ mouseX, mouseY }) => {
         const p = agPlayers.get(socket.id);
-        if (p) { p.dirX = dirX || 0; p.dirY = dirY || 0; }
+        if (p) { p.mouseX = mouseX ?? p.mouseX; p.mouseY = mouseY ?? p.mouseY; }
     });
 
     socket.on('split', () => {
@@ -521,8 +524,9 @@ io.of('/amoeba').on('connection', socket => {
         for (const cell of p.cells) {
             if (cell.size < AG.SPLIT_MIN) { next.push(cell); continue; }
             const half = cell.size / 2;
-            const mag  = Math.hypot(p.dirX, p.dirY) || 1;
-            const px   = p.dirX / mag, py = p.dirY / mag; // along mouse → oval faces mouse
+            const mdx  = p.mouseX - cell.x, mdy = p.mouseY - cell.y;
+            const mag  = Math.hypot(mdx, mdy) || 1;
+            const px   = mdx / mag, py = mdy / mag;
             const off  = cell.size * 0.7;
             const spd  = agSpeed(half);
             const shootSpd = spd * 4;

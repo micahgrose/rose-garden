@@ -193,11 +193,13 @@ function loop() {
     time++;
 
     if (myLocals.size > 0) {
-        const dx   = mouseX - c.width  / 2;
-        const dy   = mouseY - c.height / 2;
-        const dist = Math.hypot(dx, dy);
+        const worldMouseX = camX + (mouseX - c.width  / 2) / camScale;
+        const worldMouseY = camY + (mouseY - c.height / 2) / camScale;
 
         for (const cell of myLocals.values()) {
+            const dx   = worldMouseX - cell.x;
+            const dy   = worldMouseY - cell.y;
+            const dist = Math.hypot(dx, dy);
             if (dist > 1) {
                 const spd = calcSpeed(cell.size, cell.splitBoost);
                 cell.velX = (dx / dist) * spd * dtScale;
@@ -238,9 +240,7 @@ function loop() {
 
         if (now - lastInput >= TICK_MS) {
             lastInput = now;
-            socket.emit('input', dist > 1
-                ? { dirX: dx / dist, dirY: dy / dist }
-                : { dirX: 0, dirY: 0 });
+            socket.emit('input', { mouseX: worldMouseX, mouseY: worldMouseY });
         }
 
         // Camera: centroid + zoom to fit all cells
