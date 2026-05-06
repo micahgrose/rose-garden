@@ -12,6 +12,7 @@ const WORLD_W      = 4000;
 const WORLD_H      = 4000;
 const BASE_SIZE    = 10;
 const TICK_MS      = 50;
+const SPLIT_MIN    = 20;
 
 const CAM_MIN      = 0.1;
 const CAM_MAX      = 4;
@@ -33,11 +34,22 @@ let lastTickTime   = performance.now();
 // ── Server state ──────────────────────────────────────
 let youId      = null;
 let food       = [];
-let players    = []; // [{id, username, color, cells: [{id,x,y,size,velX,velY,phase,splitBoost}]}]
+let players    = [];
 let myLocals   = new Map(); // cellId → local predicted cell
 let myColor    = null;
 let myUsername = null;
 const botRender = new Map();
+
+// ── Animation state ───────────────────────────────────
+// Split: captures pre-split cell states, plays fission shape 0→1
+let splitAnim = null;
+// { splittingCells: [{cx,cy,size,phase,dir}], nonSplittingIds: Set,
+//   preSplitIds: Set, startedAt, duration }
+
+// Merge: captures pre-merge cell positions, plays fission shape 1→0
+let mergeAnim = null;
+// { pairs: [{ax,ay,aSize,bx,by,bSize,dir}], mergeIds: Set,
+//   preMergeIds: Set, startedAt, duration }
 
 // ── Socket ────────────────────────────────────────────
 const socket = io('/amoeba', { auth: { token: localStorage.getItem('rg_token') } });
@@ -49,8 +61,7 @@ socket.on('init', data => {
     for (const b of data.bots) botRender.set(b.id, { ...b });
     const me = players.find(p => p.id === youId);
     if (me) {
-        myColor    = me.color;
-        myUsername = me.username;
+        myColor = me.color; myUsername = me.username;
         myLocals.clear();
         for (const cell of me.cells) myLocals.set(cell.id, { ...cell });
     }
@@ -62,11 +73,9 @@ socket.on('tick', data => {
         if (i !== -1) food.splice(i, 1);
     }
     for (const f of data.foodAdded) food.push(f);
-
     players = data.players;
     lastTickTime = performance.now();
 
-    // Update bot render targets
     const activeIds = new Set();
     for (const b of data.bots) {
         activeIds.add(b.id);
@@ -80,34 +89,21 @@ socket.on('tick', data => {
             v.phase = b.phase; v.name = b.name;
         }
     }
-    for (const id of botRender.keys()) {
-        if (!activeIds.has(id)) botRender.delete(id);
-    }
+    for (const id of botRender.keys()) if (!activeIds.has(id)) botRender.delete(id);
 
-    // Reconcile my cells
     const serverMe = players.find(p => p.id === youId);
     if (serverMe) {
-        myColor    = serverMe.color;
-        myUsername = serverMe.username;
+        myColor = serverMe.color; myUsername = serverMe.username;
         const serverIds = new Set(serverMe.cells.map(sc => sc.id));
-        for (const id of myLocals.keys()) {
-            if (!serverIds.has(id)) myLocals.delete(id);
-        }
+        for (const id of myLocals.keys()) if (!serverIds.has(id)) myLocals.delete(id);
         for (const sc of serverMe.cells) {
             if (myLocals.has(sc.id)) {
                 const loc = myLocals.get(sc.id);
                 const d = Math.hypot(sc.x - loc.x, sc.y - loc.y);
-                if (d > SNAP_HARD) {
-                    loc.x = sc.x; loc.y = sc.y;
-                } else if (d > SNAP_SOFT) {
-                    loc.x += (sc.x - loc.x) * SNAP_LERP;
-                    loc.y += (sc.y - loc.y) * SNAP_LERP;
-                }
-                loc.size       = sc.size;
-                loc.velX       = sc.velX;
-                loc.velY       = sc.velY;
-                loc.phase      = sc.phase;
-                loc.splitBoost = sc.splitBoost;
+                if (d > SNAP_HARD) { loc.x = sc.x; loc.y = sc.y; }
+                else if (d > SNAP_SOFT) { loc.x += (sc.x - loc.x) * SNAP_LERP; loc.y += (sc.y - loc.y) * SNAP_LERP; }
+                loc.size = sc.size; loc.velX = sc.velX; loc.velY = sc.velY;
+                loc.phase = sc.phase; loc.splitBoost = sc.splitBoost;
             } else {
                 myLocals.set(sc.id, { ...sc });
             }
@@ -121,11 +117,66 @@ socket.on('died', ({ killedBy }) => {
     screen.classList.add('active');
     setTimeout(() => screen.classList.remove('active'), 2500);
     myLocals.clear();
+    splitAnim = null; mergeAnim = null;
 });
 
-// ── Split / merge inputs ──────────────────────────────
-document.addEventListener('click', () => socket.emit('split'));
-document.addEventListener('contextmenu', e => { e.preventDefault(); socket.emit('merge'); });
+// ── Input: split / merge ──────────────────────────────
+document.addEventListener('click', () => {
+    if (myLocals.size === 0) return;
+
+    const dx  = mouseX - c.width / 2, dy = mouseY - c.height / 2;
+    const mag = Math.hypot(dx, dy) || 1;
+    const dir = { x: dx / mag, y: dy / mag };
+
+    const splittingCells  = [];
+    const nonSplittingIds = new Set();
+    const preSplitIds     = new Set();
+
+    for (const [id, cell] of myLocals) {
+        preSplitIds.add(id);
+        if (cell.size >= SPLIT_MIN) {
+            splittingCells.push({ cx: cell.x, cy: cell.y, size: cell.size, phase: cell.phase, dir });
+        } else {
+            nonSplittingIds.add(id);
+        }
+    }
+
+    if (splittingCells.length > 0) {
+        splitAnim = { splittingCells, nonSplittingIds, preSplitIds, startedAt: performance.now(), duration: 500 };
+        mergeAnim = null;
+    }
+    socket.emit('split');
+});
+
+document.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    if (myLocals.size < 2) { socket.emit('merge'); return; }
+
+    const cells       = [...myLocals.entries()];
+    const pairs       = [];
+    const mergeIds    = new Set();
+    const preMergeIds = new Set(myLocals.keys());
+
+    for (let i = 0; i < cells.length; i++) {
+        for (let j = i + 1; j < cells.length; j++) {
+            const [idA, a] = cells[i], [idB, b] = cells[j];
+            const dist = Math.hypot(a.x - b.x, a.y - b.y);
+            if (dist < (a.size + b.size) * 1.2) {
+                const ddx = b.x - a.x, ddy = b.y - a.y;
+                const dmag = Math.hypot(ddx, ddy) || 1;
+                pairs.push({ ax: a.x, ay: a.y, aSize: a.size, bx: b.x, by: b.y, bSize: b.size,
+                    dir: { x: ddx / dmag, y: ddy / dmag } });
+                mergeIds.add(idA); mergeIds.add(idB);
+            }
+        }
+    }
+
+    if (pairs.length > 0) {
+        mergeAnim = { pairs, mergeIds, preMergeIds, startedAt: performance.now(), duration: 500 };
+        splitAnim = null;
+    }
+    socket.emit('merge');
+});
 
 // ── Game logic ────────────────────────────────────────
 function calcSpeed(size, splitBoost) {
@@ -186,7 +237,6 @@ function loop() {
         document.getElementById('playerText').textContent = `Players: ${players.length}`;
     }
 
-    // Extrapolate bot positions between ticks
     const tickElapsed = Math.min((now - lastTickTime) / TICK_MS, 1.5);
     for (const v of botRender.values()) {
         if (v.tx !== undefined) {
@@ -201,10 +251,88 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// ── Drawing ───────────────────────────────────────────
+// ── Fission shape ─────────────────────────────────────
+// splitS: 0 = round ball, 1 = two fully separated cells
+// dir: unit vector — long axis of the oval (faces mouse)
+function drawFissionShape(cx, cy, radius, color, dir, splitS) {
+    ctx.fillStyle = color;
+    const perp = { x: -dir.y, y: dir.x };
+
+    if (splitS < 0.18) {
+        // Smooth ball (wobble already suppressed)
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+    }
+
+    const ss = (splitS - 0.18) / 0.82; // remap to 0→1 for morph phase
+
+    if (ss > 0.84) {
+        // Two cells emerging and shooting out
+        const emerge = (ss - 0.84) / 0.16;
+        const sep = radius * (0.52 + emerge * 1.1);
+        const r   = radius * 0.5 * (1 + emerge * 0.25);
+        ctx.beginPath(); ctx.arc(cx + dir.x * sep, cy + dir.y * sep, r, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx - dir.x * sep, cy - dir.y * sep, r, 0, Math.PI * 2); ctx.fill();
+        return;
+    }
+
+    // Oval → neck pinch
+    const elongation = Math.min(ss / 0.38, 1.0);
+    const pinchDepth = Math.max(0, (ss - 0.38) / 0.46);
+
+    const a = radius * (1.0 + elongation * 0.85); // semi-major along dir
+    const b = radius * (1.0 - elongation * 0.28); // semi-minor perpendicular
+
+    const N = 32, pts = [];
+    for (let i = 0; i < N; i++) {
+        const angle = (i / N) * Math.PI * 2;
+        const ex    = Math.cos(angle); // along dir [-1,1]
+        const ey    = Math.sin(angle); // perp
+        // Gaussian neck pinch at ex=0
+        const pf       = pinchDepth * Math.exp(-ex * ex * 8);
+        const scaledA  = ex * a;
+        const scaledB  = ey * b * (1 - pf);
+        pts.push({ x: cx + dir.x * scaledA + perp.x * scaledB,
+                   y: cy + dir.y * scaledA + perp.y * scaledB });
+    }
+
+    ctx.beginPath();
+    const sp = { x: (pts[N - 1].x + pts[0].x) / 2, y: (pts[N - 1].y + pts[0].y) / 2 };
+    ctx.moveTo(sp.x, sp.y);
+    for (let i = 0; i < N; i++) {
+        const p = pts[i], next = pts[(i + 1) % N];
+        ctx.quadraticCurveTo(p.x, p.y, (p.x + next.x) / 2, (p.y + next.y) / 2);
+    }
+    ctx.closePath();
+    ctx.fill();
+}
+
+// Merge: two cells converge then play reverse fission
+function drawMergeAnim(ax, ay, aSize, bx, by, bSize, color, dir, s) {
+    const centX    = (ax + bx) / 2, centY = (ay + by) / 2;
+    const halfSize = (aSize + bSize) / 2;
+
+    if (s < 0.28) {
+        // Approach phase: cells slide toward centroid
+        const t = s / 0.28;
+        const curAx = ax + (centX - ax) * t, curAy = ay + (centY - ay) * t;
+        const curBx = bx + (centX - bx) * t, curBy = by + (centY - by) * t;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(curAx, curAy, aSize * (1 - t * 0.12), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(curBx, curBy, bSize * (1 - t * 0.12), 0, Math.PI * 2); ctx.fill();
+    } else {
+        // Reverse fission: from splitS≈0.74 down to 0 (pinched oval → round ball)
+        const splitS = 0.74 * (1 - (s - 0.28) / 0.72);
+        drawFissionShape(centX, centY, halfSize, color, dir, splitS);
+    }
+}
+
+// ── Standard amoeba drawing ───────────────────────────
 function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
-    const screenR = radius * camScale;
-    const N       = screenR < 15 ? 12 : 24;
+    const screenR   = radius * camScale;
+    const N         = screenR < 15 ? 12 : 24;
     const speed     = Math.hypot(velX, velY);
     const moveAngle = speed > 0.01 ? Math.atan2(velY, velX) : 0;
     const t         = time * 0.012;
@@ -213,29 +341,24 @@ function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
     for (let i = 0; i < N; i++) {
         let a = (i / N) * Math.PI * 2;
         let r = radius;
-
-        r += Math.sin(a * 2 + t       + phase)        * radius * 0.10;
-        r += Math.sin(a * 3 + t * 1.3 + phase * 0.7)  * radius * 0.08;
-        r += Math.sin(a * 5 + t * 0.7 + phase * 1.5)  * radius * 0.05;
-
-        r += Math.pow(Math.max(0, Math.sin(a * 2 + t * 0.6  + phase)),        5) * radius * 0.65;
-        r += Math.pow(Math.max(0, Math.sin(a * 2 + t * 0.45 + phase + 2.1)),  5) * radius * 0.55;
-        r += Math.pow(Math.max(0, Math.sin(a * 2 + t * 0.35 + phase + 4.3)),  5) * radius * 0.45;
-
+        r += Math.sin(a * 2 + t       + phase)       * radius * 0.10;
+        r += Math.sin(a * 3 + t * 1.3 + phase * 0.7) * radius * 0.08;
+        r += Math.sin(a * 5 + t * 0.7 + phase * 1.5) * radius * 0.05;
+        r += Math.pow(Math.max(0, Math.sin(a * 2 + t * 0.6  + phase)),       5) * radius * 0.65;
+        r += Math.pow(Math.max(0, Math.sin(a * 2 + t * 0.45 + phase + 2.1)), 5) * radius * 0.55;
+        r += Math.pow(Math.max(0, Math.sin(a * 2 + t * 0.35 + phase + 4.3)), 5) * radius * 0.45;
         if (speed > 0.1) {
             const align = Math.cos(a - moveAngle);
             r += Math.max(0, align) * Math.min(speed / 3, 1) * radius * 0.3;
         }
-
         pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
     }
 
     for (const obj of nearby) {
-        const infR  = obj.r * 1.6;
-        const infR2 = infR * infR;
+        const infR = obj.r * 1.6, infR2 = infR * infR;
         for (let i = 0; i < N; i++) {
             const pdx = pts[i].x - obj.x, pdy = pts[i].y - obj.y;
-            const d2  = pdx*pdx + pdy*pdy;
+            const d2 = pdx*pdx + pdy*pdy;
             if (d2 >= infR2) continue;
             const d   = Math.sqrt(d2);
             const inf = 1 - d / infR;
@@ -264,17 +387,16 @@ function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
 
 function drawLabel(x, y, radius, text) {
     const fontSize = Math.max(6, Math.min(14 / camScale, radius * 0.8));
-    ctx.fillStyle    = 'white';
-    ctx.font         = `bold ${fontSize}px sans-serif`;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'white'; ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(text, x, y);
 }
 
+// ── Draw ──────────────────────────────────────────────
 function draw() {
     ctx.clearRect(0, 0, c.width, c.height);
 
-    if (myLocals.size === 0) {
+    if (myLocals.size === 0 && !splitAnim && !mergeAnim) {
         ctx.fillStyle = '#555'; ctx.font = '22px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('Connecting...', c.width / 2, c.height / 2);
@@ -301,7 +423,6 @@ function draw() {
     for (let y = gy0; y <= gy1; y += 100) { ctx.moveTo(gx0, y); ctx.lineTo(gx1, y); }
     ctx.stroke();
 
-    // Border
     ctx.strokeStyle = '#c0394b'; ctx.lineWidth = 30;
     ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
 
@@ -312,22 +433,21 @@ function draw() {
         ctx.beginPath(); ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2); ctx.fill();
     }
 
-    // My cells as array + collision objects
     const myCells    = [...myLocals.values()];
     const myCellObjs = myCells.map(cell => ({ x: cell.x, y: cell.y, r: cell.size }));
 
-    // Nearby food for my cells
     const myNearbyFood = [];
     for (const f of food) {
         for (let k = 0; k < myCells.length; k++) {
             const mc = myCells[k];
             const dx = f.x - mc.x, dy = f.y - mc.y;
-            const reach = mc.size * 1.7 + f.size * 2;
-            if (dx*dx + dy*dy < reach*reach) { myNearbyFood.push({ x: f.x, y: f.y, r: f.size }); break; }
+            if (dx*dx + dy*dy < (mc.size * 1.7 + f.size * 2) ** 2) {
+                myNearbyFood.push({ x: f.x, y: f.y, r: f.size }); break;
+            }
         }
     }
 
-    // Build all other drawable entities (other players' cells + bots)
+    // Build other entities (enemy players' cells + bots)
     const maxR   = 200;
     const others = [];
     for (const p of players) {
@@ -337,56 +457,92 @@ function draw() {
     for (const b of botRender.values()) others.push({ ...b, label: b.name });
     others.sort((a, b) => b.size - a.size);
 
-    // Draw other entities (bigger first so smaller appear on top)
+    // Draw other entities
     for (const e of others) {
         if (e.x + maxR < vMinX || e.x - maxR > vMaxX ||
             e.y + maxR < vMinY || e.y - maxR > vMaxY) continue;
-
         const eNearby = [];
-
-        // My cells' influence on this entity
         for (let k = 0; k < myCells.length; k++) {
             const mc = myCells[k];
             const edx = e.x - mc.x, edy = e.y - mc.y;
-            if (edx*edx + edy*edy < (mc.size + e.size) * (mc.size + e.size) * 4)
-                eNearby.push(myCellObjs[k]);
+            if (edx*edx + edy*edy < (mc.size + e.size) ** 2 * 4) eNearby.push(myCellObjs[k]);
         }
-
-        // Other entities' influence on this entity
         for (const o of others) {
             if (o === e) continue;
             const odx = o.x - e.x, ody = o.y - e.y;
-            const oReach = (e.size + o.size) * 2;
-            if (odx*odx + ody*ody < oReach*oReach) eNearby.push({ x: o.x, y: o.y, r: o.size });
+            if (odx*odx + ody*ody < (e.size + o.size) ** 2 * 4) eNearby.push({ x: o.x, y: o.y, r: o.size });
         }
-
         drawAmoeba(e.x, e.y, e.size, e.color, e.velX || 0, e.velY || 0, e.phase || 0, eNearby);
         drawLabel(e.x, e.y, e.size, e.label);
     }
 
-    // Draw my own cells (always on top, sorted big-to-small)
-    const sortedMy = [...myCells].sort((a, b) => b.size - a.size);
-    for (const cell of sortedMy) {
-        const cellNearby = [...myNearbyFood];
+    // Draw my cells — with animation overrides
+    const now = performance.now();
 
-        // Other own cells deform this one
-        for (const mc of myCells) {
-            if (mc === cell) continue;
-            const dx = mc.x - cell.x, dy = mc.y - cell.y;
-            const reach = (cell.size + mc.size) * 2;
-            if (dx*dx + dy*dy < reach*reach) cellNearby.push({ x: mc.x, y: mc.y, r: mc.size });
+    if (splitAnim && now - splitAnim.startedAt < splitAnim.duration) {
+        const s = (now - splitAnim.startedAt) / splitAnim.duration;
+
+        // Non-splitting cells render normally (same IDs, unchanged on server)
+        for (const [id, cell] of myLocals) {
+            if (!splitAnim.nonSplittingIds.has(id)) continue;
+            const cn = [...myNearbyFood];
+            for (const e of others) {
+                const dx = e.x - cell.x, dy = e.y - cell.y;
+                if (dx*dx + dy*dy < (cell.size + e.size) ** 2 * 4) cn.push({ x: e.x, y: e.y, r: e.size });
+            }
+            drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
+                cell.velX || 0, cell.velY || 0, cell.phase || 0, cn);
+            drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
         }
 
-        // Other entities deform this one
-        for (const e of others) {
-            const dx = e.x - cell.x, dy = e.y - cell.y;
-            const reach = (cell.size + e.size) * 2;
-            if (dx*dx + dy*dy < reach*reach) cellNearby.push({ x: e.x, y: e.y, r: e.size });
+        // Fission animation for splitting cells
+        for (const sc of splitAnim.splittingCells) {
+            drawFissionShape(sc.cx, sc.cy, sc.size, myColor || '#fff', sc.dir, s);
         }
 
-        drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
-            cell.velX || 0, cell.velY || 0, cell.phase || 0, cellNearby);
-        drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
+    } else if (mergeAnim && now - mergeAnim.startedAt < mergeAnim.duration) {
+        const s = (now - mergeAnim.startedAt) / mergeAnim.duration;
+
+        // Non-merging cells (in preMergeIds but not mergeIds) render normally
+        for (const [id, cell] of myLocals) {
+            if (!mergeAnim.preMergeIds.has(id)) continue; // suppress new merged cell
+            if (mergeAnim.mergeIds.has(id)) continue;     // suppress animating cells
+            const cn = [...myNearbyFood];
+            for (const e of others) {
+                const dx = e.x - cell.x, dy = e.y - cell.y;
+                if (dx*dx + dy*dy < (cell.size + e.size) ** 2 * 4) cn.push({ x: e.x, y: e.y, r: e.size });
+            }
+            drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
+                cell.velX || 0, cell.velY || 0, cell.phase || 0, cn);
+            drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
+        }
+
+        // Merge animations
+        for (const pair of mergeAnim.pairs) {
+            drawMergeAnim(pair.ax, pair.ay, pair.aSize, pair.bx, pair.by, pair.bSize,
+                myColor || '#fff', pair.dir, s);
+        }
+
+    } else {
+        // No animation — clear state and render normally
+        splitAnim = null; mergeAnim = null;
+
+        const sortedMy = [...myCells].sort((a, b) => b.size - a.size);
+        for (const cell of sortedMy) {
+            const cn = [...myNearbyFood];
+            for (const mc of myCells) {
+                if (mc === cell) continue;
+                const dx = mc.x - cell.x, dy = mc.y - cell.y;
+                if (dx*dx + dy*dy < (cell.size + mc.size) ** 2 * 4) cn.push({ x: mc.x, y: mc.y, r: mc.size });
+            }
+            for (const e of others) {
+                const dx = e.x - cell.x, dy = e.y - cell.y;
+                if (dx*dx + dy*dy < (cell.size + e.size) ** 2 * 4) cn.push({ x: e.x, y: e.y, r: e.size });
+            }
+            drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
+                cell.velX || 0, cell.velY || 0, cell.phase || 0, cn);
+            drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
+        }
     }
 
     ctx.restore();

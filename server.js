@@ -303,6 +303,22 @@ function agMovePlayers() {
                 }
             }
         }
+        // Leash: split cells can't stray beyond leashRadius from their centroid
+        if (p.cells.length > 1) {
+            let sumX = 0, sumY = 0, totalSize = 0;
+            for (const c of p.cells) { sumX += c.x; sumY += c.y; totalSize += c.size; }
+            const centX = sumX / p.cells.length, centY = sumY / p.cells.length;
+            const leashR = Math.max(200, totalSize * 1.5);
+            for (const c of p.cells) {
+                const dx = c.x - centX, dy = c.y - centY;
+                const dist = Math.hypot(dx, dy);
+                if (dist > leashR) {
+                    const s = leashR / dist;
+                    c.x = centX + dx * s;
+                    c.y = centY + dy * s;
+                }
+            }
+        }
     }
 }
 
@@ -492,7 +508,7 @@ io.of('/amoeba').on('connection', socket => {
             if (cell.size < AG.SPLIT_MIN) { next.push(cell); continue; }
             const half = cell.size / 2;
             const mag  = Math.hypot(p.dirX, p.dirY) || 1;
-            const px   = -p.dirY / mag, py = p.dirX / mag;
+            const px   = p.dirX / mag, py = p.dirY / mag; // along mouse → oval faces mouse
             const off  = cell.size * 0.7;
             const spd  = agSpeed(half);
             const mk   = (ox, oy) => ({
