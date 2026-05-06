@@ -118,10 +118,11 @@ function genPassword() {
 // Cell:   { id, x, y, size, speed, velX, velY, phase, splitBoost }
 
 const AG = {
-    WORLD_W:   4000,
-    WORLD_H:   4000,
+    WORLD_W:   7500,
+    WORLD_H:   7500,
     BASE_SIZE: 10,
-    MAX_FOOD:  5000,
+    MAX_FOOD:  15000,
+    FOOD_SPAWN_RATE: 5,
     MAX_TOTAL: 55,
     TICK_MS:   50,
     EAT_RATIO: 1.2,
@@ -144,7 +145,7 @@ const AG = {
         'Blobnard','Oozwick','Dribblix','Slarmus','Glorpington',
         'Muckzor','Splort','Viscatrix','Sludgemire','Blorpheus',
         'Glimor','Squelbus','Plorbius','Oozendore','Glarbington',
-        'Snotlax','Gunkes','Slupor','Snotwaggle','Bogger',
+        'Snotlax','Count Gunkess','Slupor','Snotwaggle','Bogger',
         'Boggington','Your Mother','Gunkleton','Boogerworm',
         'Snotterson','Oozleberry','Globmax','Gooberella',
         'Slurpton','Amoebella','Amoebax','Amoebius Prime',
@@ -171,7 +172,7 @@ function agNewFood() {
 function agNewCell(x, y, size) {
     return {
         id: agId(), x, y, size, speed: agSpeed(size),
-        velX: 0, velY: 0,
+        velX: 0, velY: 0, shootX: 0, shootY: 0,
         phase: Math.random() * Math.PI * 2,
         splitBoost: false
     };
@@ -200,7 +201,7 @@ const agPlayers = new Map();
 let agFoodAdded   = [];
 let agFoodRemoved = new Set();
 
-for (let i = 0; i < 400; i++) agFood.push(agNewFood());
+for (let i = 0; i < AG.MAX_FOOD*(2/3); i++) agFood.push(agNewFood());
 for (let i = 0; i < 5;   i++) agBots.push(agNewBot());
 
 let agFoodFrames = 0, agBotFrames = 0, agTickCount = 0;
@@ -285,6 +286,13 @@ function agMovePlayers() {
             cell.velY = (p.dirY / mag) * spd;
             cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.velX));
             cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.velY));
+            if (cell.shootX || cell.shootY) {
+                cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.shootX));
+                cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.shootY));
+                cell.shootX *= 0.80; cell.shootY *= 0.80;
+                if (Math.abs(cell.shootX) < 0.1 && Math.abs(cell.shootY) < 0.1)
+                    cell.shootX = cell.shootY = 0;
+            }
         }
         // Push overlapping own cells apart so they collide/conform visually
         for (let i = 0; i < p.cells.length; i++) {
@@ -308,7 +316,7 @@ function agMovePlayers() {
             let sumX = 0, sumY = 0, totalSize = 0;
             for (const c of p.cells) { sumX += c.x; sumY += c.y; totalSize += c.size; }
             const centX = sumX / p.cells.length, centY = sumY / p.cells.length;
-            const leashR = Math.max(200, totalSize * 1.5);
+            const leashR = Math.max(280, totalSize * 2.2);
             for (const c of p.cells) {
                 const dx = c.x - centX, dy = c.y - centY;
                 const dist = Math.hypot(dx, dy);
@@ -424,7 +432,7 @@ function agEatPlayers() {
 setInterval(() => {
     agFoodFrames++; agBotFrames++; agTickCount++;
 
-    if (agFoodFrames >= 25 && agFood.length < AG.MAX_FOOD) {
+    if (agFoodFrames >= AG.FOOD_SPAWN_RATE && agFood.length < AG.MAX_FOOD) {
         agFoodFrames = 0;
         const f = agNewFood(); agFood.push(f); agFoodAdded.push(f);
     }
@@ -512,13 +520,17 @@ io.of('/amoeba').on('connection', socket => {
             const px   = p.dirX / mag, py = p.dirY / mag; // along mouse → oval faces mouse
             const off  = cell.size * 0.7;
             const spd  = agSpeed(half);
-            const mk   = (ox, oy) => ({
+            const shootSpd = spd * 4;
+            const mk = (ox, oy, sx, sy) => ({
                 id: agId(), size: half, speed: spd,
                 x: Math.max(0, Math.min(AG.WORLD_W, cell.x + ox)),
                 y: Math.max(0, Math.min(AG.WORLD_H, cell.y + oy)),
-                velX: 0, velY: 0, phase: cell.phase, splitBoost: true
+                velX: 0, velY: 0, shootX: sx, shootY: sy, phase: cell.phase, splitBoost: true
             });
-            next.push(mk(px * off, py * off), mk(-px * off, -py * off));
+            next.push(
+                mk( px * off,  py * off,  px * shootSpd,  py * shootSpd),
+                mk(-px * off, -py * off, -px * shootSpd, -py * shootSpd)
+            );
         }
         p.cells = next;
     });

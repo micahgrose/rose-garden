@@ -223,7 +223,7 @@ function loop() {
             let lsumX = 0, lsumY = 0, ltotal = 0;
             for (const cell of myLocals.values()) { lsumX += cell.x; lsumY += cell.y; ltotal += cell.size; }
             const lcentX = lsumX / myLocals.size, lcentY = lsumY / myLocals.size;
-            const leashR = Math.max(200, ltotal * 1.5);
+            const leashR = Math.max(280, ltotal * 2.2);
             for (const cell of myLocals.values()) {
                 const ldx = cell.x - lcentX, ldy = cell.y - lcentY;
                 const ldist = Math.hypot(ldx, ldy);
