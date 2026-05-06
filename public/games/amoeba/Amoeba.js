@@ -8,8 +8,8 @@ let mouseX = c.width / 2, mouseY = c.height / 2;
 document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 
 // ── Game constants ────────────────────────────────────
-const WORLD_W      = 7500;
-const WORLD_H      = 7500;
+let WORLD_W        = 7500;
+let WORLD_H        = 7500;
 const BASE_SIZE    = 10;
 const TICK_MS      = 50;
 const SPLIT_MIN    = 20;
@@ -58,6 +58,7 @@ const socket = io('/amoeba', { auth: { token: localStorage.getItem('rg_token') }
 
 socket.on('init', data => {
     youId   = data.youId;
+    if (data.worldW) { WORLD_W = data.worldW; WORLD_H = data.worldH; }
     food    = data.food;
     players = data.players;
     for (const b of data.bots) botRender.set(b.id, { ...b });

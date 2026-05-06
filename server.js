@@ -497,6 +497,8 @@ io.of('/amoeba').on('connection', socket => {
 
     socket.emit('init', {
         youId:   socket.id,
+        worldW:  AG.WORLD_W,
+        worldH:  AG.WORLD_H,
         food:    agFood,
         bots:    agBots.map(b => ({
             id: b.id, x: b.x, y: b.y, size: b.size, color: b.color,
