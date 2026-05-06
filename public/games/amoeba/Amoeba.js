@@ -11,18 +11,20 @@ document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.cli
 const WORLD_W      = 4000;
 const WORLD_H      = 4000;
 const BASE_SIZE    = 10;
-const TICK_MS      = 50;   // must match server AG.TICK_MS
+const TICK_MS      = 50;
 
-const CAM_MIN      = 0.1; // smallest zoom (biggest player)
-const CAM_MAX      = 4;    // largest zoom (smallest player)
-const CAM_LERP     = 0.05; // how fast zoom transitions
-const CAM_ZOOM     = 2.5;  // overall zoom multiplier
+const CAM_MIN      = 0.1;
+const CAM_MAX      = 4;
+const CAM_LERP     = 0.05;
+const CAM_ZOOM     = 2.5;
 
-const SNAP_HARD    = 200;  // px: hard-snap to server position
-const SNAP_SOFT    = 40;   // px: gentle correction toward server
-const SNAP_LERP    = 0.25; // correction strength (0–1)
+const SNAP_HARD    = 200;
+const SNAP_SOFT    = 40;
+const SNAP_LERP    = 0.25;
 
 let camScale       = CAM_MAX;
+let camX           = WORLD_W / 2;
+let camY           = WORLD_H / 2;
 let time           = 0;
 let lastInput      = 0;
 let lastFrameTime  = performance.now();
@@ -31,9 +33,11 @@ let lastTickTime   = performance.now();
 // ── Server state ──────────────────────────────────────
 let youId      = null;
 let food       = [];
-let players    = [];
-let myLocal    = null;
-const botRender = new Map(); // id → visual bot (interpolated each frame)
+let players    = []; // [{id, username, color, cells: [{id,x,y,size,velX,velY,phase,splitBoost}]}]
+let myLocals   = new Map(); // cellId → local predicted cell
+let myColor    = null;
+let myUsername = null;
+const botRender = new Map();
 
 // ── Socket ────────────────────────────────────────────
 const socket = io('/amoeba', { auth: { token: localStorage.getItem('rg_token') } });
@@ -44,7 +48,12 @@ socket.on('init', data => {
     players = data.players;
     for (const b of data.bots) botRender.set(b.id, { ...b });
     const me = players.find(p => p.id === youId);
-    if (me) myLocal = { ...me };
+    if (me) {
+        myColor    = me.color;
+        myUsername = me.username;
+        myLocals.clear();
+        for (const cell of me.cells) myLocals.set(cell.id, { ...cell });
+    }
 });
 
 socket.on('tick', data => {
@@ -57,7 +66,7 @@ socket.on('tick', data => {
     players = data.players;
     lastTickTime = performance.now();
 
-    // Update bot render targets; add new bots, remove gone ones
+    // Update bot render targets
     const activeIds = new Set();
     for (const b of data.bots) {
         activeIds.add(b.id);
@@ -75,20 +84,34 @@ socket.on('tick', data => {
         if (!activeIds.has(id)) botRender.delete(id);
     }
 
+    // Reconcile my cells
     const serverMe = players.find(p => p.id === youId);
-    if (serverMe && myLocal) {
-        const d = Math.hypot(serverMe.x - myLocal.x, serverMe.y - myLocal.y);
-        if (d > SNAP_HARD) {
-            myLocal.x = serverMe.x;
-            myLocal.y = serverMe.y;
-        } else if (d > SNAP_SOFT) {
-            myLocal.x += (serverMe.x - myLocal.x) * SNAP_LERP;
-            myLocal.y += (serverMe.y - myLocal.y) * SNAP_LERP;
+    if (serverMe) {
+        myColor    = serverMe.color;
+        myUsername = serverMe.username;
+        const serverIds = new Set(serverMe.cells.map(sc => sc.id));
+        for (const id of myLocals.keys()) {
+            if (!serverIds.has(id)) myLocals.delete(id);
         }
-        myLocal.size     = serverMe.size;
-        myLocal.username = serverMe.username;
-    } else if (serverMe) {
-        myLocal = { ...serverMe };
+        for (const sc of serverMe.cells) {
+            if (myLocals.has(sc.id)) {
+                const loc = myLocals.get(sc.id);
+                const d = Math.hypot(sc.x - loc.x, sc.y - loc.y);
+                if (d > SNAP_HARD) {
+                    loc.x = sc.x; loc.y = sc.y;
+                } else if (d > SNAP_SOFT) {
+                    loc.x += (sc.x - loc.x) * SNAP_LERP;
+                    loc.y += (sc.y - loc.y) * SNAP_LERP;
+                }
+                loc.size       = sc.size;
+                loc.velX       = sc.velX;
+                loc.velY       = sc.velY;
+                loc.phase      = sc.phase;
+                loc.splitBoost = sc.splitBoost;
+            } else {
+                myLocals.set(sc.id, { ...sc });
+            }
+        }
     }
 });
 
@@ -97,11 +120,17 @@ socket.on('died', ({ killedBy }) => {
     const screen = document.getElementById('killScreen');
     screen.classList.add('active');
     setTimeout(() => screen.classList.remove('active'), 2500);
-    if (myLocal) myLocal.size = BASE_SIZE;
+    myLocals.clear();
 });
 
+// ── Split / merge inputs ──────────────────────────────
+document.addEventListener('click', () => socket.emit('split'));
+document.addEventListener('contextmenu', e => { e.preventDefault(); socket.emit('merge'); });
+
 // ── Game logic ────────────────────────────────────────
-function calcSpeed(size) { return Math.pow(BASE_SIZE / size, 0.45) * 9; }
+function calcSpeed(size, splitBoost) {
+    return Math.pow(BASE_SIZE / size, 0.45) * 9 * (splitBoost ? 1.3 : 1);
+}
 
 function loop() {
     const now = performance.now();
@@ -109,22 +138,23 @@ function loop() {
     lastFrameTime = now;
     time++;
 
-    if (myLocal) {
+    if (myLocals.size > 0) {
         const dx   = mouseX - c.width  / 2;
         const dy   = mouseY - c.height / 2;
         const dist = Math.hypot(dx, dy);
 
-        if (dist > 1) {
-            const spd = calcSpeed(myLocal.size);
-            myLocal.velX = (dx / dist) * spd * dtScale;
-            myLocal.velY = (dy / dist) * spd * dtScale;
-            myLocal.x = Math.max(0, Math.min(WORLD_W, myLocal.x + myLocal.velX));
-            myLocal.y = Math.max(0, Math.min(WORLD_H, myLocal.y + myLocal.velY));
-        } else {
-            myLocal.velX = myLocal.velY = 0;
+        for (const cell of myLocals.values()) {
+            if (dist > 1) {
+                const spd = calcSpeed(cell.size, cell.splitBoost);
+                cell.velX = (dx / dist) * spd * dtScale;
+                cell.velY = (dy / dist) * spd * dtScale;
+                cell.x = Math.max(0, Math.min(WORLD_W, cell.x + cell.velX));
+                cell.y = Math.max(0, Math.min(WORLD_H, cell.y + cell.velY));
+            } else {
+                cell.velX = cell.velY = 0;
+            }
         }
 
-        // Send input at 20Hz — sending every frame wastes bandwidth
         if (now - lastInput >= TICK_MS) {
             lastInput = now;
             socket.emit('input', dist > 1
@@ -132,15 +162,31 @@ function loop() {
                 : { dirX: 0, dirY: 0 });
         }
 
-        const target = Math.max(CAM_MIN, Math.min(CAM_MAX, Math.pow(BASE_SIZE / myLocal.size, 0.5) * CAM_ZOOM));
+        // Camera: centroid + zoom to fit all cells
+        let sumX = 0, sumY = 0, maxSize = 0;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const cell of myLocals.values()) {
+            sumX += cell.x; sumY += cell.y;
+            minX = Math.min(minX, cell.x - cell.size); maxX = Math.max(maxX, cell.x + cell.size);
+            minY = Math.min(minY, cell.y - cell.size); maxY = Math.max(maxY, cell.y + cell.size);
+            maxSize = Math.max(maxSize, cell.size);
+        }
+        camX = sumX / myLocals.size;
+        camY = sumY / myLocals.size;
+
+        const spread   = Math.max(maxX - minX, maxY - minY, 1);
+        const sizeZoom = Math.max(CAM_MIN, Math.min(CAM_MAX, Math.pow(BASE_SIZE / maxSize, 0.5) * CAM_ZOOM));
+        const fitZoom  = Math.min(c.width, c.height) / (spread * 1.6);
+        const target   = Math.max(CAM_MIN, Math.min(sizeZoom, fitZoom));
         camScale += (target - camScale) * CAM_LERP;
 
-        document.getElementById('sizeText').textContent   = `Size: ${Math.floor(myLocal.size)}`;
+        let totalSize = 0;
+        for (const cell of myLocals.values()) totalSize += cell.size;
+        document.getElementById('sizeText').textContent   = `Size: ${Math.floor(totalSize)}`;
         document.getElementById('playerText').textContent = `Players: ${players.length}`;
     }
 
-    // Extrapolate bot positions: project forward from last server tick using velocity
-    // so the visual position approximates where the server currently has them
+    // Extrapolate bot positions between ticks
     const tickElapsed = Math.min((now - lastTickTime) / TICK_MS, 1.5);
     for (const v of botRender.values()) {
         if (v.tx !== undefined) {
@@ -157,7 +203,6 @@ function loop() {
 
 // ── Drawing ───────────────────────────────────────────
 function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
-    // Fewer points for small/distant cells — no visual difference at small screen size
     const screenR = radius * camScale;
     const N       = screenR < 15 ? 12 : 24;
     const speed     = Math.hypot(velX, velY);
@@ -185,22 +230,20 @@ function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
         pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
     }
 
-    // Soft inward deformation: each collider pulls nearby boundary points
-    // toward the amoeba center, creating a visible dent that grows with proximity.
     for (const obj of nearby) {
-        const infR = obj.r * 1.6; // influence radius — wider than the collider itself
+        const infR  = obj.r * 1.6;
         const infR2 = infR * infR;
         for (let i = 0; i < N; i++) {
             const pdx = pts[i].x - obj.x, pdy = pts[i].y - obj.y;
             const d2  = pdx*pdx + pdy*pdy;
             if (d2 >= infR2) continue;
             const d   = Math.sqrt(d2);
-            const inf = 1 - d / infR;           // 1 at collider center, 0 at edge
+            const inf = 1 - d / infR;
             const ax  = pts[i].x - x, ay = pts[i].y - y;
             const aD  = Math.sqrt(ax*ax + ay*ay);
             if (aD < 0.001) continue;
-            const push  = obj.r * inf * 0.7;    // how far to push inward
-            const newR  = Math.max(aD * 0.1, aD - push);
+            const push = obj.r * inf * 0.7;
+            const newR = Math.max(aD * 0.1, aD - push);
             pts[i].x = x + (ax / aD) * newR;
             pts[i].y = y + (ay / aD) * newR;
         }
@@ -231,11 +274,9 @@ function drawLabel(x, y, radius, text) {
 function draw() {
     ctx.clearRect(0, 0, c.width, c.height);
 
-    if (!myLocal) {
-        ctx.fillStyle    = '#555';
-        ctx.font         = '22px sans-serif';
-        ctx.textAlign    = 'center';
-        ctx.textBaseline = 'middle';
+    if (myLocals.size === 0) {
+        ctx.fillStyle = '#555'; ctx.font = '22px sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('Connecting...', c.width / 2, c.height / 2);
         return;
     }
@@ -243,72 +284,72 @@ function draw() {
     ctx.save();
     ctx.translate(c.width / 2, c.height / 2);
     ctx.scale(camScale, camScale);
-    ctx.translate(-myLocal.x, -myLocal.y);
+    ctx.translate(-camX, -camY);
 
-    // Viewport bounds in world space (with margin so things don't pop in)
     const hw    = (c.width  / 2) / camScale + 100;
     const hh    = (c.height / 2) / camScale + 100;
-    const vMinX = myLocal.x - hw;
-    const vMaxX = myLocal.x + hw;
-    const vMinY = myLocal.y - hh;
-    const vMaxY = myLocal.y + hh;
+    const vMinX = camX - hw, vMaxX = camX + hw;
+    const vMinY = camY - hh, vMaxY = camY + hh;
 
-    // Grid — batch all lines into one path (80 → 1 stroke call)
+    // Grid
     const gx0 = Math.max(0,       Math.floor(vMinX / 100) * 100);
     const gx1 = Math.min(WORLD_W, Math.ceil(vMaxX  / 100) * 100);
     const gy0 = Math.max(0,       Math.floor(vMinY / 100) * 100);
     const gy1 = Math.min(WORLD_H, Math.ceil(vMaxY  / 100) * 100);
-
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth   = 1;
-    ctx.beginPath();
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.beginPath();
     for (let x = gx0; x <= gx1; x += 100) { ctx.moveTo(x, gy0); ctx.lineTo(x, gy1); }
     for (let y = gy0; y <= gy1; y += 100) { ctx.moveTo(gx0, y); ctx.lineTo(gx1, y); }
     ctx.stroke();
 
     // Border
-    ctx.strokeStyle = '#c0394b';
-    ctx.lineWidth   = 30;
+    ctx.strokeStyle = '#c0394b'; ctx.lineWidth = 30;
     ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
 
-    // Food — skip anything outside the viewport
+    // Food
     for (const f of food) {
         if (f.x < vMinX || f.x > vMaxX || f.y < vMinY || f.y > vMaxY) continue;
         ctx.fillStyle = f.color;
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2); ctx.fill();
     }
 
-    // Nearby food that could deform the local player's boundary
-    const myNearby = [];
+    // My cells as array + collision objects
+    const myCells    = [...myLocals.values()];
+    const myCellObjs = myCells.map(cell => ({ x: cell.x, y: cell.y, r: cell.size }));
+
+    // Nearby food for my cells
+    const myNearbyFood = [];
     for (const f of food) {
-        const dx = f.x - myLocal.x, dy = f.y - myLocal.y;
-        const reach = myLocal.size * 1.7 + f.size * 2;
-        if (dx*dx + dy*dy < reach*reach) myNearby.push({ x: f.x, y: f.y, r: f.size });
+        for (let k = 0; k < myCells.length; k++) {
+            const mc = myCells[k];
+            const dx = f.x - mc.x, dy = f.y - mc.y;
+            const reach = mc.size * 1.7 + f.size * 2;
+            if (dx*dx + dy*dy < reach*reach) { myNearbyFood.push({ x: f.x, y: f.y, r: f.size }); break; }
+        }
     }
 
-    const playerObj = { x: myLocal.x, y: myLocal.y, r: myLocal.size };
+    // Build all other drawable entities (other players' cells + bots)
+    const maxR   = 200;
+    const others = [];
+    for (const p of players) {
+        if (p.id === youId) continue;
+        for (const cell of p.cells) others.push({ ...cell, color: p.color, label: p.username });
+    }
+    for (const b of botRender.values()) others.push({ ...b, label: b.name });
+    others.sort((a, b) => b.size - a.size);
 
-    // Others — sorted by size (bigger behind), viewport-culled
-    const maxR  = 200;
-    const others = [
-        ...players.filter(p => p.id !== youId).map(p => ({ ...p, label: p.username })),
-        ...[...botRender.values()].map(b => ({ ...b, label: b.name }))
-    ].sort((a, b) => b.size - a.size);
-
+    // Draw other entities (bigger first so smaller appear on top)
     for (const e of others) {
         if (e.x + maxR < vMinX || e.x - maxR > vMaxX ||
             e.y + maxR < vMinY || e.y - maxR > vMaxY) continue;
 
         const eNearby = [];
 
-        // Player influence on this entity
-        const edx = e.x - myLocal.x, edy = e.y - myLocal.y;
-        const eReach = (myLocal.size + e.size) * 2;
-        if (edx*edx + edy*edy < eReach*eReach) {
-            eNearby.push(playerObj);
-            myNearby.push({ x: e.x, y: e.y, r: e.size });
+        // My cells' influence on this entity
+        for (let k = 0; k < myCells.length; k++) {
+            const mc = myCells[k];
+            const edx = e.x - mc.x, edy = e.y - mc.y;
+            if (edx*edx + edy*edy < (mc.size + e.size) * (mc.size + e.size) * 4)
+                eNearby.push(myCellObjs[k]);
         }
 
         // Other entities' influence on this entity
@@ -319,13 +360,34 @@ function draw() {
             if (odx*odx + ody*ody < oReach*oReach) eNearby.push({ x: o.x, y: o.y, r: o.size });
         }
 
-        drawAmoeba(e.x, e.y, e.size, e.color, e.velX || 0, e.velY || 0, e.phase, eNearby);
+        drawAmoeba(e.x, e.y, e.size, e.color, e.velX || 0, e.velY || 0, e.phase || 0, eNearby);
         drawLabel(e.x, e.y, e.size, e.label);
     }
 
-    // Local player always on top
-    drawAmoeba(myLocal.x, myLocal.y, myLocal.size, myLocal.color, myLocal.velX || 0, myLocal.velY || 0, myLocal.phase, myNearby);
-    drawLabel(myLocal.x, myLocal.y, myLocal.size, myLocal.username || '(you)');
+    // Draw my own cells (always on top, sorted big-to-small)
+    const sortedMy = [...myCells].sort((a, b) => b.size - a.size);
+    for (const cell of sortedMy) {
+        const cellNearby = [...myNearbyFood];
+
+        // Other own cells deform this one
+        for (const mc of myCells) {
+            if (mc === cell) continue;
+            const dx = mc.x - cell.x, dy = mc.y - cell.y;
+            const reach = (cell.size + mc.size) * 2;
+            if (dx*dx + dy*dy < reach*reach) cellNearby.push({ x: mc.x, y: mc.y, r: mc.size });
+        }
+
+        // Other entities deform this one
+        for (const e of others) {
+            const dx = e.x - cell.x, dy = e.y - cell.y;
+            const reach = (cell.size + e.size) * 2;
+            if (dx*dx + dy*dy < reach*reach) cellNearby.push({ x: e.x, y: e.y, r: e.size });
+        }
+
+        drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
+            cell.velX || 0, cell.velY || 0, cell.phase || 0, cellNearby);
+        drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)');
+    }
 
     ctx.restore();
 }

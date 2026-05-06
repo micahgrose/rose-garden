@@ -114,15 +114,18 @@ function genPassword() {
 }
 
 // ── Amoeba Multiplayer ────────────────────────────────
+// Player: { id, username, color, dirX, dirY, cells: [cell…] }
+// Cell:   { id, x, y, size, speed, velX, velY, phase, splitBoost }
 
 const AG = {
     WORLD_W:   4000,
     WORLD_H:   4000,
     BASE_SIZE: 10,
     MAX_FOOD:  5000,
-    MAX_TOTAL: 35,
+    MAX_TOTAL: 55,
     TICK_MS:   50,
     EAT_RATIO: 1.2,
+    SPLIT_MIN: 20,
     BOT_NAMES: [
         'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
 	    'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
@@ -130,9 +133,23 @@ const AG = {
 	    'Gelatrix','Sploobus','Mirello','Gunkle','Slorbin',
     	'Viscora','Blorple','Oozington','Glumple','Squishard',
 	    'Dribblen','Mucor','Slatherby','Globulex','Glimbus',
-    	'Snotrix','Puddlox','Glarbo','Slimeon','Blobrick','Oozle'
-	    ,'Gorpheus','Sludgik','Plorp','Drizzleth','Gloobus','Squorp'
-	    ,'Mirex','Blobbington','Gunkus'
+    	'Snotrix','Puddlox','Glarbo','Slimeon','Blobrick','Oozle', 
+        'Gorpheus','Sludgik','Plorp','Drizzleth','Gloobus','Squorp', 
+        'Mirex','Blobbington','Gunkus','Glooberon','Slurpax',
+        'Mucilix','Blobion','Oozimus','Glorpheus','Maximus',
+        'Sludgerton','Viscogrin','Dribblor','Gunkarian',
+        'Plasmozoid','Oobleckus','Squelchor','Glomulus','Mirelisk',
+        'Blubberix','Slorpington','Gleech','Oozatrix','Squishon',
+        'Grimucus','Glarion','Splatheus','Gunkleberry','Slithrax',
+        'Blobnard','Oozwick','Dribblix','Slarmus','Glorpington',
+        'Muckzor','Splort','Viscatrix','Sludgemire','Blorpheus',
+        'Glimor','Squelbus','Plorbius','Oozendore','Glarbington',
+        'Snotlax','Gunkes','Slupor','Snotwaggle','Bogger',
+        'Boggington','Your Mother','Gunkleton','Boogerworm',
+        'Snotterson','Oozleberry','Globmax','Gooberella',
+        'Slurpton','Amoebella','Amoebax','Amoebius Prime',
+        'Amoebzilla','Amoebot','Amoebula','Amoebro','Squishy',
+        'Sir Amoebius Lot'
     ]
 };
 
@@ -148,6 +165,15 @@ function agNewFood() {
         y:     Math.random() * AG.WORLD_H,
         size:  Math.random() * 3 + 1,
         color: `rgb(${Math.floor(Math.random()*101)+155},${Math.floor(Math.random()*101)+155},${Math.floor(Math.random()*101)+155})`
+    };
+}
+
+function agNewCell(x, y, size) {
+    return {
+        id: agId(), x, y, size, speed: agSpeed(size),
+        velX: 0, velY: 0,
+        phase: Math.random() * Math.PI * 2,
+        splitBoost: false
     };
 }
 
@@ -181,10 +207,11 @@ let agFoodFrames = 0, agBotFrames = 0, agTickCount = 0;
 
 function agUpdateBotGoal(b) {
     let fleeX = 0, fleeY = 0, flee = false;
-    // Use squared distance for flee checks — no sqrt needed
     for (const [, p] of agPlayers) {
-        const dx = p.x - b.x, dy = p.y - b.y;
-        if (p.size >= b.size * AG.EAT_RATIO && dx*dx + dy*dy < 90000) { fleeX -= dx; fleeY -= dy; flee = true; }
+        for (const cell of p.cells) {
+            const dx = cell.x - b.x, dy = cell.y - b.y;
+            if (cell.size >= b.size * AG.EAT_RATIO && dx*dx + dy*dy < 90000) { fleeX -= dx; fleeY -= dy; flee = true; }
+        }
     }
     for (const o of agBots) {
         if (o === b) continue;
@@ -200,7 +227,6 @@ function agUpdateBotGoal(b) {
     let best = -Infinity, bestX = b.goalX, bestY = b.goalY;
     for (const f of agFood) {
         const dx = f.x - b.x, dy = f.y - b.y;
-        // Quick Manhattan cull — skip food > 800 units away without any sqrt
         if (dx > 800 || dx < -800 || dy > 800 || dy < -800) continue;
         const s = f.size / (Math.sqrt(dx*dx + dy*dy) + 1);
         if (s > best) { best = s; bestX = f.x; bestY = f.y; }
@@ -215,13 +241,15 @@ function agUpdateBotGoal(b) {
         if (s > best) { best = s; bestX = o.x; bestY = o.y; }
     }
     for (const [, p] of agPlayers) {
-        if (b.size < p.size * AG.EAT_RATIO) continue;
-        const dx = p.x - b.x, dy = p.y - b.y;
-        const dist2 = dx*dx + dy*dy;
-        const diff = b.size - p.size;
-        const lazy = diff > 100 && dist2 > 150*150 ? Math.max(0.1, 1 - (diff - 100) / 400) : 1;
-        const s = p.size / (Math.sqrt(dist2) + 1) * 3 * lazy;
-        if (s > best) { best = s; bestX = p.x; bestY = p.y; }
+        for (const cell of p.cells) {
+            if (b.size < cell.size * AG.EAT_RATIO) continue;
+            const dx = cell.x - b.x, dy = cell.y - b.y;
+            const dist2 = dx*dx + dy*dy;
+            const diff = b.size - cell.size;
+            const lazy = diff > 100 && dist2 > 150*150 ? Math.max(0.1, 1 - (diff - 100) / 400) : 1;
+            const s = cell.size / (Math.sqrt(dist2) + 1) * 3 * lazy;
+            if (s > best) { best = s; bestX = cell.x; bestY = cell.y; }
+        }
     }
     b.goalX = bestX; b.goalY = bestY;
 }
@@ -250,11 +278,31 @@ function agMoveBots(updateGoals) {
 function agMovePlayers() {
     for (const [, p] of agPlayers) {
         const mag = Math.hypot(p.dirX, p.dirY);
-        if (mag < 0.1) { p.velX = p.velY = 0; continue; }
-        p.velX = (p.dirX / mag) * p.speed;
-        p.velY = (p.dirY / mag) * p.speed;
-        p.x = Math.max(0, Math.min(AG.WORLD_W, p.x + p.velX));
-        p.y = Math.max(0, Math.min(AG.WORLD_H, p.y + p.velY));
+        for (const cell of p.cells) {
+            if (mag < 0.1) { cell.velX = cell.velY = 0; continue; }
+            const spd = cell.speed * (cell.splitBoost ? 1.3 : 1);
+            cell.velX = (p.dirX / mag) * spd;
+            cell.velY = (p.dirY / mag) * spd;
+            cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.velX));
+            cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.velY));
+        }
+        // Push overlapping own cells apart so they collide/conform visually
+        for (let i = 0; i < p.cells.length; i++) {
+            for (let j = i + 1; j < p.cells.length; j++) {
+                const a = p.cells[i], b = p.cells[j];
+                const dx = b.x - a.x, dy = b.y - a.y;
+                const dist = Math.hypot(dx, dy) || 0.01;
+                const minD = a.size + b.size;
+                if (dist < minD) {
+                    const push = (minD - dist) * 0.5;
+                    const nx = dx / dist, ny = dy / dist;
+                    a.x = Math.max(0, Math.min(AG.WORLD_W, a.x - nx * push));
+                    a.y = Math.max(0, Math.min(AG.WORLD_H, a.y - ny * push));
+                    b.x = Math.max(0, Math.min(AG.WORLD_W, b.x + nx * push));
+                    b.y = Math.max(0, Math.min(AG.WORLD_H, b.y + ny * push));
+                }
+            }
+        }
     }
 }
 
@@ -262,11 +310,13 @@ function agEatFood() {
     for (let i = agFood.length - 1; i >= 0; i--) {
         const f = agFood[i];
         let eaten = false;
-        for (const [, p] of agPlayers) {
-            const dx = f.x - p.x, dy = f.y - p.y, t = p.size * 1.5 + f.size;
-            if (dx*dx + dy*dy <= t*t) {
-                p.size += 1; p.speed = agSpeed(p.size);
-                agFoodRemoved.add(f.id); agFood.splice(i, 1); eaten = true; break;
+        outer: for (const [, p] of agPlayers) {
+            for (const cell of p.cells) {
+                const dx = f.x - cell.x, dy = f.y - cell.y, t = cell.size * 1.5 + f.size;
+                if (dx*dx + dy*dy <= t*t) {
+                    cell.size += 1; cell.speed = agSpeed(cell.size);
+                    agFoodRemoved.add(f.id); agFood.splice(i, 1); eaten = true; break outer;
+                }
             }
         }
         if (eaten) continue;
@@ -281,24 +331,31 @@ function agEatFood() {
 }
 
 function agRespawn(p) {
-    p.size = AG.BASE_SIZE; p.speed = agSpeed(AG.BASE_SIZE);
-    p.x = Math.random() * AG.WORLD_W; p.y = Math.random() * AG.WORLD_H;
-    p.velX = p.velY = p.dirX = p.dirY = 0;
+    p.dirX = p.dirY = 0;
+    p.cells = [agNewCell(Math.random() * AG.WORLD_W, Math.random() * AG.WORLD_H, AG.BASE_SIZE)];
 }
 
 function agEatBots() {
     for (let i = agBots.length - 1; i >= 0; i--) {
         const b = agBots[i]; let dead = false;
         for (const [sid, p] of agPlayers) {
-            const dx = b.x - p.x, dy = b.y - p.y, dsq = dx*dx + dy*dy;
-            if (p.size >= b.size * AG.EAT_RATIO && dsq < p.size * p.size) {
-                p.size += b.size * 0.5; p.speed = agSpeed(p.size);
-                agBots.splice(i, 1); dead = true; break;
-            } else if (b.size >= p.size * AG.EAT_RATIO && dsq < b.size * b.size) {
-                b.size += p.size * 0.5; b.speed = agSpeed(b.size);
-                agRespawn(p);
-                io.of('/amoeba').to(sid).emit('died', { killedBy: b.name });
+            for (let ci = p.cells.length - 1; ci >= 0; ci--) {
+                const cell = p.cells[ci];
+                const dx = b.x - cell.x, dy = b.y - cell.y, dsq = dx*dx + dy*dy;
+                if (cell.size >= b.size * AG.EAT_RATIO && dsq < cell.size * cell.size) {
+                    cell.size += b.size * 0.5; cell.speed = agSpeed(cell.size);
+                    agBots.splice(i, 1); dead = true; break;
+                } else if (b.size >= cell.size * AG.EAT_RATIO && dsq < b.size * b.size) {
+                    b.size += cell.size * 0.5; b.speed = agSpeed(b.size);
+                    p.cells.splice(ci, 1);
+                    if (p.cells.length === 0) {
+                        agRespawn(p);
+                        io.of('/amoeba').to(sid).emit('died', { killedBy: b.name });
+                    }
+                    break;
+                }
             }
+            if (dead) break;
         }
         if (dead) continue;
         for (let j = i - 1; j >= 0; j--) {
@@ -319,15 +376,29 @@ function agEatPlayers() {
     for (let i = 0; i < list.length; i++) {
         for (let j = i + 1; j < list.length; j++) {
             const [sidA, a] = list[i], [sidB, b] = list[j];
-            const dx = a.x - b.x, dy = a.y - b.y, dsq = dx*dx + dy*dy;
-            if (a.size >= b.size * AG.EAT_RATIO && dsq < a.size * a.size) {
-                a.size += b.size * 0.5; a.speed = agSpeed(a.size);
-                agRespawn(b);
-                io.of('/amoeba').to(sidB).emit('died', { killedBy: a.username });
-            } else if (b.size >= a.size * AG.EAT_RATIO && dsq < b.size * b.size) {
-                b.size += a.size * 0.5; b.speed = agSpeed(b.size);
-                agRespawn(a);
-                io.of('/amoeba').to(sidA).emit('died', { killedBy: b.username });
+            for (let ci = a.cells.length - 1; ci >= 0; ci--) {
+                if (!a.cells[ci]) continue;
+                for (let cj = b.cells.length - 1; cj >= 0; cj--) {
+                    if (!b.cells[cj]) continue;
+                    const ca = a.cells[ci], cb = b.cells[cj];
+                    const dx = ca.x - cb.x, dy = ca.y - cb.y, dsq = dx*dx + dy*dy;
+                    if (ca.size >= cb.size * AG.EAT_RATIO && dsq < ca.size * ca.size) {
+                        ca.size += cb.size * 0.5; ca.speed = agSpeed(ca.size);
+                        b.cells.splice(cj, 1);
+                        if (b.cells.length === 0) {
+                            agRespawn(b);
+                            io.of('/amoeba').to(sidB).emit('died', { killedBy: a.username });
+                        }
+                    } else if (cb.size >= ca.size * AG.EAT_RATIO && dsq < cb.size * cb.size) {
+                        cb.size += ca.size * 0.5; cb.speed = agSpeed(cb.size);
+                        a.cells.splice(ci, 1);
+                        if (a.cells.length === 0) {
+                            agRespawn(a);
+                            io.of('/amoeba').to(sidA).emit('died', { killedBy: b.username });
+                        }
+                        break;
+                    }
+                }
             }
         }
     }
@@ -352,12 +423,17 @@ setInterval(() => {
     agEatBots();
     agEatPlayers();
 
+    const mapPlayer = p => ({
+        id: p.id, username: p.username, color: p.color,
+        cells: p.cells.map(c => ({
+            id: c.id, x: c.x, y: c.y, size: c.size,
+            velX: c.velX, velY: c.velY, phase: c.phase, splitBoost: c.splitBoost
+        }))
+    });
+
     io.of('/amoeba').emit('tick', {
-        players: [...agPlayers.values()].map(p => ({
-            id: p.id, x: p.x, y: p.y, size: p.size, color: p.color,
-            velX: p.velX, velY: p.velY, phase: p.phase, username: p.username
-        })),
-        bots: agBots.map(b => ({
+        players:     [...agPlayers.values()].map(mapPlayer),
+        bots:        agBots.map(b => ({
             id: b.id, x: b.x, y: b.y, size: b.size, color: b.color,
             velX: b.velX, velY: b.velY, phase: b.phase, name: b.name
         })),
@@ -375,31 +451,82 @@ io.of('/amoeba').on('connection', socket => {
     }
 
     const player = {
-        id: socket.id, username,
-        size: AG.BASE_SIZE, speed: agSpeed(AG.BASE_SIZE),
-        x: AG.WORLD_W / 2 + (Math.random() - 0.5) * 500,
-        y: AG.WORLD_H / 2 + (Math.random() - 0.5) * 500,
-        color: agColor(), velX: 0, velY: 0, dirX: 0, dirY: 0,
-        phase: Math.random() * Math.PI * 2
+        id: socket.id, username, color: agColor(),
+        dirX: 0, dirY: 0,
+        cells: [agNewCell(
+            AG.WORLD_W / 2 + (Math.random() - 0.5) * 500,
+            AG.WORLD_H / 2 + (Math.random() - 0.5) * 500,
+            AG.BASE_SIZE
+        )]
     };
     agPlayers.set(socket.id, player);
 
+    const mapPlayer = p => ({
+        id: p.id, username: p.username, color: p.color,
+        cells: p.cells.map(c => ({
+            id: c.id, x: c.x, y: c.y, size: c.size,
+            velX: c.velX, velY: c.velY, phase: c.phase, splitBoost: c.splitBoost
+        }))
+    });
+
     socket.emit('init', {
-        youId: socket.id,
-        food:  agFood,
-        bots:  agBots.map(b => ({
+        youId:   socket.id,
+        food:    agFood,
+        bots:    agBots.map(b => ({
             id: b.id, x: b.x, y: b.y, size: b.size, color: b.color,
             velX: b.velX, velY: b.velY, phase: b.phase, name: b.name
         })),
-        players: [...agPlayers.values()].map(p => ({
-            id: p.id, x: p.x, y: p.y, size: p.size, color: p.color,
-            velX: p.velX, velY: p.velY, phase: p.phase, username: p.username
-        }))
+        players: [...agPlayers.values()].map(mapPlayer)
     });
 
     socket.on('input', ({ dirX, dirY }) => {
         const p = agPlayers.get(socket.id);
         if (p) { p.dirX = dirX || 0; p.dirY = dirY || 0; }
+    });
+
+    socket.on('split', () => {
+        const p = agPlayers.get(socket.id);
+        if (!p) return;
+        const next = [];
+        for (const cell of p.cells) {
+            if (cell.size < AG.SPLIT_MIN) { next.push(cell); continue; }
+            const half = cell.size / 2;
+            const mag  = Math.hypot(p.dirX, p.dirY) || 1;
+            const px   = -p.dirY / mag, py = p.dirX / mag;
+            const off  = cell.size * 0.7;
+            const spd  = agSpeed(half);
+            const mk   = (ox, oy) => ({
+                id: agId(), size: half, speed: spd,
+                x: Math.max(0, Math.min(AG.WORLD_W, cell.x + ox)),
+                y: Math.max(0, Math.min(AG.WORLD_H, cell.y + oy)),
+                velX: 0, velY: 0, phase: cell.phase, splitBoost: true
+            });
+            next.push(mk(px * off, py * off), mk(-px * off, -py * off));
+        }
+        p.cells = next;
+    });
+
+    socket.on('merge', () => {
+        const p = agPlayers.get(socket.id);
+        if (!p || p.cells.length < 2) return;
+        let changed = true;
+        while (changed && p.cells.length > 1) {
+            changed = false;
+            outer: for (let i = 0; i < p.cells.length; i++) {
+                for (let j = i + 1; j < p.cells.length; j++) {
+                    const a = p.cells[i], b = p.cells[j];
+                    const dx = a.x - b.x, dy = a.y - b.y;
+                    if (Math.hypot(dx, dy) < (a.size + b.size) * 1.2) {
+                        a.size += b.size; a.speed = agSpeed(a.size);
+                        a.x = (a.x + b.x) / 2; a.y = (a.y + b.y) / 2;
+                        a.velX = 0; a.velY = 0; a.splitBoost = false;
+                        p.cells.splice(j, 1);
+                        changed = true; break outer;
+                    }
+                }
+            }
+        }
+        for (const cell of p.cells) cell.splitBoost = false;
     });
 
     socket.on('disconnect', () => agPlayers.delete(socket.id));
