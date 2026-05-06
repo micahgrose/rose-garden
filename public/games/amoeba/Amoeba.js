@@ -208,6 +208,16 @@ function loop() {
             }
         }
 
+        // Client-side food prediction: removes food immediately on overlap
+        for (let i = food.length - 1; i >= 0; i--) {
+            const f = food[i];
+            for (const cell of myLocals.values()) {
+                const fdx = f.x - cell.x, fdy = f.y - cell.y;
+                const ft = cell.size * 1.5 + f.size;
+                if (fdx*fdx + fdy*fdy <= ft*ft) { food.splice(i, 1); break; }
+            }
+        }
+
         // Client-side soft leash: mirrors server logic so predictions stay smooth
         if (myLocals.size > 1) {
             let lsumX = 0, lsumY = 0, ltotal = 0;
@@ -375,7 +385,7 @@ function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
     }
 
     for (const obj of nearby) {
-        const infR = obj.r * 1.6, infR2 = infR * infR;
+        const infR = obj.r * 1, infR2 = infR * infR;
         for (let i = 0; i < N; i++) {
             const pdx = pts[i].x - obj.x, pdy = pts[i].y - obj.y;
             const d2 = pdx*pdx + pdy*pdy;
