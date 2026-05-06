@@ -121,8 +121,9 @@ const AG = {
     WORLD_W:   7500,
     WORLD_H:   7500,
     BASE_SIZE: 10,
-    MAX_FOOD:  15000,
-    FOOD_SPAWN_RATE: 5,
+    MAX_FOOD:  10000,
+    FOOD_SPAWN_RATE: 15,
+    BOT_SPAWN_RATE: 100,
     MAX_TOTAL: 55,
     TICK_MS:   50,
     EAT_RATIO: 1.2,
@@ -201,7 +202,7 @@ const agPlayers = new Map();
 let agFoodAdded   = [];
 let agFoodRemoved = new Set();
 
-for (let i = 0; i < AG.MAX_FOOD*(2/3); i++) agFood.push(agNewFood());
+for (let i = 0; i < AG.MAX_FOOD*(1/4); i++) agFood.push(agNewFood());
 for (let i = 0; i < 5;   i++) agBots.push(agNewBot());
 
 let agFoodFrames = 0, agBotFrames = 0, agTickCount = 0;
@@ -289,7 +290,7 @@ function agMovePlayers() {
             if (cell.shootX || cell.shootY) {
                 cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.shootX));
                 cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.shootY));
-                cell.shootX *= 0.80; cell.shootY *= 0.80;
+                cell.shootX *= 0.50; cell.shootY *= 0.50;
                 if (Math.abs(cell.shootX) < 0.1 && Math.abs(cell.shootY) < 0.1)
                     cell.shootX = cell.shootY = 0;
             }
@@ -438,7 +439,7 @@ setInterval(() => {
     }
 
     const maxBots = Math.max(0, AG.MAX_TOTAL - agPlayers.size);
-    if (agBotFrames >= 100 && agBots.length < maxBots) {
+    if (agBotFrames >= AG.BOT_SPAWN_RATE && agBots.length < maxBots) {
         agBots.push(agNewBot()); agBotFrames = 0;
     }
 

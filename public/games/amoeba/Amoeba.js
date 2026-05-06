@@ -8,8 +8,8 @@ let mouseX = c.width / 2, mouseY = c.height / 2;
 document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 
 // ── Game constants ────────────────────────────────────
-const WORLD_W      = 4000;
-const WORLD_H      = 4000;
+const WORLD_W      = 7500;
+const WORLD_H      = 7500;
 const BASE_SIZE    = 10;
 const TICK_MS      = 50;
 const SPLIT_MIN    = 20;
