@@ -24,14 +24,30 @@ const SNAP_SOFT    = 40;
 const SNAP_LERP    = 0.25;
 
 const ANIM_MS      = 1000; // split / merge animation duration (ms)
+const EAT_RATIO    = 1.2;  // must match AG.EAT_RATIO on server
 
 let camScale       = CAM_MAX;
 let camX           = WORLD_W / 2;
 let camY           = WORLD_H / 2;
 let time           = 0;
+let animT          = 0;     // synchronized animation time (matches server's agBlobRadius t)
+let agStartTime    = 0;     // Date.now() epoch when server started, received from init
 let lastInput      = 0;
 let lastFrameTime  = performance.now();
 let lastTickTime   = performance.now();
+
+// Blob radius at a given angle — identical formula to server's agBlobRadius.
+// t = (Date.now() - agStartTime) / 1000 * 0.72
+function blobRadius(angle, baseR, t, phase) {
+    let r = baseR;
+    r += Math.sin(angle * 2 + t         + phase)       * baseR * 0.10;
+    r += Math.sin(angle * 3 + t * 1.3   + phase * 0.7) * baseR * 0.08;
+    r += Math.sin(angle * 5 + t * 0.7   + phase * 1.5) * baseR * 0.05;
+    r += Math.pow(Math.max(0, Math.sin(angle * 2 + t * 0.6  + phase)),       5) * baseR * 0.65;
+    r += Math.pow(Math.max(0, Math.sin(angle * 2 + t * 0.45 + phase + 2.1)), 5) * baseR * 0.55;
+    r += Math.pow(Math.max(0, Math.sin(angle * 2 + t * 0.35 + phase + 4.3)), 5) * baseR * 0.45;
+    return r;
+}
 
 // ── Server state ──────────────────────────────────────
 let youId      = null;
@@ -58,7 +74,8 @@ const socket = io('/amoeba', { auth: { token: localStorage.getItem('rg_token') }
 
 socket.on('init', data => {
     youId   = data.youId;
-    if (data.worldW) { WORLD_W = data.worldW; WORLD_H = data.worldH; }
+    if (data.worldW)  { WORLD_W = data.worldW; WORLD_H = data.worldH; }
+    if (data.agStart) agStartTime = data.agStart;
     food    = data.food;
     players = data.players;
     for (const b of data.bots) botRender.set(b.id, { ...b });
@@ -191,6 +208,7 @@ function loop() {
     const dtScale = Math.min((now - lastFrameTime) / TICK_MS, 3);
     lastFrameTime = now;
     time++;
+    animT = agStartTime ? (Date.now() - agStartTime) / 1000 * 0.72 : time * 0.012;
 
     if (myLocals.size > 0) {
         const sdx  = mouseX - c.width  / 2;
@@ -211,13 +229,14 @@ function loop() {
             }
         }
 
-        // Client-side food prediction: removes food immediately on overlap
+        // Client-side food prediction: removes food when blob edge reaches it
         for (let i = food.length - 1; i >= 0; i--) {
             const f = food[i];
             for (const cell of myLocals.values()) {
                 const fdx = f.x - cell.x, fdy = f.y - cell.y;
-                const ft = cell.size * 1.5 + f.size;
-                if (fdx*fdx + fdy*fdy <= ft*ft) { food.splice(i, 1); break; }
+                const angle = Math.atan2(fdy, fdx);
+                const thresh = blobRadius(angle, cell.size, animT, cell.phase) + f.size;
+                if (fdx*fdx + fdy*fdy <= thresh*thresh) { food.splice(i, 1); break; }
             }
         }
 
@@ -363,20 +382,22 @@ function drawMergeAnim(ax, ay, aSize, bx, by, bSize, color, dir, s, targetX, tar
 }
 
 // ── Standard amoeba drawing ───────────────────────────
-function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
+// nearby  = objects the blob avoids / indents around (larger threats, sibling cells)
+// eatables = objects the blob engulfs / bulges toward (food, smaller prey)
+// t       = synchronized animation time (animT global)
+function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = [], eatables = [], t = 0) {
     const screenR   = radius * camScale;
     const N         = screenR < 15 ? 12 : 24;
     const speed     = Math.hypot(velX, velY);
     const moveAngle = speed > 0.01 ? Math.atan2(velY, velX) : 0;
-    const t         = time * 0.012;
 
     const pts = [];
     for (let i = 0; i < N; i++) {
         let a = (i / N) * Math.PI * 2;
         let r = radius;
-        r += Math.sin(a * 2 + t       + phase)       * radius * 0.10;
-        r += Math.sin(a * 3 + t * 1.3 + phase * 0.7) * radius * 0.08;
-        r += Math.sin(a * 5 + t * 0.7 + phase * 1.5) * radius * 0.05;
+        r += Math.sin(a * 2 + t         + phase)       * radius * 0.10;
+        r += Math.sin(a * 3 + t * 1.3   + phase * 0.7) * radius * 0.08;
+        r += Math.sin(a * 5 + t * 0.7   + phase * 1.5) * radius * 0.05;
         r += Math.pow(Math.max(0, Math.sin(a * 2 + t * 0.6  + phase)),       5) * radius * 0.65;
         r += Math.pow(Math.max(0, Math.sin(a * 2 + t * 0.45 + phase + 2.1)), 5) * radius * 0.55;
         r += Math.pow(Math.max(0, Math.sin(a * 2 + t * 0.35 + phase + 4.3)), 5) * radius * 0.45;
@@ -387,8 +408,30 @@ function drawAmoeba(x, y, radius, color, velX, velY, phase, nearby = []) {
         pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
     }
 
+    // Eatables: blob bulges outward toward prey/food it can consume
+    for (const obj of eatables) {
+        const objDx = obj.x - x, objDy = obj.y - y;
+        const objDist = Math.sqrt(objDx*objDx + objDy*objDy);
+        const infDist = radius * 2.5 + obj.r;
+        if (objDist < 0.001 || objDist > infDist) continue;
+        const proximity = 1 - objDist / infDist;
+        const objUx = objDx / objDist, objUy = objDy / objDist;
+        for (let i = 0; i < N; i++) {
+            const ax = pts[i].x - x, ay = pts[i].y - y;
+            const aD = Math.sqrt(ax*ax + ay*ay);
+            if (aD < 0.001) continue;
+            const dot = (ax/aD) * objUx + (ay/aD) * objUy; // cosine of angle to obj
+            const angFactor = Math.max(0, dot);
+            if (angFactor < 0.01) continue;
+            const pull = obj.r * proximity * angFactor * 0.9;
+            pts[i].x = x + (ax / aD) * (aD + pull);
+            pts[i].y = y + (ay / aD) * (aD + pull);
+        }
+    }
+
+    // Nearby: blob indents inward around threats / siblings
     for (const obj of nearby) {
-        const infR = obj.r * 1, infR2 = infR * infR;
+        const infR = obj.r, infR2 = infR * infR;
         for (let i = 0; i < N; i++) {
             const pdx = pts[i].x - obj.x, pdy = pts[i].y - obj.y;
             const d2 = pdx*pdx + pdy*pdy;
@@ -476,13 +519,14 @@ function draw() {
     const myCells    = [...myLocals.values()];
     const myCellObjs = myCells.map(cell => ({ x: cell.x, y: cell.y, r: cell.size }));
 
-    const myNearbyFood = [];
+    // Food near my cells goes in eatables (blob bulges toward it)
+    const myEatableFood = [];
     for (const f of food) {
         for (let k = 0; k < myCells.length; k++) {
             const mc = myCells[k];
             const dx = f.x - mc.x, dy = f.y - mc.y;
-            if (dx*dx + dy*dy < (mc.size * 1.7 + f.size * 2) ** 2) {
-                myNearbyFood.push({ x: f.x, y: f.y, r: f.size }); break;
+            if (dx*dx + dy*dy < (mc.size * 2.5 + f.size) ** 2) {
+                myEatableFood.push({ x: f.x, y: f.y, r: f.size }); break;
             }
         }
     }
@@ -501,18 +545,24 @@ function draw() {
     for (const e of others) {
         if (e.x + maxR < vMinX || e.x - maxR > vMaxX ||
             e.y + maxR < vMinY || e.y - maxR > vMaxY) continue;
-        const eNearby = [];
+        const eNearby = [], eEatables = [];
         for (let k = 0; k < myCells.length; k++) {
             const mc = myCells[k];
             const edx = e.x - mc.x, edy = e.y - mc.y;
-            if (edx*edx + edy*edy < (mc.size + e.size) ** 2 * 4) eNearby.push(myCellObjs[k]);
+            if (edx*edx + edy*edy < (mc.size + e.size) ** 2 * 4) {
+                if (e.size >= mc.size * EAT_RATIO) eEatables.push(myCellObjs[k]);
+                else eNearby.push(myCellObjs[k]);
+            }
         }
         for (const o of others) {
             if (o === e) continue;
             const odx = o.x - e.x, ody = o.y - e.y;
-            if (odx*odx + ody*ody < (e.size + o.size) ** 2 * 4) eNearby.push({ x: o.x, y: o.y, r: o.size });
+            if (odx*odx + ody*ody < (e.size + o.size) ** 2 * 4) {
+                if (e.size >= o.size * EAT_RATIO) eEatables.push({ x: o.x, y: o.y, r: o.size });
+                else eNearby.push({ x: o.x, y: o.y, r: o.size });
+            }
         }
-        drawAmoeba(e.x, e.y, e.size, e.color, e.velX || 0, e.velY || 0, e.phase || 0, eNearby);
+        drawAmoeba(e.x, e.y, e.size, e.color, e.velX || 0, e.velY || 0, e.phase || 0, eNearby, eEatables, animT);
         drawLabel(e.x, e.y, e.size, e.label, e.isBot ? null : Math.floor(e.size));
     }
 
@@ -531,13 +581,16 @@ function draw() {
         // Non-splitting cells render normally (same IDs, unchanged on server)
         for (const [id, cell] of myLocals) {
             if (!splitAnim.nonSplittingIds.has(id)) continue;
-            const cn = [...myNearbyFood];
+            const cn = [], ce = [...myEatableFood];
             for (const e of others) {
                 const dx = e.x - cell.x, dy = e.y - cell.y;
-                if (dx*dx + dy*dy < (cell.size + e.size) ** 2 * 4) cn.push({ x: e.x, y: e.y, r: e.size });
+                if (dx*dx + dy*dy < (cell.size + e.size) ** 2 * 4) {
+                    if (cell.size >= e.size * EAT_RATIO) ce.push({ x: e.x, y: e.y, r: e.size });
+                    else cn.push({ x: e.x, y: e.y, r: e.size });
+                }
             }
             drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
-                cell.velX || 0, cell.velY || 0, cell.phase || 0, cn);
+                cell.velX || 0, cell.velY || 0, cell.phase || 0, cn, ce, animT);
             drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)', Math.floor(cell.size));
         }
 
@@ -559,8 +612,8 @@ function draw() {
             } else if (nA && nB) {
                 const emerge = (s - SPLIT_PHASE) / (1 - SPLIT_PHASE);
                 const rA = nA.size * emerge, rB = nB.size * emerge;
-                if (rA > 1) drawAmoeba(nA.x, nA.y, rA, myColor || '#fff', nA.velX||0, nA.velY||0, nA.phase||0, myNearbyFood);
-                if (rB > 1) drawAmoeba(nB.x, nB.y, rB, myColor || '#fff', nB.velX||0, nB.velY||0, nB.phase||0, myNearbyFood);
+                if (rA > 1) drawAmoeba(nA.x, nA.y, rA, myColor || '#fff', nA.velX||0, nA.velY||0, nA.phase||0, [], myEatableFood, animT);
+                if (rB > 1) drawAmoeba(nB.x, nB.y, rB, myColor || '#fff', nB.velX||0, nB.velY||0, nB.phase||0, [], myEatableFood, animT);
                 drawLabel(animCx, animCy, sc.size * 0.5, myUsername || '(you)', Math.floor(nA.size));
             }
         }
@@ -578,14 +631,16 @@ function draw() {
         for (const [id, cell] of myLocals) {
             if (!mergeAnim.preMergeIds.has(id)) continue; // suppress new merged cell
             if (mergeAnim.mergeIds.has(id)) continue;     // suppress animating cells
-            const cn = [...myNearbyFood];
+            const cn = [], ce = [...myEatableFood];
             for (const e of others) {
                 const dx = e.x - cell.x, dy = e.y - cell.y;
-                if (dx*dx + dy*dy < (cell.size + e.size) ** 2 * 4) cn.push({ x: e.x, y: e.y, r: e.size });
+                if (dx*dx + dy*dy < (cell.size + e.size) ** 2 * 4) {
+                    if (cell.size >= e.size * EAT_RATIO) ce.push({ x: e.x, y: e.y, r: e.size });
+                    else cn.push({ x: e.x, y: e.y, r: e.size });
+                }
             }
             drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
-                cell.velX || 0, cell.velY || 0, cell.phase || 0, cn);
-            //drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)', Math.floor(cell.size));
+                cell.velX || 0, cell.velY || 0, cell.phase || 0, cn, ce, animT);
         }
 
         // Approach phase: actual amoeba blobs converge and shrink
@@ -598,8 +653,8 @@ function draw() {
                 const curAx = pair.ax + (targetX - pair.ax) * t, curAy = pair.ay + (targetY - pair.ay) * t;
                 const curBx = pair.bx + (targetX - pair.bx) * t, curBy = pair.by + (targetY - pair.by) * t;
                 const rA = pair.aSize * (1 - t), rB = pair.bSize * (1 - t);
-                if (rA > 0.5) drawAmoeba(curAx, curAy, rA, myColor || '#fff', 0, 0, 0, []);
-                if (rB > 0.5) drawAmoeba(curBx, curBy, rB, myColor || '#fff', 0, 0, 0, []);
+                if (rA > 0.5) drawAmoeba(curAx, curAy, rA, myColor || '#fff', 0, 0, 0, [], [], animT);
+                if (rB > 0.5) drawAmoeba(curBx, curBy, rB, myColor || '#fff', 0, 0, 0, [], [], animT);
             }
         }
 
@@ -609,7 +664,7 @@ function draw() {
             const r = mergedCell.size * emerge;
             if (r > 0.5) {
                 drawAmoeba(mergedCell.x, mergedCell.y, r, myColor || '#fff',
-                    mergedCell.velX||0, mergedCell.velY||0, mergedCell.phase||0, myNearbyFood);
+                    mergedCell.velX||0, mergedCell.velY||0, mergedCell.phase||0, [], myEatableFood, animT);
                 drawLabel(mergedCell.x, mergedCell.y, r, myUsername || '(you)', Math.floor(mergedCell.size));
             }
         }
@@ -620,7 +675,8 @@ function draw() {
 
         const sortedMy = [...myCells].sort((a, b) => b.size - a.size);
         for (const cell of sortedMy) {
-            const cn = [...myNearbyFood];
+            const cn = [];                       // nearby: blob indents away
+            const ce = [...myEatableFood];       // eatables: blob bulges toward
             for (const mc of myCells) {
                 if (mc === cell) continue;
                 const dx = mc.x - cell.x, dy = mc.y - cell.y;
@@ -628,10 +684,13 @@ function draw() {
             }
             for (const e of others) {
                 const dx = e.x - cell.x, dy = e.y - cell.y;
-                if (dx*dx + dy*dy < (cell.size + e.size) ** 2 * 4) cn.push({ x: e.x, y: e.y, r: e.size });
+                if (dx*dx + dy*dy < (cell.size + e.size) ** 2 * 4) {
+                    if (cell.size >= e.size * EAT_RATIO) ce.push({ x: e.x, y: e.y, r: e.size });
+                    else cn.push({ x: e.x, y: e.y, r: e.size });
+                }
             }
             drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
-                cell.velX || 0, cell.velY || 0, cell.phase || 0, cn);
+                cell.velX || 0, cell.velY || 0, cell.phase || 0, cn, ce, animT);
             drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)', Math.floor(cell.size));
         }
     }

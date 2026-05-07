@@ -123,6 +123,7 @@ const AG = {
     BASE_SIZE: 10,
     MAX_SIZE:  1000,
     MAX_FOOD:  10000,
+    FOOD_SPAWN_AMOUNT: 15,
     FOOD_SPAWN_RATE: 500,
     BOT_SPAWN_RATE: 100,
     MAX_TOTAL: 55,
@@ -161,6 +162,21 @@ function agSpeed(size)  { return Math.pow(AG.BASE_SIZE / size, 0.45) * 9; }
 function agColor()      { return `hsl(${Math.floor(Math.random() * 360)},70%,55%)`; }
 function agBotName()    { return AG.BOT_NAMES[Math.floor(Math.random() * AG.BOT_NAMES.length)]; }
 function agId()         { return Math.random().toString(36).slice(2, 9); }
+
+const AG_START = Date.now();
+
+// Blob radius at a given angle — mirrors the drawAmoeba formula on the client.
+// t = (Date.now() - AG_START) / 1000 * 0.72  (same rate as client's time * 0.012 at 60fps)
+function agBlobRadius(angle, baseR, t, phase) {
+    let r = baseR;
+    r += Math.sin(angle * 2 + t         + phase)       * baseR * 0.10;
+    r += Math.sin(angle * 3 + t * 1.3   + phase * 0.7) * baseR * 0.08;
+    r += Math.sin(angle * 5 + t * 0.7   + phase * 1.5) * baseR * 0.05;
+    r += Math.pow(Math.max(0, Math.sin(angle * 2 + t * 0.6  + phase)),       5) * baseR * 0.65;
+    r += Math.pow(Math.max(0, Math.sin(angle * 2 + t * 0.45 + phase + 2.1)), 5) * baseR * 0.55;
+    r += Math.pow(Math.max(0, Math.sin(angle * 2 + t * 0.35 + phase + 4.3)), 5) * baseR * 0.45;
+    return r;
+}
 
 function agNewFood() {
     return {
@@ -344,13 +360,16 @@ function agMovePlayers() {
 }
 
 function agEatFood() {
+    const t = (Date.now() - AG_START) / 1000 * 0.72;
     for (let i = agFood.length - 1; i >= 0; i--) {
         const f = agFood[i];
         let eaten = false;
         outer: for (const [, p] of agPlayers) {
             for (const cell of p.cells) {
-                const dx = f.x - cell.x, dy = f.y - cell.y, t = cell.size * 1.5 + f.size;
-                if (dx*dx + dy*dy <= t*t) {
+                const dx = f.x - cell.x, dy = f.y - cell.y;
+                const angle = Math.atan2(dy, dx);
+                const thresh = agBlobRadius(angle, cell.size, t, cell.phase) + f.size;
+                if (dx*dx + dy*dy <= thresh*thresh) {
                     cell.size = Math.min(AG.MAX_SIZE, cell.size + 1); cell.speed = agSpeed(cell.size);
                     agFoodRemoved.add(f.id); agFood.splice(i, 1); eaten = true; break outer;
                 }
@@ -358,8 +377,10 @@ function agEatFood() {
         }
         if (eaten) continue;
         for (const b of agBots) {
-            const dx = f.x - b.x, dy = f.y - b.y, t = b.size * 1.5 + f.size;
-            if (dx*dx + dy*dy <= t*t) {
+            const dx = f.x - b.x, dy = f.y - b.y;
+            const angle = Math.atan2(dy, dx);
+            const thresh = agBlobRadius(angle, b.size, t, b.phase) + f.size;
+            if (dx*dx + dy*dy <= thresh*thresh) {
                 b.size = Math.min(AG.MAX_SIZE, b.size + 1); b.speed = agSpeed(b.size);
                 agFoodRemoved.add(f.id); agFood.splice(i, 1); break;
             }
@@ -373,16 +394,21 @@ function agRespawn(p) {
 }
 
 function agEatBots() {
+    const t = (Date.now() - AG_START) / 1000 * 0.72;
     for (let i = agBots.length - 1; i >= 0; i--) {
         const b = agBots[i]; let dead = false;
         for (const [sid, p] of agPlayers) {
             for (let ci = p.cells.length - 1; ci >= 0; ci--) {
                 const cell = p.cells[ci];
                 const dx = b.x - cell.x, dy = b.y - cell.y, dsq = dx*dx + dy*dy;
-                if (cell.size >= b.size * AG.EAT_RATIO && dsq < cell.size * cell.size) {
+                // dx/dy points from cell toward bot; angle from cell toward bot:
+                const angleCellToBot = Math.atan2(dy, dx);
+                const cellEdgeR = agBlobRadius(angleCellToBot, cell.size, t, cell.phase);
+                const botEdgeR  = agBlobRadius(angleCellToBot + Math.PI, b.size, t, b.phase);
+                if (cell.size >= b.size * AG.EAT_RATIO && dsq < cellEdgeR * cellEdgeR) {
                     cell.size = Math.min(AG.MAX_SIZE, cell.size + b.size * 0.5); cell.speed = agSpeed(cell.size);
                     agBots.splice(i, 1); dead = true; break;
-                } else if (b.size >= cell.size * AG.EAT_RATIO && dsq < b.size * b.size) {
+                } else if (b.size >= cell.size * AG.EAT_RATIO && dsq < botEdgeR * botEdgeR) {
                     b.size = Math.min(AG.MAX_SIZE, b.size + cell.size * 0.5); b.speed = agSpeed(b.size);
                     p.cells.splice(ci, 1);
                     if (p.cells.length === 0) {
@@ -396,11 +422,15 @@ function agEatBots() {
         }
         if (dead) continue;
         for (let j = i - 1; j >= 0; j--) {
+            // dx/dy points from a toward b
             const a = agBots[j]; const dx = b.x - a.x, dy = b.y - a.y, dsq = dx*dx + dy*dy;
-            if (b.size >= a.size * AG.EAT_RATIO && dsq < b.size * b.size) {
+            const angleAtoB = Math.atan2(dy, dx);
+            const bEdgeR = agBlobRadius(angleAtoB + Math.PI, b.size, t, b.phase); // b faces a
+            const aEdgeR = agBlobRadius(angleAtoB,           a.size, t, a.phase); // a faces b
+            if (b.size >= a.size * AG.EAT_RATIO && dsq < bEdgeR * bEdgeR) {
                 b.size = Math.min(AG.MAX_SIZE, b.size + a.size * 0.5); b.speed = agSpeed(b.size);
                 agBots.splice(j, 1); i--;
-            } else if (a.size >= b.size * AG.EAT_RATIO && dsq < a.size * a.size) {
+            } else if (a.size >= b.size * AG.EAT_RATIO && dsq < aEdgeR * aEdgeR) {
                 a.size = Math.min(AG.MAX_SIZE, a.size + b.size * 0.5); a.speed = agSpeed(a.size);
                 agBots.splice(i, 1); dead = true; break;
             }
@@ -409,6 +439,7 @@ function agEatBots() {
 }
 
 function agEatPlayers() {
+    const t = (Date.now() - AG_START) / 1000 * 0.72;
     const list = [...agPlayers.entries()];
     for (let i = 0; i < list.length; i++) {
         for (let j = i + 1; j < list.length; j++) {
@@ -418,15 +449,19 @@ function agEatPlayers() {
                 for (let cj = b.cells.length - 1; cj >= 0; cj--) {
                     if (!b.cells[cj]) continue;
                     const ca = a.cells[ci], cb = b.cells[cj];
+                    // dx/dy points from cb toward ca
                     const dx = ca.x - cb.x, dy = ca.y - cb.y, dsq = dx*dx + dy*dy;
-                    if (ca.size >= cb.size * AG.EAT_RATIO && dsq < ca.size * ca.size) {
+                    const angleCbToCa = Math.atan2(dy, dx);
+                    const caEdgeR = agBlobRadius(angleCbToCa + Math.PI, ca.size, t, ca.phase); // ca faces cb
+                    const cbEdgeR = agBlobRadius(angleCbToCa,           cb.size, t, cb.phase); // cb faces ca
+                    if (ca.size >= cb.size * AG.EAT_RATIO && dsq < caEdgeR * caEdgeR) {
                         ca.size = Math.min(AG.MAX_SIZE, ca.size + cb.size * 0.5); ca.speed = agSpeed(ca.size);
                         b.cells.splice(cj, 1);
                         if (b.cells.length === 0) {
                             agRespawn(b);
                             io.of('/amoeba').to(sidB).emit('died', { killedBy: a.username });
                         }
-                    } else if (cb.size >= ca.size * AG.EAT_RATIO && dsq < cb.size * cb.size) {
+                    } else if (cb.size >= ca.size * AG.EAT_RATIO && dsq < cbEdgeR * cbEdgeR) {
                         cb.size = Math.min(AG.MAX_SIZE, cb.size + ca.size * 0.5); cb.speed = agSpeed(cb.size);
                         a.cells.splice(ci, 1);
                         if (a.cells.length === 0) {
@@ -444,9 +479,9 @@ function agEatPlayers() {
 setInterval(() => {
     agFoodFrames++; agBotFrames++; agTickCount++;
 
-    if (agFoodFrames >= AG.FOOD_SPAWN_RATE && agFood.length < AG.MAX_FOOD*(12/13)) {
+    if (agFoodFrames >= AG.FOOD_SPAWN_RATE && agFood.length < AG.MAX_FOOD*((FOOD_SPAWN_AMOUNT-1)/FOOD_SPAWN_AMOUNT)) {
         agFoodFrames = 0;
-        for(let i = 0; i < Math.floor(AG.MAX_FOOD / 13); i++){
+        for(let i = 0; i < Math.floor(AG.MAX_FOOD / AG.FOOD_SPAWN_AMOUNT); i++){
             const f = agNewFood(); agFood.push(f); agFoodAdded.push(f);
         }
     }
@@ -512,6 +547,7 @@ io.of('/amoeba').on('connection', socket => {
         youId:   socket.id,
         worldW:  AG.WORLD_W,
         worldH:  AG.WORLD_H,
+        agStart: AG_START,
         food:    agFood,
         bots:    agBots.map(b => ({
             id: b.id, x: b.x, y: b.y, size: b.size, color: b.color,
