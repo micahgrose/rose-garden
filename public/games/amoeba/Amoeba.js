@@ -120,8 +120,14 @@ socket.on('tick', data => {
             if (myLocals.has(sc.id)) {
                 const loc = myLocals.get(sc.id);
                 const d = Math.hypot(sc.x - loc.x, sc.y - loc.y);
-                if (d > SNAP_HARD) { loc.x = sc.x; loc.y = sc.y; }
-                else { loc.x += (sc.x - loc.x) * SNAP_LERP; loc.y += (sc.y - loc.y) * SNAP_LERP; }
+                if (d > SNAP_HARD) {
+                    // Extreme disagreement — server wins as a safety net
+                    loc.x = sc.x; loc.y = sc.y;
+                } else if (d > SNAP_SOFT) {
+                    // Client wins: push client position back to server
+                    socket.emit('correct', { id: sc.id, x: loc.x, y: loc.y });
+                }
+                // d <= SNAP_SOFT: dead zone, keep client prediction as-is
                 loc.size = sc.size; loc.velX = sc.velX; loc.velY = sc.velY;
                 loc.phase = sc.phase; loc.splitBoost = sc.splitBoost;
             } else {

@@ -616,6 +616,15 @@ io.of('/amoeba').on('connection', socket => {
         for (const cell of p.cells) cell.splitBoost = false;
     });
 
+    socket.on('correct', ({ id, x, y }) => {
+        const p = agPlayers.get(socket.id);
+        if (!p) return;
+        const cell = p.cells.find(c => c.id === id);
+        if (!cell) return;
+        cell.x = Math.max(0, Math.min(AG.WORLD_W, x));
+        cell.y = Math.max(0, Math.min(AG.WORLD_H, y));
+    });
+
     socket.on('disconnect', () => agPlayers.delete(socket.id));
 });
 
