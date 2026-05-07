@@ -143,6 +143,7 @@ body {
 .badge.premium      { background: #c0394b22; color: #e8527a; border: 1px solid #c0394b55; }
 .badge.free         { background: #1a3a1a; color: #4caf50; border: 1px solid #4caf5055; }
 .badge.coming-soon-badge { background: #1a1a2e; color: #7a7aaa; border: 1px solid #3a3a6a; }
+.badge.maintenance      { background: #2a1a00; color: #e09030; border: 1px solid #a06010; }
 
 /* ── Modal ── */
 .modal {
