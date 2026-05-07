@@ -18,8 +18,9 @@ const CAM_LERP     = 0.05;
 const CAM_ZOOM     = 2.5;
 
 const SNAP_HARD    = 200;
-const SNAP_SOFT    = 40;
-const SNAP_LERP    = 0.25;
+const SNAP_SOFT    = 25;   // dead zone — no correction below this distance
+const SNAP_FAST    = 0.09; // per-frame blend rate for large errors
+const SNAP_CREEP   = 0.02; // per-frame drift for small errors inside dead zone
 
 const EAT_RATIO    = 1.2;  // must match AG.EAT_RATIO on server
 
@@ -106,12 +107,12 @@ socket.on('tick', data => {
             if (myLocals.has(sc.id)) {
                 const loc = myLocals.get(sc.id);
                 const d = Math.hypot(sc.x - loc.x, sc.y - loc.y);
-                if (d > SNAP_HARD) { loc.x = sc.x; loc.y = sc.y; }
-                else if (d > SNAP_SOFT) { loc.x += (sc.x - loc.x) * SNAP_LERP; loc.y += (sc.y - loc.y) * SNAP_LERP; }
+                if (d > SNAP_HARD) { loc.x = sc.x; loc.y = sc.y; loc.sx = sc.x; loc.sy = sc.y; }
+                else { loc.sx = sc.x; loc.sy = sc.y; } // per-frame blend happens in loop()
                 loc.size = sc.size; loc.velX = sc.velX; loc.velY = sc.velY;
                 loc.phase = sc.phase;
             } else {
-                myLocals.set(sc.id, { ...sc });
+                myLocals.set(sc.id, { ...sc, sx: sc.x, sy: sc.y });
             }
         }
     }
@@ -172,6 +173,17 @@ function loop() {
                 const thresh = blobRadius(angle, cell.size, animT, cell.phase) + f.size;
                 if (fdx*fdx + fdy*fdy <= thresh*thresh) { food.splice(i, 1); break; }
             }
+        }
+
+        // Per-frame server reconciliation: blend toward server target continuously
+        for (const loc of myLocals.values()) {
+            if (loc.sx === undefined) continue;
+            const dx = loc.sx - loc.x, dy = loc.sy - loc.y;
+            const d = Math.hypot(dx, dy);
+            if (d < 0.5) continue;
+            const rate = d > SNAP_SOFT ? SNAP_FAST : SNAP_CREEP;
+            loc.x += dx * rate;
+            loc.y += dy * rate;
         }
 
         // Client-side soft leash: mirrors server logic so predictions stay smooth
