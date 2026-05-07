@@ -130,7 +130,7 @@ const AG = {
     TICK_MS:   50,
     EAT_RATIO: 1.2,
     SPLIT_MIN: 20,
-    SHOOT_DECAY: 0.88,
+    SHOOT_DECAY: 0.7,
     BOT_NAMES: [
         'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
 	    'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
@@ -299,28 +299,31 @@ function agMovePlayers() {
     for (const [, p] of agPlayers) {
         const mag = Math.hypot(p.dirX, p.dirY);
         for (const cell of p.cells) {
+            // While sliding from a split, coast on shoot boost only — skip mouse movement
+            if (cell.shootX || cell.shootY) {
+                cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.shootX));
+                cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.shootY));
+                cell.velX = cell.shootX; cell.velY = cell.shootY;
+                cell.shootX *= AG.SHOOT_DECAY; cell.shootY *= AG.SHOOT_DECAY;
+                if (Math.abs(cell.shootX) < 0.1 && Math.abs(cell.shootY) < 0.1) {
+                    cell.shootX = cell.shootY = 0; cell.splitBoost = false;
+                }
+                continue;
+            }
             let ux, uy;
             if (mag >= 0.1) {
                 ux = p.dirX / mag; uy = p.dirY / mag;
             } else {
-                // Fallback: per-cell direction from stored world mouse (older client format)
                 const fdx = p.mouseX - cell.x, fdy = p.mouseY - cell.y;
                 const fm = Math.hypot(fdx, fdy);
                 if (fm < 1) { cell.velX = cell.velY = 0; continue; }
                 ux = fdx / fm; uy = fdy / fm;
             }
-            const spd = cell.speed * (cell.splitBoost ? 1.3 : 1);
+            const spd = cell.speed;
             cell.velX = ux * spd;
             cell.velY = uy * spd;
             cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.velX));
             cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.velY));
-            if (cell.shootX || cell.shootY) {
-                cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.shootX));
-                cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.shootY));
-                cell.shootX *= AG.SHOOT_DECAY; cell.shootY *= AG.SHOOT_DECAY;
-                if (Math.abs(cell.shootX) < 0.1 && Math.abs(cell.shootY) < 0.1)
-                    cell.shootX = cell.shootY = 0;
-            }
         }
         // Push overlapping own cells apart so they collide/conform visually
         for (let i = 0; i < p.cells.length; i++) {
