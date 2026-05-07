@@ -121,7 +121,7 @@ socket.on('tick', data => {
                 const loc = myLocals.get(sc.id);
                 const d = Math.hypot(sc.x - loc.x, sc.y - loc.y);
                 if (d > SNAP_HARD) { loc.x = sc.x; loc.y = sc.y; }
-                else if (d > SNAP_SOFT) { loc.x += (sc.x - loc.x) * SNAP_LERP; loc.y += (sc.y - loc.y) * SNAP_LERP; }
+                else { loc.x += (sc.x - loc.x) * SNAP_LERP; loc.y += (sc.y - loc.y) * SNAP_LERP; }
                 loc.size = sc.size; loc.velX = sc.velX; loc.velY = sc.velY;
                 loc.phase = sc.phase; loc.splitBoost = sc.splitBoost;
             } else {
