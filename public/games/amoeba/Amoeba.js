@@ -150,19 +150,21 @@ document.addEventListener('click', () => {
 
     const splittingCells  = [];
     const nonSplittingIds = new Set();
+    const splittingIds    = new Set();
     const preSplitIds     = new Set();
 
     for (const [id, cell] of myLocals) {
         preSplitIds.add(id);
         if (cell.size >= SPLIT_MIN) {
             splittingCells.push({ cx: cell.x, cy: cell.y, size: cell.size, phase: cell.phase, dir });
+            splittingIds.add(id);
         } else {
             nonSplittingIds.add(id);
         }
     }
 
     if (splittingCells.length > 0) {
-        splitAnim = { splittingCells, nonSplittingIds, preSplitIds, startedAt: performance.now(), duration: ANIM_MS };
+        splitAnim = { splittingCells, nonSplittingIds, splittingIds, preSplitIds, startedAt: performance.now(), duration: ANIM_MS };
         mergeAnim = null;
     }
     socket.emit('split');
@@ -594,27 +596,34 @@ function draw() {
             drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)', Math.floor(cell.size));
         }
 
-        // Fission animation for each splitting cell, anchored to actual new cell positions
+        // Fission animation for each splitting cell, anchored to actual cell positions
+        const splittingIdsList = [...splitAnim.splittingIds];
         for (let k = 0; k < splitAnim.splittingCells.length; k++) {
-            const sc  = splitAnim.splittingCells[k];
-            const nA  = allNew[k * 2];
-            const nB  = allNew[k * 2 + 1];
+            const sc       = splitAnim.splittingCells[k];
+            const nA       = allNew[k]; // one new cell per split (original keeps its ID)
+            const origCell = myLocals.get(splittingIdsList[k]); // original cell
 
-            // Track the actual centroid of the two new cells so the shape moves with them
-            const animCx = (nA && nB) ? (nA.x + nB.x) / 2 : sc.cx;
-            const animCy = (nA && nB) ? (nA.y + nB.y) / 2 : sc.cy;
+            // Track centroid between original and new cell positions
+            const animCx = (nA && origCell) ? (nA.x + origCell.x) / 2 : sc.cx;
+            const animCy = (nA && origCell) ? (nA.y + origCell.y) / 2 : sc.cy;
 
-            // Fission shape plays until neck pinches, then actual amoeba blobs grow in
             const SPLIT_PHASE = 0.62;
             if (s < SPLIT_PHASE) {
                 drawFissionShape(animCx, animCy, sc.size, myColor || '#fff', sc.dir, s);
                 drawLabel(animCx, animCy, sc.size, myUsername || '(you)', Math.floor(sc.size));
-            } else if (nA && nB) {
+            } else {
                 const emerge = (s - SPLIT_PHASE) / (1 - SPLIT_PHASE);
-                const rA = nA.size * emerge, rB = nB.size * emerge;
-                if (rA > 1) drawAmoeba(nA.x, nA.y, rA, myColor || '#fff', nA.velX||0, nA.velY||0, nA.phase||0, [], myEatableFood, animT);
-                if (rB > 1) drawAmoeba(nB.x, nB.y, rB, myColor || '#fff', nB.velX||0, nB.velY||0, nB.phase||0, [], myEatableFood, animT);
-                drawLabel(animCx, animCy, sc.size * 0.5, myUsername || '(you)', Math.floor(nA.size));
+                // Original cell renders normally at its halved size
+                if (origCell) {
+                    drawAmoeba(origCell.x, origCell.y, origCell.size, myColor || '#fff',
+                        origCell.velX||0, origCell.velY||0, origCell.phase||0, [], myEatableFood, animT);
+                }
+                // New cell grows in from the split point
+                if (nA) {
+                    const rA = nA.size * emerge;
+                    if (rA > 1) drawAmoeba(nA.x, nA.y, rA, myColor || '#fff', nA.velX||0, nA.velY||0, nA.phase||0, [], myEatableFood, animT);
+                }
+                drawLabel(animCx, animCy, sc.size * 0.5, myUsername || '(you)', Math.floor(sc.size * 0.5));
             }
         }
 
@@ -644,7 +653,8 @@ function draw() {
         }
 
         // Approach phase: actual amoeba blobs converge and shrink
-        const MERGE_APPROACH = 0.5;
+        const MERGE_APPROACH  = 0.5;
+        const MERGE_EMERGE    = 0.42; // start emergence before approach fully ends (no gap)
         if (s < MERGE_APPROACH) {
             const t = s / MERGE_APPROACH;
             for (const pair of mergeAnim.pairs) {
@@ -658,9 +668,9 @@ function draw() {
             }
         }
 
-        // Emergence phase: merged cell grows from nothing as actual amoeba blob
-        if (s >= MERGE_APPROACH && mergedCell) {
-            const emerge = (s - MERGE_APPROACH) / (1 - MERGE_APPROACH);
+        // Emergence phase: merged cell grows in, starts before approach ends to avoid a gap
+        if (s >= MERGE_EMERGE && mergedCell) {
+            const emerge = (s - MERGE_EMERGE) / (1 - MERGE_EMERGE);
             const r = mergedCell.size * emerge;
             if (r > 0.5) {
                 drawAmoeba(mergedCell.x, mergedCell.y, r, myColor || '#fff',
