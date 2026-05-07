@@ -130,7 +130,7 @@ const AG = {
     TICK_MS:   50,
     EAT_RATIO: 1.2,
     SPLIT_MIN: 20,
-    SHOOT_DECAY: 0.1,
+    SHOOT_DECAY: 0.88,
     BOT_NAMES: [
         'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
 	    'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
@@ -573,19 +573,19 @@ io.of('/amoeba').on('connection', socket => {
             const mdx  = p.mouseX - cell.x, mdy = p.mouseY - cell.y;
             const mag  = Math.hypot(mdx, mdy) || 1;
             const px   = mdx / mag, py = mdy / mag;
-            const off  = cell.size * 0.7;
             const spd  = agSpeed(half);
-            const shootSpd = spd * 4;
-            const mk = (ox, oy, sx, sy) => ({
+            const shootSpd = spd * 8;
+            // Original cell shrinks, stays in place
+            cell.size = half; cell.speed = spd; cell.splitBoost = false;
+            next.push(cell);
+            // New cell spawns at same position and slides away toward mouse
+            next.push({
                 id: agId(), size: half, speed: spd,
-                x: Math.max(0, Math.min(AG.WORLD_W, cell.x + ox)),
-                y: Math.max(0, Math.min(AG.WORLD_H, cell.y + oy)),
-                velX: 0, velY: 0, shootX: sx, shootY: sy, phase: cell.phase, splitBoost: true
+                x: cell.x, y: cell.y,
+                velX: 0, velY: 0,
+                shootX: px * shootSpd, shootY: py * shootSpd,
+                phase: cell.phase, splitBoost: true
             });
-            next.push(
-                mk( px * off,  py * off,  px * shootSpd,  py * shootSpd),
-                mk(-px * off, -py * off, -px * shootSpd, -py * shootSpd)
-            );
         }
         p.cells = next;
     });
