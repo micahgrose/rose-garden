@@ -281,13 +281,12 @@ function agMoveBots(updateGoals) {
 
 function agMovePlayers() {
     for (const [, p] of agPlayers) {
+        const mag = Math.hypot(p.dirX, p.dirY);
         for (const cell of p.cells) {
-            const dx = p.mouseX - cell.x, dy = p.mouseY - cell.y;
-            const mag = Math.hypot(dx, dy);
-            if (mag < 1) { cell.velX = cell.velY = 0; continue; }
+            if (mag < 0.1) { cell.velX = cell.velY = 0; continue; }
             const spd = cell.speed * (cell.splitBoost ? 1.3 : 1);
-            cell.velX = (dx / mag) * spd;
-            cell.velY = (dy / mag) * spd;
+            cell.velX = (p.dirX / mag) * spd;
+            cell.velY = (p.dirY / mag) * spd;
             cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.velX));
             cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.velY));
             if (cell.shootX || cell.shootY) {
@@ -360,7 +359,7 @@ function agEatFood() {
 }
 
 function agRespawn(p) {
-    p.mouseX = AG.WORLD_W / 2; p.mouseY = AG.WORLD_H / 2;
+    p.dirX = p.dirY = 0; p.mouseX = AG.WORLD_W / 2; p.mouseY = AG.WORLD_H / 2;
     p.cells = [agNewCell(Math.random() * AG.WORLD_W, Math.random() * AG.WORLD_H, AG.BASE_SIZE)];
 }
 
@@ -483,7 +482,7 @@ io.of('/amoeba').on('connection', socket => {
 
     const player = {
         id: socket.id, username, color: agColor(),
-        mouseX: AG.WORLD_W / 2, mouseY: AG.WORLD_H / 2,
+        dirX: 0, dirY: 0, mouseX: AG.WORLD_W / 2, mouseY: AG.WORLD_H / 2,
         cells: [agNewCell(
             AG.WORLD_W / 2 + (Math.random() - 0.5) * 500,
             AG.WORLD_H / 2 + (Math.random() - 0.5) * 500,
@@ -512,9 +511,11 @@ io.of('/amoeba').on('connection', socket => {
         players: [...agPlayers.values()].map(mapPlayer)
     });
 
-    socket.on('input', ({ mouseX, mouseY }) => {
+    socket.on('input', ({ dirX, dirY, mouseX, mouseY }) => {
         const p = agPlayers.get(socket.id);
-        if (p) { p.mouseX = mouseX ?? p.mouseX; p.mouseY = mouseY ?? p.mouseY; }
+        if (!p) return;
+        p.dirX = dirX || 0; p.dirY = dirY || 0;
+        if (mouseX != null) { p.mouseX = mouseX; p.mouseY = mouseY; }
     });
 
     socket.on('split', () => {
