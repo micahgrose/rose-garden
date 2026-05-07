@@ -4,72 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Amoeba – RoseGarden</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #0f0f0f; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-        canvas { display: block; }
-
-        /* ── HUD ── */
-        #hud {
-            position: fixed;
-            top: 14px; left: 14px;
-            color: #ccc;
-            font-size: 0.82rem;
-            background: rgba(0,0,0,0.55);
-            padding: 8px 14px;
-            border-radius: 8px;
-            z-index: 5;
-            line-height: 1.7;
-            pointer-events: none;
-        }
-
-        /* ── Kill screen ── */
-        #killScreen {
-            position: fixed;
-            inset: 0;
-            background: radial-gradient(ellipse at center, #2a0005ee, #000000f5);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 30;
-            animation: killFadeIn 0.25s ease-out;
-        }
-        #killScreen.active { display: flex; }
-
-        .kill-title {
-            font-size: clamp(2.5rem, 9vw, 5.5rem);
-            font-weight: 900;
-            color: #c0394b;
-            letter-spacing: 6px;
-            text-transform: uppercase;
-            text-shadow: 0 0 30px #c0394b99, 0 0 70px #c0394b44;
-            animation: killPulse 0.75s ease-in-out infinite alternate;
-        }
-        .kill-by {
-            font-size: clamp(1rem, 3vw, 1.4rem);
-            color: #888;
-            margin-top: 18px;
-            letter-spacing: 1px;
-        }
-        .kill-by span { color: #e8527a; font-weight: 700; }
-        .kill-respawn {
-            margin-top: 36px;
-            font-size: 0.85rem;
-            color: #444;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-        }
-
-        @keyframes killPulse {
-            from { transform: scale(1);    text-shadow: 0 0 30px #c0394b99, 0 0 60px #c0394b33; }
-            to   { transform: scale(1.04); text-shadow: 0 0 50px #c0394bcc, 0 0 110px #c0394b66; }
-        }
-        @keyframes killFadeIn {
-            from { opacity: 0; }
-            to   { opacity: 1; }
-        }
-    </style>
+    <link rel="icon" type="image/png" href="AmoebaIcon.png">
+    <link rel="stylesheet" href="amoeba.css">
 </head>
 <body>
     <canvas id="c"></canvas>

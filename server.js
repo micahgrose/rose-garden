@@ -283,10 +283,19 @@ function agMovePlayers() {
     for (const [, p] of agPlayers) {
         const mag = Math.hypot(p.dirX, p.dirY);
         for (const cell of p.cells) {
-            if (mag < 0.1) { cell.velX = cell.velY = 0; continue; }
+            let ux, uy;
+            if (mag >= 0.1) {
+                ux = p.dirX / mag; uy = p.dirY / mag;
+            } else {
+                // Fallback: per-cell direction from stored world mouse (older client format)
+                const fdx = p.mouseX - cell.x, fdy = p.mouseY - cell.y;
+                const fm = Math.hypot(fdx, fdy);
+                if (fm < 1) { cell.velX = cell.velY = 0; continue; }
+                ux = fdx / fm; uy = fdy / fm;
+            }
             const spd = cell.speed * (cell.splitBoost ? 1.3 : 1);
-            cell.velX = (p.dirX / mag) * spd;
-            cell.velY = (p.dirY / mag) * spd;
+            cell.velX = ux * spd;
+            cell.velY = uy * spd;
             cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.velX));
             cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.velY));
             if (cell.shootX || cell.shootY) {

@@ -18,7 +18,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
+    min-height: calc(100vh - 80px);
     padding: 60px 24px;
     text-align: center;
     position: sticky;
@@ -92,7 +92,7 @@ body {
 }
 
 .games-preview h2 {
-    font-size: 1.8rem;
+    font-size: 2.6rem;
     margin-bottom: 24px;
     color: #e8527a;
 }

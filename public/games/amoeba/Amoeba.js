@@ -585,7 +585,7 @@ function draw() {
             }
             drawAmoeba(cell.x, cell.y, cell.size, myColor || '#fff',
                 cell.velX || 0, cell.velY || 0, cell.phase || 0, cn);
-            drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)', Math.floor(cell.size));
+            //drawLabel(cell.x, cell.y, cell.size, myUsername || '(you)', Math.floor(cell.size));
         }
 
         // Approach phase: actual amoeba blobs converge and shrink

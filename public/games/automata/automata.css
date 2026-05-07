@@ -392,6 +392,12 @@ button:disabled {
 	border-radius: 0;
 	transition: none;
 }
+.dialog-heading {
+	font-size: 13px;
+	font-weight: bold;
+	letter-spacing: 0.1em;
+	color: #00ddff;
+}
 
 /* ── Messages ── */
 .message {
