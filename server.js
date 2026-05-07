@@ -115,7 +115,7 @@ function genPassword() {
 
 // ── Amoeba Multiplayer ────────────────────────────────
 // Player: { id, username, color, dirX, dirY, cells: [cell…] }
-// Cell:   { id, x, y, size, speed, velX, velY, phase, splitBoost }
+// Cell:   { id, x, y, size, speed, velX, velY, phase }
 
 const AG = {
     WORLD_W:   7500,
@@ -129,8 +129,6 @@ const AG = {
     MAX_TOTAL: 55,
     TICK_MS:   50,
     EAT_RATIO: 1.2,
-    SPLIT_MIN: 20,
-    SHOOT_DECAY: 0.7,
     BOT_NAMES: [
         'Globulus','Blobsworth','Oozebert','Slimon','Gloopus',
 	    'Muckling','Vacuole','Cytoplasm','Nucleon','Flagellum',
@@ -191,9 +189,8 @@ function agNewFood() {
 function agNewCell(x, y, size) {
     return {
         id: agId(), x, y, size, speed: agSpeed(size),
-        velX: 0, velY: 0, shootX: 0, shootY: 0,
-        phase: Math.random() * Math.PI * 2,
-        splitBoost: false
+        velX: 0, velY: 0,
+        phase: Math.random() * Math.PI * 2
     };
 }
 
@@ -299,17 +296,6 @@ function agMovePlayers() {
     for (const [, p] of agPlayers) {
         const mag = Math.hypot(p.dirX, p.dirY);
         for (const cell of p.cells) {
-            // While sliding from a split, coast on shoot boost only — skip mouse movement
-            if (cell.shootX || cell.shootY) {
-                cell.x = Math.max(0, Math.min(AG.WORLD_W, cell.x + cell.shootX));
-                cell.y = Math.max(0, Math.min(AG.WORLD_H, cell.y + cell.shootY));
-                cell.velX = cell.shootX; cell.velY = cell.shootY;
-                cell.shootX *= AG.SHOOT_DECAY; cell.shootY *= AG.SHOOT_DECAY;
-                if (Math.abs(cell.shootX) < 0.1 && Math.abs(cell.shootY) < 0.1) {
-                    cell.shootX = cell.shootY = 0; cell.splitBoost = false;
-                }
-                continue;
-            }
             let ux, uy;
             if (mag >= 0.1) {
                 ux = p.dirX / mag; uy = p.dirY / mag;
@@ -504,7 +490,7 @@ setInterval(() => {
         id: p.id, username: p.username, color: p.color,
         cells: p.cells.map(c => ({
             id: c.id, x: c.x, y: c.y, size: c.size,
-            velX: c.velX, velY: c.velY, phase: c.phase, splitBoost: c.splitBoost
+            velX: c.velX, velY: c.velY, phase: c.phase
         }))
     });
 
@@ -542,7 +528,7 @@ io.of('/amoeba').on('connection', socket => {
         id: p.id, username: p.username, color: p.color,
         cells: p.cells.map(c => ({
             id: c.id, x: c.x, y: c.y, size: c.size,
-            velX: c.velX, velY: c.velY, phase: c.phase, splitBoost: c.splitBoost
+            velX: c.velX, velY: c.velY, phase: c.phase
         }))
     });
 
@@ -564,56 +550,6 @@ io.of('/amoeba').on('connection', socket => {
         if (!p) return;
         p.dirX = dirX || 0; p.dirY = dirY || 0;
         if (mouseX != null) { p.mouseX = mouseX; p.mouseY = mouseY; }
-    });
-
-    socket.on('split', () => {
-        const p = agPlayers.get(socket.id);
-        if (!p) return;
-        const next = [];
-        for (const cell of p.cells) {
-            if (cell.size < AG.SPLIT_MIN) { next.push(cell); continue; }
-            const half = cell.size / 2;
-            const mdx  = p.mouseX - cell.x, mdy = p.mouseY - cell.y;
-            const mag  = Math.hypot(mdx, mdy) || 1;
-            const px   = mdx / mag, py = mdy / mag;
-            const spd  = agSpeed(half);
-            const shootSpd = spd * 8;
-            // Original cell shrinks, stays in place
-            cell.size = half; cell.speed = spd; cell.splitBoost = false;
-            next.push(cell);
-            // New cell spawns at same position and slides away toward mouse
-            next.push({
-                id: agId(), size: half, speed: spd,
-                x: cell.x, y: cell.y,
-                velX: 0, velY: 0,
-                shootX: px * shootSpd, shootY: py * shootSpd,
-                phase: cell.phase, splitBoost: true
-            });
-        }
-        p.cells = next;
-    });
-
-    socket.on('merge', () => {
-        const p = agPlayers.get(socket.id);
-        if (!p || p.cells.length < 2) return;
-        let changed = true;
-        while (changed && p.cells.length > 1) {
-            changed = false;
-            outer: for (let i = 0; i < p.cells.length; i++) {
-                for (let j = i + 1; j < p.cells.length; j++) {
-                    const a = p.cells[i], b = p.cells[j];
-                    const dx = a.x - b.x, dy = a.y - b.y;
-                    if (Math.hypot(dx, dy) < (a.size + b.size) * 1.2) {
-                        a.size += b.size; a.speed = agSpeed(a.size);
-                        a.x = (a.x + b.x) / 2; a.y = (a.y + b.y) / 2;
-                        a.velX = 0; a.velY = 0; a.splitBoost = false;
-                        p.cells.splice(j, 1);
-                        changed = true; break outer;
-                    }
-                }
-            }
-        }
-        for (const cell of p.cells) cell.splitBoost = false;
     });
 
     socket.on('disconnect', () => agPlayers.delete(socket.id));
