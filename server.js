@@ -479,7 +479,7 @@ function agEatPlayers() {
 setInterval(() => {
     agFoodFrames++; agBotFrames++; agTickCount++;
 
-    if (agFoodFrames >= AG.FOOD_SPAWN_RATE && agFood.length < AG.MAX_FOOD*((FOOD_SPAWN_AMOUNT-1)/FOOD_SPAWN_AMOUNT)) {
+    if (agFoodFrames >= AG.FOOD_SPAWN_RATE && agFood.length < AG.MAX_FOOD*((AG.FOOD_SPAWN_AMOUNT-1)/AG.FOOD_SPAWN_AMOUNT)) {
         agFoodFrames = 0;
         for(let i = 0; i < Math.floor(AG.MAX_FOOD / AG.FOOD_SPAWN_AMOUNT); i++){
             const f = agNewFood(); agFood.push(f); agFoodAdded.push(f);
