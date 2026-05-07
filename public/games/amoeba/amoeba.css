@@ -62,3 +62,47 @@ canvas { display: block; }
     from { opacity: 0; }
     to   { opacity: 1; }
 }
+
+/* ── Pause panel ── */
+#pausePanel {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.72);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    z-index: 40;
+}
+#pausePanel.active { display: flex; }
+
+#pauseTitle {
+    font-size: clamp(2rem, 7vw, 4rem);
+    font-weight: 900;
+    color: #e8527a;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+}
+
+#leaveBtn, #resumeBtn {
+    padding: 12px 32px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.15s, transform 0.1s;
+}
+#leaveBtn:hover, #resumeBtn:hover { opacity: 0.85; transform: translateY(-1px); }
+
+#leaveBtn {
+    background: #7a1a1a;
+    color: #fff;
+    border: none;
+}
+#resumeBtn {
+    background: transparent;
+    color: #e8527a;
+    border: 2px solid #c0394b;
+}

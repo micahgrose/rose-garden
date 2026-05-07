@@ -125,6 +125,13 @@ socket.on('died', ({ killedBy }) => {
     myLocals.clear();
 });
 
+// ── Pause panel ───────────────────────────────────────
+const pausePanel = document.getElementById('pausePanel');
+document.getElementById('resumeBtn').addEventListener('click', () => pausePanel.classList.remove('active'));
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') pausePanel.classList.toggle('active');
+});
+
 // ── Game logic ────────────────────────────────────────
 function calcSpeed(size) {
     return Math.pow(BASE_SIZE / size, 0.45) * 9;
