@@ -21,7 +21,7 @@ const BATTERY_PICKUP_AMOUNT = 40;
 const FLASHLIGHT_RADIUS_FULL = 0.09;
 const FLASHLIGHT_REACH       = 4;   // world units before walls fade to black
 const MOUSE_SENSITIVITY     = 0.00075;
-const FOV                   = Math.PI * 150 / 180;
+const FOV                   = Math.PI * 75 / 180;
 const TEXTURE_SIZE          = 128;
 const CELL_SCALE            = 0.5;  // each maze cell = 0.5 world units (tight corridors)
 const LAB_SIZES             = [11, 15, 19];
