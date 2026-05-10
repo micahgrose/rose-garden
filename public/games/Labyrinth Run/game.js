@@ -10,7 +10,7 @@
 
 const CELL_SIZE             = 1;
 const MOVE_SPEED            = 0.8;
-const RUN_SPEED             = 2.8;
+const RUN_SPEED             = 1.3;
 const STAMINA_MAX           = 50;
 const STAMINA_DRAIN         = 30;
 const STAMINA_REGEN_NORMAL  = 4;
@@ -19,8 +19,9 @@ const BATTERY_MAX           = 100;
 const BATTERY_DRAIN         = 6.0;
 const BATTERY_PICKUP_AMOUNT = 40;
 const FLASHLIGHT_RADIUS_FULL = 0.09;
+const FLASHLIGHT_REACH       = 4;   // world units before walls fade to black
 const MOUSE_SENSITIVITY     = 0.00075;
-const FOV                   = Math.PI * 75 / 180;
+const FOV                   = Math.PI * 150 / 180;
 const TEXTURE_SIZE          = 128;
 const CELL_SCALE            = 0.5;  // each maze cell = 0.5 world units (tight corridors)
 const LAB_SIZES             = [11, 15, 19];
@@ -466,7 +467,7 @@ function renderScene(grid, player, batteries) {
         zBuffer[screenX] = perpWallDist;
 
         // Wall height on screen
-        const lineH  = Math.min(H * 2, Math.floor(H / Math.max(0.001, perpWallDist)));
+        const lineH  = Math.min(H, Math.floor(H / Math.max(0.001, perpWallDist)));
         const drawStart = Math.max(0, halfH - (lineH >> 1));
         const drawEnd   = Math.min(H - 1, halfH + (lineH >> 1));
 
@@ -487,7 +488,7 @@ function renderScene(grid, player, batteries) {
         texX = texX & (TEXTURE_SIZE - 1);
 
         // Distance darkening factor
-        const distFactor = Math.max(0, 1 - perpWallDist / 14);
+        const distFactor = Math.max(0, 1 - perpWallDist / FLASHLIGHT_REACH);
         // Side darkening: y-side walls are 30% darker
         const sideMult = side === 1 ? 0.70 : 1.0;
 
@@ -775,7 +776,7 @@ function updatePlayer(dt, grid, batteries) {
     // Strafe
     const moveSide = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
 
-    const MARGIN = 0.22 * CELL_SCALE;
+    const MARGIN = 0.38 * CELL_SCALE;
 
     if (moveFwd !== 0) {
         const moveSpeed = speed * dt * moveFwd;
