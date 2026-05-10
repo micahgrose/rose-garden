@@ -22,8 +22,27 @@ MongoClient.connect(process.env.MONGODB_URI)
     .then(client => {
         db = client.db();
         db.collection('users').createIndex({ username: 1 }, { unique: true });
-        db.collection('users').createIndex({ email: 1 },    { unique: true });
+        db.collection('users').createIndex({ email: 1 },    { unique: true, sparse: true });
         console.log('Connected to MongoDB');
+
+        // Inactivity cleanup: delete no-email accounts inactive for 30+ days
+        setInterval(async () => {
+            const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            try {
+                const stale = await db.collection('users').find({
+                    email: null,
+                    last_active: { $lt: cutoff }
+                }).toArray();
+                if (stale.length > 0) {
+                    const ids = stale.map(u => u._id);
+                    await db.collection('users').deleteMany({ _id: { $in: ids } });
+                    await db.collection('saves').deleteMany({ userId: { $in: ids } });
+                    console.log(`Cleanup: removed ${stale.length} inactive no-email account(s).`);
+                }
+            } catch (err) {
+                console.error('Inactivity cleanup error:', err);
+            }
+        }, 86400000);
     })
     .catch(err => { console.error('MongoDB connection failed:', err); process.exit(1); });
 
@@ -561,17 +580,49 @@ io.of('/amoeba').on('connection', socket => {
 app.post('/api/register', async (req, res) => {
     const { username, email, password } = req.body;
 
-    if (!username || !email || !password)
-        return res.status(400).json({ error: 'All fields are required.' });
+    if (!username || !password)
+        return res.status(400).json({ error: 'Username and password are required.' });
     if (username.length < 3 || username.length > 20)
         return res.status(400).json({ error: 'Username must be 3–20 characters.' });
     if (password.length < 6)
         return res.status(400).json({ error: 'Password must be at least 6 characters.' });
 
-    const existing = await dbFind({ $or: [{ username }, { email }] });
-    if (existing) return res.status(400).json({ error: 'Username or email already in use.' });
+    // Check username uniqueness
+    const existingUser = await dbFind({ username });
+    if (existingUser) return res.status(400).json({ error: 'Username already in use.' });
 
-    const password_hash  = await bcrypt.hash(password, 12);
+    const password_hash = await bcrypt.hash(password, 12);
+
+    if (!email) {
+        // No email: create account immediately and issue token
+        let inserted;
+        try {
+            inserted = await dbInsert({
+                username, password_hash,
+                email: null,
+                email_verified: false,
+                last_active: new Date(),
+                created_at: new Date().toISOString()
+            });
+        } catch (err) {
+            console.error('DB insert error:', err);
+            return res.status(500).json({ error: 'Failed to create account. Try again.' });
+        }
+        const token = jwt.sign(
+            { id: inserted._id.toString(), username },
+            process.env.JWT_SECRET,
+            { expiresIn: '10d' }
+        );
+        return res.json({ token, username, emailRequired: false });
+    }
+
+    // Email provided: validate format and uniqueness
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+        return res.status(400).json({ error: 'Invalid email address.' });
+
+    const existingEmail = await dbFind({ email });
+    if (existingEmail) return res.status(400).json({ error: 'Email already in use.' });
+
     const verify_code    = genCode(6);
     const verify_expires = Date.now() + 15 * 60 * 1000;
 
@@ -579,8 +630,9 @@ app.post('/api/register', async (req, res) => {
     try {
         inserted = await dbInsert({
             username, email, password_hash,
+            email_verified: false,
             verify_code, verify_expires,
-            verified: false,
+            last_active: new Date(),
             created_at: new Date().toISOString()
         });
     } catch (err) {
@@ -590,7 +642,7 @@ app.post('/api/register', async (req, res) => {
 
     try {
         await sendEmail(email, 'Verify your RoseGarden account', verifyEmailHtml(username, verify_code));
-        res.json({ message: 'Account created! Enter the 6-digit code sent to your email.', email });
+        res.json({ pendingEmail: email });
     } catch (err) {
         console.error('Email error:', err);
         await dbRemove({ _id: inserted._id });
@@ -604,14 +656,31 @@ app.post('/api/verify-code', async (req, res) => {
     if (!email || !code) return res.status(400).json({ error: 'Email and code required.' });
 
     const user = await dbFind({ email });
-    if (!user)          return res.status(404).json({ error: 'No account found.' });
-    if (user.verified)  return res.status(400).json({ error: 'Account already verified.' });
+    if (!user) return res.status(404).json({ error: 'No account found.' });
+    if (user.email_verified && user.email === email && !user.pending_email)
+        return res.status(400).json({ error: 'Account already verified.' });
     if (Date.now() > user.verify_expires)
         return res.status(400).json({ error: 'Code expired. Please register again.' });
     if (user.verify_code !== code.trim())
         return res.status(400).json({ error: 'Incorrect code.' });
 
-    await dbUpdate({ _id: user._id }, { $set: { verified: true, verify_code: null, verify_expires: null } });
+    // If verifying a pending linked email
+    if (user.pending_email && user.pending_email === email) {
+        await dbUpdate({ _id: user._id }, {
+            $set: {
+                email: user.pending_email,
+                email_verified: true,
+                pending_email: null,
+                verify_code: null,
+                verify_expires: null
+            }
+        });
+    } else {
+        // Initial registration verification
+        await dbUpdate({ _id: user._id }, {
+            $set: { email_verified: true, verify_code: null, verify_expires: null }
+        });
+    }
     res.json({ message: 'Email verified! You can now log in.' });
 });
 
@@ -621,8 +690,8 @@ app.post('/api/resend-verification', async (req, res) => {
     if (!email) return res.status(400).json({ error: 'Email is required.' });
 
     const user = await dbFind({ email });
-    if (!user)         return res.status(404).json({ error: 'No account found.' });
-    if (user.verified) return res.status(400).json({ error: 'Account already verified.' });
+    if (!user)                return res.status(404).json({ error: 'No account found.' });
+    if (user.email_verified)  return res.status(400).json({ error: 'Account already verified.' });
 
     const verify_code    = genCode(6);
     const verify_expires = Date.now() + 15 * 60 * 1000;
@@ -648,14 +717,16 @@ app.post('/api/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid username or password.' });
 
-    if (!user.verified)
+    // If user has an email but hasn't verified it, block login
+    if (user.email && !user.email_verified)
         return res.status(403).json({
-            error: 'Please verify your email before logging in.',
+            error: 'Please verify your email.',
             needsVerify: true,
             email: user.email
         });
 
-    const token = jwt.sign({ id: user._id.toString(), username: user.username }, process.env.JWT_SECRET, { expiresIn: '30d' });
+    await dbUpdate({ _id: user._id }, { $set: { last_active: new Date() } });
+    const token = jwt.sign({ id: user._id.toString(), username: user.username }, process.env.JWT_SECRET, { expiresIn: '10d' });
     res.json({ token, username: user.username });
 });
 
@@ -666,6 +737,7 @@ app.post('/api/forgot-password', async (req, res) => {
 
     const user = await dbFind({ username });
     if (!user) return res.status(404).json({ error: 'No account with that username.' });
+    if (!user.email) return res.status(400).json({ error: 'No email linked to this account. Password reset is unavailable.' });
 
     const reset_code    = genCode(8);
     const reset_expires = Date.now() + 15 * 60 * 1000;
@@ -687,6 +759,7 @@ app.post('/api/reset-password', async (req, res) => {
 
     const user = await dbFind({ username });
     if (!user)              return res.status(404).json({ error: 'No account found.' });
+    if (!user.email)        return res.status(400).json({ error: 'No email linked to this account.' });
     if (!user.reset_code)   return res.status(400).json({ error: 'No reset request found.' });
     if (Date.now() > user.reset_expires)
         return res.status(400).json({ error: 'Code expired. Request a new one.' });
@@ -710,7 +783,62 @@ app.post('/api/reset-password', async (req, res) => {
 app.get('/api/me', requireAuth, async (req, res) => {
     const user = await dbFind({ _id: uid(req.user.id) });
     if (!user) return res.status(404).json({ error: 'User not found.' });
-    res.json({ username: user.username, email: user.email, created_at: user.created_at });
+    res.json({ username: user.username, email: user.email ?? null, email_verified: user.email_verified ?? false, created_at: user.created_at });
+});
+
+// Link email to no-email account — step 1: send code
+app.post('/api/account/link-email', requireAuth, async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+        return res.status(400).json({ error: 'Invalid email address.' });
+
+    const existing = await dbFind({ email });
+    if (existing) return res.status(400).json({ error: 'Email already in use.' });
+
+    const verify_code    = genCode(6);
+    const verify_expires = Date.now() + 15 * 60 * 1000;
+
+    const user = await dbFind({ _id: uid(req.user.id) });
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    await dbUpdate({ _id: user._id }, {
+        $set: { pending_email: email, verify_code, verify_expires }
+    });
+
+    try {
+        await sendEmail(email, 'Verify your RoseGarden email', verifyEmailHtml(user.username, verify_code));
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('Email error (link-email):', err);
+        res.status(500).json({ error: 'Failed to send verification email.' });
+    }
+});
+
+// Link email to no-email account — step 2: verify code
+app.post('/api/account/verify-link-email', requireAuth, async (req, res) => {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 'Code is required.' });
+
+    const user = await dbFind({ _id: uid(req.user.id) });
+    if (!user)             return res.status(404).json({ error: 'User not found.' });
+    if (!user.pending_email) return res.status(400).json({ error: 'No pending email to verify.' });
+    if (!user.verify_code) return res.status(400).json({ error: 'No verification in progress.' });
+    if (Date.now() > user.verify_expires)
+        return res.status(400).json({ error: 'Code expired. Please request a new one.' });
+    if (user.verify_code !== code.trim())
+        return res.status(400).json({ error: 'Incorrect code.' });
+
+    await dbUpdate({ _id: user._id }, {
+        $set: {
+            email: user.pending_email,
+            email_verified: true,
+            pending_email: null,
+            verify_code: null,
+            verify_expires: null
+        }
+    });
+    res.json({ ok: true });
 });
 
 // Change password

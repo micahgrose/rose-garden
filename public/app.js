@@ -13,6 +13,7 @@ function setLoading(btn, loading) {
 let authToken   = localStorage.getItem('rg_token') || null;
 let currentUser = null;
 let pendingVerifyEmail = null; // email awaiting code after registration
+let pendingLinkEmail   = null; // email being linked to an existing account
 
 // ── DOM ───────────────────────────────────────────────
 const authModal      = document.getElementById('authModal');
@@ -81,7 +82,6 @@ function showForgot() {
 // ── Register ──────────────────────────────────────────
 document.getElementById('registerBtn').addEventListener('click', async () => {
     const username = document.getElementById('regUsername').value.trim();
-    const email    = document.getElementById('regEmail').value.trim();
     const password = document.getElementById('regPassword').value;
     const errEl    = document.getElementById('registerError');
     const okEl     = document.getElementById('registerSuccess');
@@ -95,17 +95,28 @@ document.getElementById('registerBtn').addEventListener('click', async () => {
         const res  = await fetch('/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, email, password })
+            body: JSON.stringify({ username, password })
         });
         const data = await res.json();
         if (!res.ok) { errEl.textContent = data.error; return; }
 
-        pendingVerifyEmail = email;
-        okEl.textContent   = data.message + ' (Check spam if you don\'t see it.)';
-
-        document.getElementById('registerInputs').classList.add('hidden');
-        document.getElementById('verifySection').classList.remove('hidden');
-        document.getElementById('verifyCode').focus();
+        if (data.token) {
+            // No-email registration: log in immediately
+            authToken = data.token;
+            localStorage.setItem('rg_token', authToken);
+            authModal.classList.add('hidden');
+            showRegister(); // reset register form state
+            await loadUser();
+            // Open account modal so user sees the "No Email Linked" section
+            showAccount();
+        } else if (data.pendingEmail) {
+            // Email was provided (future path): show verify section
+            pendingVerifyEmail = data.pendingEmail;
+            okEl.textContent   = 'Account created! Enter the 6-digit code sent to your email. (Check spam if you don\'t see it.)';
+            document.getElementById('registerInputs').classList.add('hidden');
+            document.getElementById('verifySection').classList.remove('hidden');
+            document.getElementById('verifyCode').focus();
+        }
     } catch {
         errEl.textContent = 'Something went wrong. Try again.';
     } finally {
@@ -277,7 +288,10 @@ async function loadUser() {
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
         if (!res.ok) { logout(); return; }
-        currentUser = await res.json();
+        const data = await res.json();
+        currentUser = data;
+        currentUser.email         = data.email ?? null;
+        currentUser.email_verified = data.email_verified ?? false;
         showUserHeader();
     } catch {
         logout();
@@ -304,10 +318,12 @@ function logout() {
 }
 
 // ── Account panel ─────────────────────────────────────
-document.getElementById('accountBtn').addEventListener('click', () => {
+function showAccount() {
     if (!currentUser) return;
     document.getElementById('accountUsername').textContent = `Username: ${currentUser.username}`;
-    document.getElementById('accountEmail').textContent    = `Email: ${currentUser.email}`;
+    document.getElementById('accountEmail').textContent    = currentUser.email
+        ? `Email: ${currentUser.email}`
+        : 'Email: (none)';
     const date = new Date(currentUser.created_at).toLocaleDateString();
     document.getElementById('accountCreated').textContent  = `Member since: ${date}`;
     document.getElementById('deleteError').textContent      = '';
@@ -316,8 +332,26 @@ document.getElementById('accountBtn').addEventListener('click', () => {
     document.getElementById('changePassSuccess').textContent = '';
     document.getElementById('currentPassword').value        = '';
     document.getElementById('newPassword').value            = '';
+
+    // Show/hide the link-email section
+    const linkSection = document.getElementById('linkEmailSection');
+    if (!currentUser.email) {
+        linkSection.classList.remove('hidden');
+        // Reset the link-email form
+        document.getElementById('linkEmailInput').value   = '';
+        document.getElementById('linkEmailError').textContent  = '';
+        document.getElementById('linkEmailSuccess').textContent = '';
+        document.getElementById('linkCodeSection').classList.add('hidden');
+        document.getElementById('linkCodeInput').value   = '';
+        document.getElementById('linkCodeError').textContent  = '';
+    } else {
+        linkSection.classList.add('hidden');
+    }
+
     accountModal.classList.remove('hidden');
-});
+}
+
+document.getElementById('accountBtn').addEventListener('click', showAccount);
 
 document.getElementById('closeAccount').addEventListener('click', () => {
     accountModal.classList.add('hidden');
@@ -380,6 +414,74 @@ document.getElementById('deleteBtn').addEventListener('click', async () => {
         showBanner('Your account has been deleted.', 'success-banner');
     } catch {
         errEl.textContent = 'Something went wrong. Try again.';
+    }
+});
+
+// ── Link email ────────────────────────────────────────
+document.getElementById('linkEmailBtn').addEventListener('click', async () => {
+    const email  = document.getElementById('linkEmailInput').value.trim();
+    const errEl  = document.getElementById('linkEmailError');
+    const okEl   = document.getElementById('linkEmailSuccess');
+    const btn    = document.getElementById('linkEmailBtn');
+    errEl.textContent = '';
+    okEl.textContent  = '';
+
+    if (!email) { errEl.textContent = 'Enter an email address.'; return; }
+
+    setLoading(btn, true);
+    try {
+        const res  = await fetch('/api/account/link-email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error; return; }
+
+        pendingLinkEmail = email;
+        okEl.textContent = 'Code sent! Check your email (and spam folder).';
+        document.getElementById('linkCodeSection').classList.remove('hidden');
+        document.getElementById('linkCodeInput').focus();
+    } catch {
+        errEl.textContent = 'Something went wrong. Try again.';
+    } finally {
+        setLoading(btn, false);
+    }
+});
+
+document.getElementById('linkCodeBtn').addEventListener('click', async () => {
+    const code   = document.getElementById('linkCodeInput').value.trim();
+    const errEl  = document.getElementById('linkCodeError');
+    const btn    = document.getElementById('linkCodeBtn');
+    errEl.textContent = '';
+
+    if (!code) { errEl.textContent = 'Enter the verification code.'; return; }
+
+    setLoading(btn, true);
+    try {
+        const res  = await fetch('/api/account/verify-link-email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ code })
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error; return; }
+
+        pendingLinkEmail = null;
+        // Reload user data and refresh the account panel
+        await loadUser();
+        showAccount();
+        showBanner('Email linked successfully!', 'success-banner');
+    } catch {
+        errEl.textContent = 'Something went wrong. Try again.';
+    } finally {
+        setLoading(btn, false);
     }
 });
 

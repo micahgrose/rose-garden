@@ -13,7 +13,7 @@
     <div id="landingPage">
         <div class="hero">
             <div class="hero-text">
-                <img src="/RoseGardenIcon.png" alt="RoseGarden" class="hero-logo">
+                <img src="/RoseGardenTitleIcon.png" alt="RoseGarden" class="hero-logo">
                 <p>A Growing Garden of Games.</p>
                 <div class="hero-btns" id="heroBtns">
                     <button id="showLoginBtn" class="btn primary">Log In</button>
@@ -102,7 +102,6 @@
 
                 <div id="registerInputs">
                     <input type="text"     id="regUsername" placeholder="Username (3–20 chars)" autocomplete="username">
-                    <input type="email"    id="regEmail"    placeholder="Email address"         autocomplete="email">
                     <input type="password" id="regPassword" placeholder="Password (min 6 chars)" autocomplete="new-password">
                     <div class="error"   id="registerError"></div>
                     <div class="success" id="registerSuccess"></div>
@@ -146,6 +145,20 @@
             <div class="error" id="changePassError"></div>
             <div class="success" id="changePassSuccess"></div>
             <button class="btn primary full" id="changePassBtn">Change Password</button>
+            <div id="linkEmailSection" class="hidden">
+                <hr>
+                <h3 style="color:#e09030;">No Email Linked</h3>
+                <p style="font-size:0.85rem;color:#888;margin-bottom:10px;">Without an email, your account will be deleted after 30 days of inactivity.</p>
+                <input type="email" id="linkEmailInput" placeholder="Email address">
+                <div class="error" id="linkEmailError"></div>
+                <div class="success" id="linkEmailSuccess"></div>
+                <button class="btn primary full" id="linkEmailBtn">Send Verification Code</button>
+                <div id="linkCodeSection" class="hidden" style="margin-top:10px;">
+                    <input type="text" id="linkCodeInput" placeholder="000000" maxlength="6" autocomplete="off">
+                    <div class="error" id="linkCodeError"></div>
+                    <button class="btn primary full" id="linkCodeBtn" style="margin-top:4px;">Verify Email</button>
+                </div>
+            </div>
             <hr>
             <h3 style="color:#c0394b;">Delete Account</h3>
             <p style="font-size:0.85rem;color:#888;">This is permanent and cannot be undone.</p>
