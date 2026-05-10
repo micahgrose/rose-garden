@@ -496,3 +496,6 @@ document.getElementById('marbleRunCard').addEventListener('click', () => {
 document.getElementById('amoebaCard').addEventListener('click', () => {
     window.location.href = '/amoeba';
 });
+document.getElementById('labyrinthRunCard').addEventListener('click', () => {
+    window.location.href = '/games/Labyrinth Run/';
+});
