@@ -26,22 +26,80 @@ MongoClient.connect(process.env.MONGODB_URI)
         await db.collection('users').createIndex({ email: 1 }, { unique: true, sparse: true });
         console.log('Connected to MongoDB');
 
-        // Inactivity cleanup: delete no-email accounts inactive for 30+ days
+        // Migration: backfill last_active and created_at for existing users missing them
+        const migrationDate = new Date('2026-05-10T00:00:00.000Z');
+        await db.collection('users').updateMany(
+            { last_active: { $exists: false } },
+            { $set: { last_active: migrationDate } }
+        );
+        await db.collection('users').updateMany(
+            { created_at: { $exists: false } },
+            { $set: { created_at: migrationDate.toISOString() } }
+        );
+
+        // Daily cleanup & warning job
         setInterval(async () => {
-            const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            const now = Date.now();
+            const thirtyDays  = new Date(now - 30 * 24 * 60 * 60 * 1000);
+            const fiveYears   = new Date(now - 5 * 365 * 24 * 60 * 60 * 1000);
+            const fourYears   = new Date(now - 4 * 365 * 24 * 60 * 60 * 1000);
+            const thisMonth   = new Date(now); thisMonth.setDate(1); thisMonth.setHours(0,0,0,0);
+
             try {
-                const stale = await db.collection('users').find({
+                // Delete no-email accounts inactive 30+ days
+                const staleNoEmail = await db.collection('users').find({
                     email: null,
-                    last_active: { $lt: cutoff }
+                    last_active: { $lt: thirtyDays }
                 }).toArray();
-                if (stale.length > 0) {
-                    const ids = stale.map(u => u._id);
+                if (staleNoEmail.length > 0) {
+                    const ids = staleNoEmail.map(u => u._id);
                     await db.collection('users').deleteMany({ _id: { $in: ids } });
                     await db.collection('saves').deleteMany({ userId: { $in: ids } });
-                    console.log(`Cleanup: removed ${stale.length} inactive no-email account(s).`);
+                    console.log(`Cleanup: removed ${staleNoEmail.length} inactive no-email account(s).`);
+                }
+
+                // Delete email accounts inactive 5+ years
+                const staleEmail = await db.collection('users').find({
+                    email: { $ne: null },
+                    last_active: { $lt: fiveYears }
+                }).toArray();
+                if (staleEmail.length > 0) {
+                    const ids = staleEmail.map(u => u._id);
+                    await db.collection('users').deleteMany({ _id: { $in: ids } });
+                    await db.collection('saves').deleteMany({ userId: { $in: ids } });
+                    console.log(`Cleanup: removed ${staleEmail.length} inactive email account(s).`);
+                }
+
+                // Monthly warning emails for accounts inactive 4–5 years
+                const warnCandidates = await db.collection('users').find({
+                    email: { $ne: null },
+                    email_verified: true,
+                    last_active: { $lt: fourYears, $gte: fiveYears },
+                    $or: [
+                        { last_warning_sent: { $exists: false } },
+                        { last_warning_sent: { $lt: thisMonth } }
+                    ]
+                }).toArray();
+                for (const u of warnCandidates) {
+                    const deleteDate = new Date(u.last_active.getTime() + 5 * 365 * 24 * 60 * 60 * 1000);
+                    const deleteDateStr = deleteDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                    try {
+                        await sendEmail(u.email, 'Your RoseGarden account will be deleted due to inactivity',
+                            `<div style="font-family:sans-serif;max-width:480px;margin:auto;">
+                                <h2 style="color:#c0394b;">Inactivity Warning</h2>
+                                <p>Hi <strong>${u.username}</strong>,</p>
+                                <p>Your RoseGarden account has been inactive for over 4 years. If you do not log in before <strong>${deleteDateStr}</strong>, your account will be permanently deleted.</p>
+                                <p>Simply log in at <a href="https://rosegarden.onrender.com">rosegarden.onrender.com</a> to keep your account active.</p>
+                                <p style="color:#888;font-size:0.85rem;">— The RoseGarden Team</p>
+                            </div>`
+                        );
+                        await db.collection('users').updateOne({ _id: u._id }, { $set: { last_warning_sent: new Date() } });
+                    } catch (err) {
+                        console.error(`Warning email failed for ${u.username}:`, err);
+                    }
                 }
             } catch (err) {
-                console.error('Inactivity cleanup error:', err);
+                console.error('Cleanup job error:', err);
             }
         }, 86400000);
     })
@@ -728,7 +786,7 @@ app.post('/api/login', async (req, res) => {
 
     await dbUpdate({ _id: user._id }, { $set: { last_active: new Date() } });
     const token = jwt.sign({ id: user._id.toString(), username: user.username }, process.env.JWT_SECRET, { expiresIn: '10d' });
-    res.json({ token, username: user.username });
+    res.json({ token, username: user.username, noEmailWarning: !user.email });
 });
 
 // Forgot password — step 1: send 8-digit code

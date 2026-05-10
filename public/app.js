@@ -217,6 +217,7 @@ async function submitLogin() {
         localStorage.setItem('rg_token', authToken);
         authModal.classList.add('hidden');
         await loadUser();
+        if (data.noEmailWarning) showAccount();
     } catch {
         errEl.textContent = 'Something went wrong. Try again.';
     }
