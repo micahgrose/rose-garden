@@ -971,6 +971,68 @@ app.delete('/api/automata/saves/:id', requireAuth, async (req, res) => {
     }
 });
 
+// ── Labyrinth Run stats ────────────────────────────────
+
+app.get('/api/stats/labyrinth', requireAuth, async (req, res) => {
+    const stats = await db.collection('labyrinth_stats').findOne({ userId: new ObjectId(req.user.id) });
+    res.json(stats || {
+        total_runs: 0,
+        total_quits: 0,
+        best_total_time: null,
+        fastest_per_lab: [null, null, null],
+        total_playtime: 0
+    });
+});
+
+app.post('/api/stats/labyrinth', requireAuth, async (req, res) => {
+    const { completed, quit, lap_times, total_time } = req.body;
+    if (typeof total_time !== 'number')
+        return res.status(400).json({ error: 'total_time required.' });
+
+    const userId = new ObjectId(req.user.id);
+
+    // Fetch current document so we can compute conditional field updates
+    const existing = await db.collection('labyrinth_stats').findOne({ userId });
+
+    const $inc = { total_playtime: total_time || 0 };
+    if (completed) $inc.total_runs  = 1;
+    if (quit)      $inc.total_quits = 1;
+
+    const $set = {};
+
+    // Update best_total_time if completed and better
+    if (completed && typeof total_time === 'number') {
+        if (!existing || existing.best_total_time == null || total_time < existing.best_total_time) {
+            $set.best_total_time = total_time;
+        }
+    }
+
+    // Update fastest_per_lab where new time is better
+    if (Array.isArray(lap_times)) {
+        const curFastest = existing?.fastest_per_lab || [null, null, null];
+        const newFastest = [...curFastest];
+        for (let i = 0; i < 3; i++) {
+            if (typeof lap_times[i] === 'number') {
+                if (newFastest[i] == null || lap_times[i] < newFastest[i]) {
+                    newFastest[i] = lap_times[i];
+                }
+            }
+        }
+        $set.fastest_per_lab = newFastest;
+    }
+
+    const update = { $inc };
+    if (Object.keys($set).length > 0) update.$set = $set;
+
+    await db.collection('labyrinth_stats').updateOne(
+        { userId },
+        update,
+        { upsert: true }
+    );
+
+    res.json({ ok: true });
+});
+
 // ── Serve games ────────────────────────────────────────
 app.get('/automata',   (req, res) => res.redirect('/games/automata/'));
 app.get('/marble-run', (req, res) => res.redirect('/games/marble-run/'));

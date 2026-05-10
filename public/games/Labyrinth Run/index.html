@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labyrinth Run</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ── MENU ─────────────────────────────────────────────── -->
+    <div id="menu">
+        <div id="menuInner">
+            <div id="titleBlock">
+                <div id="titleTop">LABYRINTH</div>
+                <div id="titleBottom">RUN</div>
+                <div id="titleDivider"></div>
+            </div>
+
+            <div id="statsPanel">
+                <div id="statsContent">Loading stats...</div>
+            </div>
+
+            <div id="menuButtons">
+                <a href="/" class="btn btnSecondary">&#8592; Rose Garden</a>
+                <button id="controlsBtn" class="btn">CONTROLS</button>
+                <button id="enterBtn" class="btn btnPrimary">ENTER LABYRINTH</button>
+                <button id="modesBtn" class="btn btnDisabled" disabled>MODES</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── CONTROLS SCREEN ──────────────────────────────────── -->
+    <div id="controlsScreen" class="hidden">
+        <div id="controlsInner">
+            <h2>CONTROLS</h2>
+            <div id="controlsDivider"></div>
+            <ul id="controlsList">
+                <li><span class="key">W A S D</span> <span class="desc">Move</span></li>
+                <li><span class="key">MOUSE</span> <span class="desc">Look around</span></li>
+                <li><span class="key">SHIFT</span> <span class="desc">Sprint (drains stamina)</span></li>
+                <li><span class="key">E</span> <span class="desc">Pick up battery</span></li>
+                <li><span class="key">ESC</span> <span class="desc">Quit run</span></li>
+                <li><span class="key">CLICK</span> <span class="desc">Lock mouse (required to look)</span></li>
+            </ul>
+            <div id="controlsNotes">
+                <p>Find the glowing door to advance to the next labyrinth.</p>
+                <p>Your flashlight battery drains over time — find replacements hidden in the maze.</p>
+                <p>Sprinting depletes stamina. Running out fully triggers a slow recovery penalty.</p>
+            </div>
+            <button id="controlsBackBtn" class="btn">&#8592; BACK</button>
+        </div>
+    </div>
+
+    <!-- ── GAME CANVAS ───────────────────────────────────────── -->
+    <canvas id="canvas" class="hidden"></canvas>
+
+    <!-- ── HUD ──────────────────────────────────────────────── -->
+    <div id="hud" class="hidden">
+        <div id="hudTopLeft">
+            <div id="labyrinthLabel">LABYRINTH 1 / 3</div>
+        </div>
+        <div id="hudTopCenter">
+            <div id="timerDisplay">00:00.0</div>
+        </div>
+        <div id="hudTopRight"></div>
+        <div id="hudBottomLeft">
+            <div class="hudBarGroup">
+                <div class="hudBarLabel">STAMINA</div>
+                <div class="hudBarOuter" id="staminaBarOuter">
+                    <div class="hudBarFill" id="staminaBar"></div>
+                </div>
+            </div>
+        </div>
+        <div id="hudBottomRight">
+            <div class="hudBarGroup">
+                <div class="hudBarLabel">BATTERY</div>
+                <div class="hudBarOuter" id="batteryBarOuter">
+                    <div class="hudBarFill" id="batteryBar"></div>
+                </div>
+            </div>
+        </div>
+        <div id="batteryHint">Press E near battery to pick up</div>
+    </div>
+
+    <!-- ── SUMMARY SCREEN ───────────────────────────────────── -->
+    <div id="summaryScreen" class="hidden">
+        <div id="summaryInner">
+            <h2 id="summaryTitle">RUN COMPLETE</h2>
+            <div id="summaryDivider"></div>
+            <table id="summaryTable">
+                <thead>
+                    <tr>
+                        <th>Labyrinth</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody id="summaryBody">
+                </tbody>
+                <tfoot>
+                    <tr id="summaryTotal">
+                        <td>TOTAL</td>
+                        <td id="summaryTotalTime">—</td>
+                    </tr>
+                </tfoot>
+            </table>
+            <div id="summaryButtons">
+                <button id="summaryPlayAgain" class="btn btnPrimary">PLAY AGAIN</button>
+                <button id="summaryMenu" class="btn">&#8592; MENU</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
