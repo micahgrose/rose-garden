@@ -20,7 +20,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 let db;
 MongoClient.connect(process.env.MONGODB_URI)
     .then(async client => {
-        db = client.db();
+        db = client.db('rosegarden');
         await db.collection('users').createIndex({ username: 1 }, { unique: true });
         await db.collection('users').dropIndex('email_1').catch(() => {});
         await db.collection('users').createIndex({ email: 1 }, { unique: true, sparse: true });
