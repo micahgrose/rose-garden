@@ -11,16 +11,16 @@
 const CELL_SIZE             = 1;
 const MOVE_SPEED            = 2.2;
 const RUN_SPEED             = 4.0;
-const STAMINA_MAX           = 100;
-const STAMINA_DRAIN         = 22;
+const STAMINA_MAX           = 50;
+const STAMINA_DRAIN         = 30;
 const STAMINA_REGEN_NORMAL  = 4;
 const STAMINA_REGEN_PENALTY = 1;
 const BATTERY_MAX           = 100;
 const BATTERY_DRAIN         = 1.8;
 const BATTERY_PICKUP_AMOUNT = 40;
-const FLASHLIGHT_RADIUS_FULL = 0.38;
-const MOUSE_SENSITIVITY     = 0.002;
-const FOV                   = Math.PI / 3;
+const FLASHLIGHT_RADIUS_FULL = 0.20;
+const MOUSE_SENSITIVITY     = 0.0015;
+const FOV                   = Math.PI * 50 / 180;
 const TEXTURE_SIZE          = 64;
 const LAB_SIZES             = [11, 15, 19];
 const NUM_BATTERIES_PER_LAB = [2, 3, 4];
@@ -35,52 +35,105 @@ const MAX_LABYRINTHS        = 3;
  * Sandy base with mortar lines, pixel noise, and brick-level variation.
  */
 function generateSandstoneTexture() {
-    const size = TEXTURE_SIZE;
-    const img  = new ImageData(size, size);
-    const d    = img.data;
+    const size   = TEXTURE_SIZE; // 64
+    const img    = new ImageData(size, size);
+    const d      = img.data;
 
-    const BRICK_H   = 16; // pixels per brick row
-    const MORTAR    = 2;  // mortar line thickness
-    const BRICK_W   = 32; // nominal brick width
+    const BRICK_H = 16;
+    const MORTAR  = 1;  // thin mortar seam
+    const HALF_W  = 16; // pixels per brick column (BRICK_W/2)
 
-    // Base colour
     const BASE_R = 200, BASE_G = 165, BASE_B = 90;
+    const MRT_R  = 158,  MRT_G = 130,  MRT_B = 68; // mortar close to sandstone
 
-    // Pre-generate per-brick darkness variation
+    // Hieroglyph bitmaps (8×8 pixel art, 1 = dark carved stroke)
+    const HIEROGLYPHS = [
+        // Eye of Ra
+        [
+            [0,1,1,1,1,1,0,0],
+            [1,0,0,1,0,0,1,0],
+            [1,0,0,0,0,0,1,0],
+            [1,0,0,1,0,0,1,0],
+            [0,1,1,1,1,1,0,0],
+            [0,0,1,0,0,0,0,0],
+            [0,0,0,1,1,0,0,0],
+            [0,0,0,0,0,0,0,0],
+        ],
+        // Ankh
+        [
+            [0,0,1,1,0,0,0,0],
+            [0,1,0,0,1,0,0,0],
+            [0,0,1,1,0,0,0,0],
+            [1,1,1,1,1,1,0,0],
+            [0,0,1,1,0,0,0,0],
+            [0,0,1,1,0,0,0,0],
+            [0,0,1,1,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+        ],
+        // Ibis bird
+        [
+            [0,1,1,0,0,0,0,0],
+            [1,0,0,1,0,0,0,0],
+            [0,1,1,0,0,0,0,0],
+            [0,0,1,0,0,0,0,0],
+            [0,0,1,1,1,0,0,0],
+            [0,1,0,0,0,1,0,0],
+            [1,0,0,0,0,0,1,0],
+            [0,0,0,0,0,0,0,0],
+        ],
+    ];
+
+    // Map brickId (row*4+col) → hieroglyph pattern index
+    const HIERO_MAP = { 2: 0, 5: 1, 10: 2, 13: 0 };
+
     const brickNoise = [];
     for (let i = 0; i < 32; i++) brickNoise.push((Math.random() - 0.5) * 28);
 
     for (let y = 0; y < size; y++) {
-        const row     = Math.floor(y / BRICK_H);
-        const rowY    = y % BRICK_H;
-        const mortar  = rowY < MORTAR;
-        const offset  = (row % 2 === 0) ? 0 : BRICK_W / 2;
+        const row    = Math.floor(y / BRICK_H);
+        const rowY   = y % BRICK_H;
+        const mortar = rowY < MORTAR;
+        const offset = (row % 2 === 0) ? 0 : HALF_W;
 
         for (let x = 0; x < size; x++) {
-            const col   = Math.floor((x + offset) % size / (BRICK_W / 2));
-            const colX  = (x + offset) % (BRICK_W / 2);
-            const mX    = colX < MORTAR;
-            const isMortar = mortar || mX;
-
-            let r, g, b;
-            if (isMortar) {
-                r = 107; g = 79; b = 16; // dark mortar
-            } else {
-                // brick base + per-brick darkness
-                const bIdx = (row * 4 + col) % brickNoise.length;
-                const bDark = brickNoise[bIdx];
-                // pixel-level noise ±15
-                const noise = (Math.random() - 0.5) * 30;
-                r = Math.min(255, Math.max(0, BASE_R + bDark + noise));
-                g = Math.min(255, Math.max(0, BASE_G + bDark * 0.8 + noise * 0.8));
-                b = Math.min(255, Math.max(0, BASE_B + bDark * 0.5 + noise * 0.5));
-            }
+            const shifted  = (x + offset) & (size - 1);
+            const col      = Math.floor(shifted / HALF_W);
+            const colX     = shifted % HALF_W;
+            const isMortar = mortar || colX < MORTAR;
 
             const idx = (y * size + x) * 4;
-            d[idx]     = r;
-            d[idx + 1] = g;
-            d[idx + 2] = b;
-            d[idx + 3] = 255;
+
+            if (isMortar) {
+                d[idx] = MRT_R; d[idx+1] = MRT_G; d[idx+2] = MRT_B; d[idx+3] = 255;
+            } else {
+                const bIdx  = (row * 4 + col) % brickNoise.length;
+                const bDark = brickNoise[bIdx];
+                const noise = (Math.random() - 0.5) * 30;
+                let r = Math.min(255, Math.max(0, BASE_R + bDark + noise));
+                let g = Math.min(255, Math.max(0, BASE_G + bDark * 0.8 + noise * 0.8));
+                let b = Math.min(255, Math.max(0, BASE_B + bDark * 0.5 + noise * 0.5));
+
+                // Stamp hieroglyph pattern if this brick is mapped
+                const brickId = row * 4 + col;
+                if (HIERO_MAP[brickId] !== undefined) {
+                    const hPat   = HIEROGLYPHS[HIERO_MAP[brickId]];
+                    const localX = colX - MORTAR;
+                    const localY = rowY - MORTAR;
+                    const contentW = HALF_W - MORTAR; // 15
+                    const contentH = BRICK_H - MORTAR; // 15
+                    const ox = Math.floor((contentW - 8) / 2); // 3
+                    const oy = Math.floor((contentH - 8) / 2); // 3
+                    const px = localX - ox;
+                    const py = localY - oy;
+                    if (px >= 0 && px < 8 && py >= 0 && py < 8 && hPat[py][px]) {
+                        r = Math.floor(r * 0.28);
+                        g = Math.floor(g * 0.28);
+                        b = Math.floor(b * 0.28);
+                    }
+                }
+
+                d[idx] = r; d[idx+1] = g; d[idx+2] = b; d[idx+3] = 255;
+            }
         }
     }
     return img;
@@ -321,12 +374,22 @@ function renderScene(grid, player, batteries) {
     const H = canvas.height;
     const halfH = H >> 1;
 
-    // ── Fill ceiling & floor ─────────────────────────────────
+    // ── Fill ceiling & floor (distance-based gradient) ───────
     for (let y = 0; y < H; y++) {
-        const isCeiling = y < halfH;
-        const r = isCeiling ? 8  : 13;
-        const g = isCeiling ? 6  : 10;
-        const b = isCeiling ? 4  : 4;
+        const isCeiling      = y < halfH;
+        const distFromCenter = Math.abs(y - halfH);
+        const rowDist        = distFromCenter > 0 ? (0.5 * H / distFromCenter) : 99999;
+        const shade          = Math.max(0, 1 - rowDist / 5);
+        let r, g, b;
+        if (isCeiling) {
+            r = Math.floor(shade * 9);
+            g = Math.floor(shade * 6);
+            b = Math.floor(shade * 2);
+        } else {
+            r = Math.floor(shade * 22 + 3);
+            g = Math.floor(shade * 15 + 2);
+            b = Math.floor(shade * 6  + 1);
+        }
         for (let x = 0; x < W; x++) {
             setPixel(x, y, r, g, b);
         }
@@ -416,8 +479,12 @@ function renderScene(grid, player, batteries) {
         // Side darkening: y-side walls are 30% darker
         const sideMult = side === 1 ? 0.70 : 1.0;
 
-        // Door glow modifier
         const isDoor = cellVal === 2;
+        // Doors are less dark than walls so they stand out
+        const darkMult = isDoor ? 0.45 : 0.15;
+
+        // Door opening covers middle 65% of the wall column; top/bottom 17.5% = stone frame
+        const DOOR_GAP_FRAC = 0.175;
 
         // Draw wall column pixel by pixel
         const step = TEXTURE_SIZE / lineH;
@@ -427,20 +494,33 @@ function renderScene(grid, player, batteries) {
             const texY = Math.floor(texPos) & (TEXTURE_SIZE - 1);
             texPos += step;
 
-            const i = (texY * TEXTURE_SIZE + texX) * 4;
-            let r = texImg.data[i];
-            let g = texImg.data[i + 1];
-            let b = texImg.data[i + 2];
+            // For door cells: top/bottom fringe uses sandstone (embedded look)
+            let useTexImg = texImg;
+            if (isDoor) {
+                const wallFrac = drawEnd > drawStart ? (y - drawStart) / (drawEnd - drawStart) : 0.5;
+                if (wallFrac < DOOR_GAP_FRAC || wallFrac > 1 - DOOR_GAP_FRAC) {
+                    useTexImg = sandstoneImg;
+                }
+            }
 
-            // Apply distance and side darkening
-            const bright = distFactor * sideMult;
+            const i = (texY * TEXTURE_SIZE + texX) * 4;
+            let r = useTexImg.data[i];
+            let g = useTexImg.data[i + 1];
+            let b = useTexImg.data[i + 2];
+
+            // Global darkness + distance + side darkening
+            const bright = distFactor * sideMult * darkMult;
             r = Math.floor(r * bright);
             g = Math.floor(g * bright);
             b = Math.floor(b * bright);
 
-            // Door glow: warm amber tint on door pixels
+            // Orange-amber tint on all surfaces
+            g = Math.floor(g * 0.85);
+            b = Math.floor(b * 0.65);
+
+            // Door glow: warm amber additive tint
             if (isDoor) {
-                const glowStrength = 0.28 * distFactor;
+                const glowStrength = 0.9 * distFactor;
                 r = Math.min(255, r + Math.floor(212 * glowStrength));
                 g = Math.min(255, g + Math.floor(136 * glowStrength));
                 b = Math.min(255, b + Math.floor(34  * glowStrength));
@@ -621,7 +701,7 @@ canvas.addEventListener('click', () => {
 function updatePlayer(dt, grid, batteries) {
     // ── Mouse rotation ──────────────────────────────────────
     if (mouseMovX !== 0) {
-        rotatePlayer(-mouseMovX * MOUSE_SENSITIVITY);
+        rotatePlayer(mouseMovX * MOUSE_SENSITIVITY);
         mouseMovX = 0;
     }
 
@@ -701,7 +781,7 @@ function isWall(grid, px, py, margin) {
     for (const [cx, cy] of checks) {
         const mx = Math.floor(cx), my = Math.floor(cy);
         if (mx < 0 || mx >= w || my < 0 || my >= h) return true;
-        if (grid[my][mx] !== 0) return true;
+        if (grid[my][mx] === 1) return true;
     }
     return false;
 }
