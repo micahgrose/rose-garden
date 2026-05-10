@@ -21,7 +21,7 @@ const BATTERY_PICKUP_AMOUNT = 40;
 const FLASHLIGHT_RADIUS_FULL = 0.09;
 const FLASHLIGHT_REACH       = 4;   // world units before walls fade to black
 const MOUSE_SENSITIVITY     = 0.00075;
-const FOV                   = Math.PI * 75 / 180;
+const FOV                   = Math.PI * 90 / 180;
 const TEXTURE_SIZE          = 128;
 const CELL_SCALE            = 0.5;  // each maze cell = 0.5 world units (tight corridors)
 const LAB_SIZES             = [11, 15, 19];
@@ -384,12 +384,13 @@ function renderScene(grid, player, batteries) {
 
     const W = canvas.width;
     const H = canvas.height;
-    const halfH = H >> 1;
+    const halfH  = H >> 1;
+    const horizon = Math.round(halfH + pitch); // shifted by vertical look
 
     // ── Fill ceiling & floor (distance-based gradient) ───────
     for (let y = 0; y < H; y++) {
-        const isCeiling      = y < halfH;
-        const distFromCenter = Math.abs(y - halfH);
+        const isCeiling      = y < horizon;
+        const distFromCenter = Math.abs(y - horizon);
         const rowDist        = distFromCenter > 0 ? (0.5 * H / distFromCenter) : 99999;
         const shade          = Math.max(0, 1 - rowDist / 3);
         let r, g, b;
@@ -468,8 +469,8 @@ function renderScene(grid, player, batteries) {
 
         // Wall height on screen
         const lineH  = Math.min(H, Math.floor(H / Math.max(0.001, perpWallDist)));
-        const drawStart = Math.max(0, halfH - (lineH >> 1));
-        const drawEnd   = Math.min(H - 1, halfH + (lineH >> 1));
+        const drawStart = Math.max(0, horizon - (lineH >> 1));
+        const drawEnd   = Math.min(H - 1, horizon + (lineH >> 1));
 
         // Where on the wall the ray hits (normalize to [0,1) within cell)
         let wallX;
@@ -501,7 +502,7 @@ function renderScene(grid, player, batteries) {
 
         // Draw wall column pixel by pixel
         const step = TEXTURE_SIZE / lineH;
-        let texPos = (drawStart - halfH + (lineH >> 1)) * step;
+        let texPos = (drawStart - horizon + (lineH >> 1)) * step;
 
         for (let y = drawStart; y <= drawEnd; y++) {
             const texY = Math.floor(texPos) & (TEXTURE_SIZE - 1);
@@ -572,7 +573,7 @@ function renderScene(grid, player, batteries) {
         if (zBuffer[screenCol] < transformY) continue;
 
         const spriteH = Math.abs(Math.floor(H / transformY));
-        const drawY = Math.floor(H / 2 - spriteH / 2);
+        const drawY = Math.floor(horizon - spriteH / 2);
 
         // Draw a small green glow gradient
         const glowR = Math.max(4, spriteH / 4);
@@ -671,6 +672,7 @@ function resetPlayer() {
     player.stamina = STAMINA_MAX;
     player.staminaPenalty = false;
     player.battery = BATTERY_MAX;
+    pitch = 0;
 }
 
 /** Rotate player direction by angle (radians) */
@@ -686,6 +688,8 @@ function rotatePlayer(angle) {
 // ── Input state ──────────────────────────────────────────────
 const keys = { w: false, a: false, s: false, d: false, shift: false, e: false };
 let mouseMovX = 0;    // accumulated mouse X delta
+let mouseMovY = 0;    // accumulated mouse Y delta
+let pitch     = 0;    // vertical horizon offset in pixels (look up/down)
 let pointerLocked = false;
 let eJustPressed   = false; // single-press detection
 
@@ -722,6 +726,7 @@ document.addEventListener('keyup', e => {
 document.addEventListener('mousemove', e => {
     if (pointerLocked) {
         mouseMovX += e.movementX;
+        mouseMovY += e.movementY;
     }
 });
 
@@ -750,6 +755,11 @@ function updatePlayer(dt, grid, batteries) {
     if (mouseMovX !== 0) {
         rotatePlayer(mouseMovX * MOUSE_SENSITIVITY);
         mouseMovX = 0;
+    }
+    if (mouseMovY !== 0) {
+        const maxPitch = canvas.height * 0.40;
+        pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch - mouseMovY * 0.65));
+        mouseMovY = 0;
     }
 
     // ── Stamina logic ───────────────────────────────────────
