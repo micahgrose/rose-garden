@@ -22,7 +22,8 @@ MongoClient.connect(process.env.MONGODB_URI)
     .then(client => {
         db = client.db();
         db.collection('users').createIndex({ username: 1 }, { unique: true });
-        db.collection('users').createIndex({ email: 1 },    { unique: true, sparse: true });
+        db.collection('users').dropIndex('email_1').catch(() => {});
+        db.collection('users').createIndex({ email: 1 }, { unique: true, sparse: true });
         console.log('Connected to MongoDB');
 
         // Inactivity cleanup: delete no-email accounts inactive for 30+ days
