@@ -16,15 +16,15 @@ const STAMINA_DRAIN         = 30;
 const STAMINA_REGEN_NORMAL  = 4;
 const STAMINA_REGEN_PENALTY = 1;
 const BATTERY_MAX           = 100;
-const BATTERY_DRAIN         = 1.8;
+const BATTERY_DRAIN         = 6.0;
 const BATTERY_PICKUP_AMOUNT = 40;
 const FLASHLIGHT_RADIUS_FULL = 0.09;
-const MOUSE_SENSITIVITY     = 0.0015;
-const FOV                   = Math.PI * 50 / 180;
+const MOUSE_SENSITIVITY     = 0.00075;
+const FOV                   = Math.PI * 75 / 180;
 const TEXTURE_SIZE          = 128;
 const CELL_SCALE            = 0.5;  // each maze cell = 0.5 world units (tight corridors)
 const LAB_SIZES             = [11, 15, 19];
-const NUM_BATTERIES_PER_LAB = [2, 3, 4];
+const NUM_BATTERIES_PER_LAB = [1, 1, 2];
 const MAX_LABYRINTHS        = 3;
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -594,14 +594,45 @@ function renderScene(grid, player, batteries) {
 // SECTION 5 — Flashlight Effect
 // ══════════════════════════════════════════════════════════════════════════
 
+// ── Flicker state ────────────────────────────────────────────
+let flickerMult     = 1.0; // 1=full, 0=off
+let flickerTimer    = 0;   // seconds remaining in current flicker
+let flickerCooldown = 0;   // minimum wait before next flicker check
+
+function resetFlicker() {
+    flickerMult = 1.0; flickerTimer = 0; flickerCooldown = 0;
+}
+
+function updateFlicker(dt, batteryPct) {
+    if (flickerTimer > 0) {
+        flickerTimer -= dt;
+        if (flickerTimer <= 0) {
+            flickerMult     = 1.0;
+            flickerCooldown = 0.25 + Math.random() * 0.75; // brief rest before next
+        }
+    } else if (flickerCooldown > 0) {
+        flickerCooldown -= dt;
+    } else {
+        // Chance per second: ~1% at full battery, ~55% at empty
+        const chance = (0.01 + 0.54 * (1 - batteryPct)) * dt;
+        if (Math.random() < chance) {
+            flickerMult  = Math.random() < 0.25 ? 0 : Math.random() * 0.2;
+            flickerTimer = 0.04 + Math.random() * 0.13; // 40–170 ms flicker
+        }
+    }
+}
+
 function drawFlashlight(batteryPct) {
     const cx = canvas.width  / 2;
     const cy = canvas.height / 2;
     const maxDim = Math.max(canvas.width, canvas.height);
 
-    const innerR   = batteryPct > 0 ? maxDim * FLASHLIGHT_RADIUS_FULL * batteryPct : 1;
+    // Combine battery level and flicker; fully off at 0 battery
+    const effectivePct = batteryPct * flickerMult;
+    const innerR   = effectivePct > 0.005 ? maxDim * FLASHLIGHT_RADIUS_FULL * effectivePct : 0;
     const outerR   = maxDim * 0.88;
-    const edgeDark = batteryPct > 0.05 ? 0.97 : 0.99;
+    // Edges grow darker as battery depletes
+    const edgeDark = Math.min(0.999, 0.97 + 0.028 * (1 - batteryPct));
 
     // Sharp cutoff: stays transparent until edge of beam, then drops to black fast
     const grad = ctx.createRadialGradient(cx, cy, innerR * 0.4, cx, cy, outerR);
@@ -999,6 +1030,7 @@ function startRun() {
     lapStart    = runStart;
 
     resetPlayer();
+    resetFlicker();
     loadNextLab();
     showGame();
 
@@ -1029,6 +1061,9 @@ function gameLoop(now) {
 
     // Update player
     updatePlayer(dt, currentGrid, currentBats);
+
+    // Update flashlight flicker
+    updateFlicker(dt, player.battery / BATTERY_MAX);
 
     // Render
     renderScene(currentGrid, player, currentBats);
