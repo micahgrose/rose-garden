@@ -85,20 +85,73 @@ function generateSandstoneTexture() {
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         ],
+        //Bird
+        [
+            [0,0,0,0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,0,0,1,0,0,0,1,1,1,0],
+            [0,0,0,0,0,0,1,0,0,0,1,1,0,0],
+            [0,0,0,0,0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,0,0,0,0,0],
+            [0,0,1,0,0,0,0,0,0,1,0,0,0,0],
+            [1,1,0,0,0,0,0,0,0,1,0,0,0,0],
+            [1,0,0,0,0,0,0,0,1,0,0,0,0,0],
+            [0,1,1,0,0,0,0,0,1,0,0,0,0,0],
+            [0,0,0,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,1,1,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        ],
+        //Beetle Scarab
+        [
+            [0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+            [0,0,1,1,0,1,1,1,0,1,1,0,0,0],
+            [1,0,1,0,1,0,0,0,1,0,1,0,1,0],
+            [1,0,0,1,1,0,0,0,1,1,0,0,1,0],
+            [1,0,1,0,0,0,0,0,0,0,1,0,1,0],
+            [0,1,1,0,0,0,0,0,0,0,1,1,0,0],
+            [0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+            [0,1,1,0,0,0,0,0,0,0,1,1,0,0],
+            [1,0,1,0,0,0,0,0,0,0,1,0,1,0],
+            [1,0,1,0,0,0,0,0,0,0,1,0,1,0],
+            [0,0,0,1,0,0,0,0,0,1,0,0,0,0],
+            [0,1,1,0,1,1,1,1,1,0,1,1,0,0],
+            [1,0,0,0,0,0,0,0,0,0,0,0,1,0],
+            [1,0,0,0,0,0,0,0,0,0,0,0,1,0]
+        ],
+        //Pharoah
+        [
+            [0,0,0,0,1,1,1,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,0,0,0,0,1,1,1,0,0],
+            [0,1,1,1,0,1,1,1,1,0,1,1,1,0],
+            [0,1,1,0,1,1,1,1,1,1,0,1,1,0],
+            [1,1,1,0,1,0,1,1,0,1,0,1,1,1],
+            [1,1,1,0,1,1,1,1,1,1,0,1,1,1],
+            [1,1,1,0,0,1,1,1,1,0,0,1,1,1],
+            [0,1,1,1,0,0,1,1,0,0,1,1,1,0],
+            [0,1,1,1,1,0,0,0,0,1,1,1,1,0],
+            [0,0,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,0,0,1,1,0,0,0,0,1,1,0,0,0],
+            [0,0,0,1,1,0,0,0,0,1,1,0,0,0],
+            [0,0,1,1,1,0,0,0,0,1,1,1,0,0]
+        ]
     ];
 
     // Random horizontal placement, all vertically centered.
-    // Automatically samples from however many glyphs are defined above.
+    // Shuffles glyph pool so each placement gets a distinct glyph type.
+    // Adding more entries to HIEROGLYPHS above automatically increases the pool.
     const centY    = Math.floor((size - 14) / 2);
     const numGlyphs = Math.min(HIEROGLYPHS.length, 2 + Math.floor(Math.random() * 2)); // 2–3
     const MIN_GAP  = 22; // min pixels between glyph left edges
+    const glyphPool = HIEROGLYPHS.map((_, i) => i).sort(() => Math.random() - 0.5);
     const PLACEMENTS = [];
     let attempts = 0;
     while (PLACEMENTS.length < numGlyphs && attempts < 300) {
         attempts++;
         const x = Math.floor(Math.random() * (size - 14));
         if (PLACEMENTS.every(p => Math.abs(p.x - x) >= MIN_GAP)) {
-            PLACEMENTS.push({ g: Math.floor(Math.random() * HIEROGLYPHS.length), x, y: centY });
+            PLACEMENTS.push({ g: glyphPool[PLACEMENTS.length % glyphPool.length], x, y: centY });
         }
     }
 
@@ -556,8 +609,9 @@ function renderScene(grid, player, batteries) {
         const spriteH = Math.abs(Math.floor(H / transformY));
         const drawY = Math.floor(horizon - spriteH / 2);
 
-        // Blue glow
-        const glowR = Math.max(6, spriteH / 3);
+        // Size based on distance so icon stays ~10px far away, grows as you approach
+        const iconH = Math.max(10, Math.min(60, 18 / dist));
+        const glowR = iconH * 0.9;
         const alpha = Math.min(0.65, 1 / (dist * 0.4));
         const cy2   = drawY + spriteH / 2;
         const grd = ctx.createRadialGradient(spriteScreenX, cy2, 0, spriteScreenX, cy2, glowR);
@@ -572,7 +626,7 @@ function renderScene(grid, player, batteries) {
         // Battery icon
         ctx.save();
         const iAlpha = Math.min(0.95, alpha * 2.5);
-        const bh  = glowR * 1.6;
+        const bh  = iconH;
         const bw  = bh * 0.52;
         const lw  = Math.max(0.8, bw * 0.09);
         const bx  = spriteScreenX;
