@@ -517,10 +517,16 @@ function renderScene(grid, player, batteries) {
                 }
             }
 
-            const i = (texY * TEXTURE_SIZE + texX) * 4;
-            let r = useTexImg.data[i];
-            let g = useTexImg.data[i + 1];
-            let b = useTexImg.data[i + 2];
+            let r, g, b;
+            if (useTexImg === doorImg) {
+                const i = (texY * TEXTURE_SIZE + texX) * 4;
+                r = useTexImg.data[i];
+                g = useTexImg.data[i + 1];
+                b = useTexImg.data[i + 2];
+            } else {
+                // Flat sandstone colour — no texture
+                r = 200; g = 165; b = 90;
+            }
 
             // Global darkness + distance + side darkening
             const bright = distFactor * sideMult * darkMult;
