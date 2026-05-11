@@ -19,8 +19,16 @@ const BATTERY_MAX           = 150;
 const BATTERY_DRAIN         = 1.5;
 const BATTERY_PICKUP_AMOUNT = 40;
 const FLASHLIGHT_RADIUS_FULL = 0.175;
-const FLASHLIGHT_REACH       = 4;   // world units before walls fade to black
+const FLASHLIGHT_REACH       = 4;    // world units before walls fade to black (at full battery)
 const SIDE_SHADE_MULT        = 0.85; // east/west faces are this much darker than north/south faces
+
+// ── Flashlight deterioration rates (tune each axis independently) ──────────
+const FLICKER_CHANCE_BASE  = 0.02;  // flicker probability/sec at 100% battery
+const FLICKER_CHANCE_SCALE = 0.54;  // additional probability/sec added at 0% battery
+const RADIUS_DRAIN_CURVE   = 1.0;   // exponent on battery% for beam radius (1=linear, 2=drops faster early)
+const REACH_DRAIN_CURVE    = 1.2;   // exponent on battery% for distance reach
+const REACH_FLOOR          = 0.30;  // minimum reach at 0% battery (fraction of FLASHLIGHT_REACH)
+const BRIGHTNESS_DRAIN     = 0.028; // how much darker the outer halo edge gets at 0% battery
 const MOUSE_SENSITIVITY     = 0.00075;
 const FOV                   = Math.PI * 90 / 180;
 const TEXTURE_SIZE          = 128;
@@ -33,23 +41,15 @@ const MAX_LABYRINTHS        = 3;
 // SECTION 2 — Texture Generation
 // ══════════════════════════════════════════════════════════════════════════
 
-/**
- * Generate a sandstone brick texture (64×64 ImageData).
- * Sandy base with mortar lines, pixel noise, and brick-level variation.
- */
+/** Flat sandstone texture with carved hieroglyphs — no brick grid. */
 function generateSandstoneTexture() {
-    const size   = TEXTURE_SIZE; // 128
-    const img    = new ImageData(size, size);
-    const d      = img.data;
-
-    const BRICK_H = 32; // tall bricks for large-brick look
-    const MORTAR  = 1;
-    const HALF_W  = 32; // wide bricks (BRICK_W=64, stagger by 32)
+    const size = TEXTURE_SIZE; // 128
+    const img  = new ImageData(size, size);
+    const d    = img.data;
 
     const BASE_R = 200, BASE_G = 165, BASE_B = 90;
-    const MRT_R  = 160,  MRT_G = 132,  MRT_B = 70; // mortar close to sandstone
 
-    // Hieroglyph bitmaps (14×14 pixel art, 1 = dark carved stroke)
+    // Hieroglyph bitmaps (14×14, 1 = carved stroke)
     const HIEROGLYPHS = [
         // Eye of Ra
         [
@@ -85,85 +85,36 @@ function generateSandstoneTexture() {
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         ],
-
-        [
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            [1,0,0,0,1,1,1,1,0,0,0,1,0,0],
-            [1,0,0,1,0,0,0,0,1,0,0,1,0,0],
-            [1,0,0,1,0,0,0,0,1,0,0,1,0,0],
-            [1,0,0,0,1,1,1,1,0,0,0,1,0,0],
-            [0,1,0,0,0,0,0,0,0,0,1,0,0,0],
-            [0,0,1,1,1,1,1,1,1,1,0,0,0,0],
-            [0,0,0,0,1,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,1,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,1,1,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        ]
     ];
 
-    // Only 2 bricks out of 16 get hieroglyphs (sparse)
-    const HIERO_MAP = { 3: 0, 10: 1 };
-
-    const brickNoise = [];
-    for (let i = 0; i < 64; i++) brickNoise.push((Math.random() - 0.5) * 32);
+    // (glyph index, top-left x, top-left y) — sparse placement, one per quadrant
+    const PLACEMENTS = [
+        { g: 0, x: 14, y: 20 },  // Eye of Ra, upper-left
+        { g: 1, x: 82, y: 88 },  // Ankh, lower-right
+    ];
 
     for (let y = 0; y < size; y++) {
-        const row    = Math.floor(y / BRICK_H);
-        const rowY   = y % BRICK_H;
-        const mortar = rowY < MORTAR;
-        const offset = (row % 2 === 0) ? 0 : HALF_W;
-
         for (let x = 0; x < size; x++) {
-            const shifted  = (x + offset) & (size - 1);
-            const col      = Math.floor(shifted / HALF_W);
-            const colX     = shifted % HALF_W;
-            const isMortar = mortar || colX < MORTAR;
-
             const idx = (y * size + x) * 4;
 
-            if (isMortar) {
-                d[idx] = MRT_R; d[idx+1] = MRT_G; d[idx+2] = MRT_B; d[idx+3] = 255;
-            } else {
-                const bIdx  = (row * 4 + col) % brickNoise.length;
-                const bDark = brickNoise[bIdx];
-                // Two-frequency noise for more realistic stone surface
-                const noise1 = (Math.random() - 0.5) * 28;
-                const noise2 = (Math.random() - 0.5) * 10;
-                const noise  = noise1 + noise2;
-                let r = Math.min(255, Math.max(0, BASE_R + bDark + noise));
-                let g = Math.min(255, Math.max(0, BASE_G + bDark * 0.82 + noise * 0.82));
-                let b = Math.min(255, Math.max(0, BASE_B + bDark * 0.52 + noise * 0.52));
+            // Flat sandstone with two-frequency noise
+            const noise = (Math.random() - 0.5) * 28 + (Math.random() - 0.5) * 10;
+            let r = Math.min(255, Math.max(0, BASE_R + noise));
+            let g = Math.min(255, Math.max(0, BASE_G + noise * 0.82));
+            let b = Math.min(255, Math.max(0, BASE_B + noise * 0.52));
 
-                // Fine surface grain
-                const grain = (Math.random() - 0.5) * 6;
-                r = Math.min(255, Math.max(0, r + grain));
-                g = Math.min(255, Math.max(0, g + grain * 0.8));
-                b = Math.min(255, Math.max(0, b + grain * 0.4));
-
-                // Stamp hieroglyph pattern if this brick is mapped
-                const brickId = row * 4 + col;
-                if (HIERO_MAP[brickId] !== undefined) {
-                    const hPat    = HIEROGLYPHS[HIERO_MAP[brickId]];
-                    const localX  = colX - MORTAR;
-                    const localY  = rowY - MORTAR;
-                    const contentW = HALF_W - MORTAR; // 31
-                    const contentH = BRICK_H - MORTAR; // 31
-                    const ox = Math.floor((contentW - 14) / 2); // 8
-                    const oy = Math.floor((contentH - 14) / 2); // 8
-                    const px = localX - ox;
-                    const py = localY - oy;
-                    if (px >= 0 && px < 14 && py >= 0 && py < 14 && hPat[py] && hPat[py][px]) {
-                        r = Math.floor(r * 0.25);
-                        g = Math.floor(g * 0.25);
-                        b = Math.floor(b * 0.25);
-                    }
+            // Carved hieroglyphs
+            for (const p of PLACEMENTS) {
+                const px = x - p.x, py = y - p.y;
+                if (px >= 0 && px < 14 && py >= 0 && py < 14 && HIEROGLYPHS[p.g][py][px]) {
+                    r = Math.floor(r * 0.22);
+                    g = Math.floor(g * 0.22);
+                    b = Math.floor(b * 0.22);
+                    break;
                 }
-
-                d[idx] = r; d[idx+1] = g; d[idx+2] = b; d[idx+3] = 255;
             }
+
+            d[idx] = r; d[idx+1] = g; d[idx+2] = b; d[idx+3] = 255;
         }
     }
     return img;
@@ -507,7 +458,7 @@ function renderScene(grid, player, batteries) {
         texX = texX & (TEXTURE_SIZE - 1);
 
         // Distance darkening factor
-        const distFactor = Math.max(0, 1 - perpWallDist / FLASHLIGHT_REACH);
+        const distFactor = Math.max(0, 1 - perpWallDist / effectiveReach);
         // Side darkening: y-side walls are 30% darker
         const sideMult = side === 1 ? SIDE_SHADE_MULT : 1.0;
 
@@ -536,14 +487,11 @@ function renderScene(grid, player, batteries) {
             }
 
             let r, g, b;
-            if (useTexImg === doorImg) {
+            {
                 const i = (texY * TEXTURE_SIZE + texX) * 4;
                 r = useTexImg.data[i];
                 g = useTexImg.data[i + 1];
                 b = useTexImg.data[i + 2];
-            } else {
-                // Flat sandstone colour — no texture
-                r = 200; g = 165; b = 90;
             }
 
             // Global darkness + distance + side darkening
@@ -599,20 +547,43 @@ function renderScene(grid, player, batteries) {
         const spriteH = Math.abs(Math.floor(H / transformY));
         const drawY = Math.floor(horizon - spriteH / 2);
 
-        // Draw a small green glow gradient
-        const glowR = Math.max(4, spriteH / 4);
-        const alpha = Math.min(0.5, 1 / (dist * 0.5));
-        const grd = ctx.createRadialGradient(
-            spriteScreenX, drawY + spriteH / 2, 0,
-            spriteScreenX, drawY + spriteH / 2, glowR
-        );
-        grd.addColorStop(0,   `rgba(80, 220, 100, ${alpha})`);
-        grd.addColorStop(0.4, `rgba(50, 180, 70,  ${alpha * 0.4})`);
+        // Blue glow
+        const glowR = Math.max(6, spriteH / 3);
+        const alpha = Math.min(0.65, 1 / (dist * 0.4));
+        const cy2   = drawY + spriteH / 2;
+        const grd = ctx.createRadialGradient(spriteScreenX, cy2, 0, spriteScreenX, cy2, glowR);
+        grd.addColorStop(0,   `rgba(80, 160, 255, ${alpha})`);
+        grd.addColorStop(0.5, `rgba(40, 100, 220, ${alpha * 0.4})`);
         grd.addColorStop(1,   'rgba(0, 0, 0, 0)');
         ctx.fillStyle = grd;
         ctx.beginPath();
-        ctx.ellipse(spriteScreenX, drawY + spriteH / 2, glowR * 1.5, glowR, 0, 0, Math.PI * 2);
+        ctx.ellipse(spriteScreenX, cy2, glowR * 1.6, glowR, 0, 0, Math.PI * 2);
         ctx.fill();
+
+        // Battery icon
+        ctx.save();
+        const iAlpha = Math.min(0.95, alpha * 2.5);
+        const bh  = glowR * 1.6;
+        const bw  = bh * 0.52;
+        const lw  = Math.max(0.8, bw * 0.09);
+        const bx  = spriteScreenX;
+        const by  = cy2;
+
+        // Nub (top terminal)
+        ctx.fillStyle = `rgba(140, 210, 255, ${iAlpha})`;
+        ctx.fillRect(bx - bw * 0.18, by - bh / 2 - lw * 2.5, bw * 0.36, lw * 2.5);
+
+        // Body outline
+        ctx.strokeStyle = `rgba(140, 210, 255, ${iAlpha})`;
+        ctx.lineWidth   = lw;
+        ctx.strokeRect(bx - bw / 2, by - bh / 2, bw, bh);
+
+        // Fill (65% charged)
+        const fillH = (bh - lw * 2) * 0.65;
+        ctx.fillStyle = `rgba(80, 160, 255, ${iAlpha * 0.85})`;
+        ctx.fillRect(bx - bw / 2 + lw, by + bh / 2 - lw - fillH, bw - lw * 2, fillH);
+
+        ctx.restore();
     }
 }
 
@@ -639,8 +610,7 @@ function updateFlicker(dt, batteryPct) {
     } else if (flickerCooldown > 0) {
         flickerCooldown -= dt;
     } else {
-        // Chance per second: ~2% at full battery, ~56% at empty
-        const chance = (0.02 + 0.54 * (1 - batteryPct)) * dt;
+        const chance = (FLICKER_CHANCE_BASE + FLICKER_CHANCE_SCALE * (1 - batteryPct)) * dt;
         if (Math.random() < chance) {
             flickerMult  = Math.random() < 0.25 ? 0 : Math.random() * 0.2;
             flickerTimer = 0.04 + Math.random() * 0.13; // 40–170 ms flicker
@@ -662,9 +632,9 @@ function drawFlashlight(batteryPct) {
         return;
     }
 
-    const outerR = maxDim * 0.88;
-    const beamR  = maxDim * FLASHLIGHT_RADIUS_FULL * effectivePct;
-    const edgeDark = Math.min(0.999, 0.97 + 0.028 * (1 - batteryPct));
+    const outerR   = maxDim * 0.88;
+    const beamR    = maxDim * FLASHLIGHT_RADIUS_FULL * Math.pow(batteryPct, RADIUS_DRAIN_CURVE) * flickerMult;
+    const edgeDark = Math.min(0.999, 0.97 + BRIGHTNESS_DRAIN * (1 - batteryPct));
 
     // Drive stops from actual beam radius so beam visibly shrinks with battery
     const f0 = Math.min(0.99, beamR / outerR);        // beam edge fraction
@@ -1065,7 +1035,8 @@ let doorX = 0, doorY = 0;
 let lastFrameTime = 0;
 let animFrameId   = 0;
 let runActive        = false;
-let batteryDeadTimer = -1; // countdown seconds after battery dies; -1 = not triggered
+let batteryDeadTimer = -1;             // countdown seconds after battery dies; -1 = not triggered
+let effectiveReach   = FLASHLIGHT_REACH; // updated each frame based on battery level
 
 function startRun() {
     currentLab       = 0;
@@ -1107,12 +1078,17 @@ function gameLoop(now) {
     // Update player
     updatePlayer(dt, currentGrid, currentBats);
 
+    const batPct = player.battery / BATTERY_MAX;
+
+    // Update effective reach based on battery level
+    effectiveReach = FLASHLIGHT_REACH * (REACH_FLOOR + (1 - REACH_FLOOR) * Math.pow(batPct, REACH_DRAIN_CURVE));
+
     // Update flashlight flicker
-    updateFlicker(dt, player.battery / BATTERY_MAX);
+    updateFlicker(dt, batPct);
 
     // Render
     renderScene(currentGrid, player, currentBats);
-    drawFlashlight(player.battery / BATTERY_MAX);
+    drawFlashlight(batPct);
 
     // HUD
     updateHUD(currentLab + 1, elapsed);
@@ -1137,7 +1113,6 @@ function gameLoop(now) {
             cancelAnimationFrame(animFrameId);
             const elapsed2 = (performance.now() - lapStart) / 1000;
             const partialTimes = [...lapTimes];
-            saveStats({ completed: false, quit: true, lap_times: partialTimes, total_time: partialTimes.reduce((s, t) => s + (t || 0), 0) + elapsed2 });
             playRippleTransition(showMenu);
             return;
         }
@@ -1244,7 +1219,6 @@ function onEscapeQuit() {
     // Current lab time is partial — leave as null (abandoned)
     const partialTimes = [...lapTimes];
     const total = partialTimes.reduce((s, t) => s + (t || 0), 0) + elapsed;
-    saveStats({ completed: false, quit: true, lap_times: partialTimes, total_time: total });
     showSummary(partialTimes, true);
 }
 
@@ -1282,7 +1256,6 @@ function renderStats(stats) {
     const fpl  = stats.fastest_per_lab || [null, null, null];
     const rows = [
         ['Runs Completed',  stats.total_runs  ?? 0],
-        ['Runs Quit',       stats.total_quits ?? 0],
         ['Best Total Time', best],
         ['Fastest Lab 1',   fpl[0] != null ? formatTime(fpl[0]) : '—'],
         ['Fastest Lab 2',   fpl[1] != null ? formatTime(fpl[1]) : '—'],

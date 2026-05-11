@@ -995,8 +995,7 @@ app.post('/api/stats/labyrinth', requireAuth, async (req, res) => {
     const existing = await db.collection('labyrinth_stats').findOne({ userId });
 
     const $inc = { total_playtime: total_time || 0 };
-    if (completed) $inc.total_runs  = 1;
-    if (quit)      $inc.total_quits = 1;
+    if (completed) $inc.total_runs = 1;
 
     const $set = {};
 
