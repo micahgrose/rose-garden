@@ -10,21 +10,21 @@
 
 const CELL_SIZE             = 1;
 const MOVE_SPEED            = 0.8;
-const RUN_SPEED             = 1.3;
-const STAMINA_MAX           = 50;
+const RUN_SPEED             = 1.5;
+const STAMINA_MAX           = 100;
 const STAMINA_DRAIN         = 30;
-const STAMINA_REGEN_NORMAL  = 4;
-const STAMINA_REGEN_PENALTY = 1;
+const STAMINA_REGEN_NORMAL  = 15;
+const STAMINA_REGEN_PENALTY = 5;
 const BATTERY_MAX           = 100;
 const BATTERY_DRAIN         = 6.0;
 const BATTERY_PICKUP_AMOUNT = 40;
-const FLASHLIGHT_RADIUS_FULL = 0.09;
+const FLASHLIGHT_RADIUS_FULL = 0.175;
 const FLASHLIGHT_REACH       = 4;   // world units before walls fade to black
-const SIDE_SHADE_MULT        = 0.90; // east/west faces are this much darker than north/south faces
+const SIDE_SHADE_MULT        = 0.85; // east/west faces are this much darker than north/south faces
 const MOUSE_SENSITIVITY     = 0.00075;
 const FOV                   = Math.PI * 90 / 180;
 const TEXTURE_SIZE          = 128;
-const CELL_SCALE            = 0.75; // each maze cell = 0.75 world units (medium corridors)
+const CELL_SCALE            = 1; // each maze cell = 1 world unit (wide corridors)
 const LAB_SIZES             = [11, 15, 19];
 const NUM_BATTERIES_PER_LAB = [1, 1, 2];
 const MAX_LABYRINTHS        = 3;
@@ -636,20 +636,28 @@ function drawFlashlight(batteryPct) {
     const cy = canvas.height / 2;
     const maxDim = Math.max(canvas.width, canvas.height);
 
-    // Combine battery level and flicker; fully off at 0 battery
     const effectivePct = batteryPct * flickerMult;
-    const innerR   = effectivePct > 0.005 ? maxDim * FLASHLIGHT_RADIUS_FULL * effectivePct : 0;
-    const outerR   = maxDim * 0.88;
-    // Edges grow darker as battery depletes
+
+    // Dead battery or flicker-off: fill black
+    if (effectivePct <= 0.005) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        return;
+    }
+
+    const outerR = maxDim * 0.88;
+    const beamR  = maxDim * FLASHLIGHT_RADIUS_FULL * effectivePct;
     const edgeDark = Math.min(0.999, 0.97 + 0.028 * (1 - batteryPct));
 
-    // Sharp cutoff: stays transparent until edge of beam, then drops to black fast
-    const grad = ctx.createRadialGradient(cx, cy, innerR * 0.4, cx, cy, outerR);
-    grad.addColorStop(0,    'rgba(0,0,0,0)');
-    grad.addColorStop(0.08, 'rgba(0,0,0,0.05)');
-    grad.addColorStop(0.18, 'rgba(0,0,0,0.55)');
-    grad.addColorStop(0.30, 'rgba(0,0,0,0.82)');
-    grad.addColorStop(1,    `rgba(0,0,0,${edgeDark})`);
+    // Drive stops from actual beam radius so beam visibly shrinks with battery
+    const f0 = Math.min(0.99, beamR / outerR);        // beam edge fraction
+    const f1 = Math.min(0.995, f0 + 0.12);            // rapid falloff over next 12%
+
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, outerR);
+    grad.addColorStop(0,   'rgba(0,0,0,0)');
+    grad.addColorStop(f0,  'rgba(0,0,0,0)');
+    grad.addColorStop(f1,  'rgba(0,0,0,0.88)');
+    grad.addColorStop(1,   `rgba(0,0,0,${edgeDark})`);
 
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
