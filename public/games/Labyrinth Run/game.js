@@ -87,11 +87,20 @@ function generateSandstoneTexture() {
         ],
     ];
 
-    // (glyph index, top-left x, top-left y) — sparse placement, one per quadrant
-    const PLACEMENTS = [
-        { g: 0, x: 14, y: 20 },  // Eye of Ra, upper-left
-        { g: 1, x: 82, y: 88 },  // Ankh, lower-right
-    ];
+    // Random horizontal placement, all vertically centered.
+    // Automatically samples from however many glyphs are defined above.
+    const centY    = Math.floor((size - 14) / 2);
+    const numGlyphs = Math.min(HIEROGLYPHS.length, 2 + Math.floor(Math.random() * 2)); // 2–3
+    const MIN_GAP  = 22; // min pixels between glyph left edges
+    const PLACEMENTS = [];
+    let attempts = 0;
+    while (PLACEMENTS.length < numGlyphs && attempts < 300) {
+        attempts++;
+        const x = Math.floor(Math.random() * (size - 14));
+        if (PLACEMENTS.every(p => Math.abs(p.x - x) >= MIN_GAP)) {
+            PLACEMENTS.push({ g: Math.floor(Math.random() * HIEROGLYPHS.length), x, y: centY });
+        }
+    }
 
     for (let y = 0; y < size; y++) {
         for (let x = 0; x < size; x++) {
