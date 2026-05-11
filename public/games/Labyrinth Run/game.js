@@ -16,6 +16,9 @@ const STAMINA_MAX           = 100;
 const STAMINA_DRAIN         = 30;
 const STAMINA_REGEN_NORMAL  = 15;
 const STAMINA_REGEN_PENALTY = 5;
+const BOB_AMP               = 4;   // head-bob amplitude in pixels at normal walk speed
+const BOB_FREQ              = 8;   // bob cycles per world unit traveled
+const BOB_SMOOTH            = 10;  // amplitude lerp speed (attack/release)
 const BATTERY_MAX           = 150;
 const BATTERY_DRAIN         = 1.5;
 const BATTERY_PICKUP_AMOUNT = 40;
@@ -417,7 +420,7 @@ function renderScene(grid, player, batteries) {
     const W = canvas.width;
     const H = canvas.height;
     const halfH  = H >> 1;
-    const horizon = Math.round(halfH + pitch); // shifted by vertical look
+    const horizon = Math.round(halfH + pitch + bobOffset); // shifted by vertical look + head bob
 
     // ── Fill ceiling & floor (distance-based gradient) ───────
     for (let y = 0; y < H; y++) {
@@ -739,6 +742,7 @@ function resetPlayer() {
     player.staminaPenalty = false;
     player.battery = BATTERY_MAX;
     pitch = 0;
+    bobPhase = 0; bobAmp = 0; bobOffset = 0;
 }
 
 /** Rotate player direction by angle (radians) */
@@ -756,6 +760,9 @@ const keys = { w: false, a: false, s: false, d: false, shift: false, e: false };
 let mouseMovX = 0;    // accumulated mouse X delta
 let mouseMovY = 0;    // accumulated mouse Y delta
 let pitch     = 0;    // vertical horizon offset in pixels (look up/down)
+let bobPhase  = 0;    // current head-bob sine phase (radians)
+let bobAmp    = 0;    // current smoothed bob amplitude (pixels)
+let bobOffset = 0;    // computed bob pixel offset added to horizon each frame
 let pointerLocked = false;
 let eJustPressed   = false; // single-press detection
 
@@ -870,6 +877,13 @@ function updatePlayer(dt, grid, batteries) {
         if (!isWall(grid, sx, player.y, MARGIN)) player.x = sx;
         if (!isWall(grid, player.x, sy, MARGIN)) player.y = sy;
     }
+
+    // ── Head bob ─────────────────────────────────────────────
+    const isMoving = moveFwd !== 0 || moveSide !== 0;
+    const targetBobAmp = isMoving ? BOB_AMP * (speed / MOVE_SPEED) : 0;
+    bobAmp += (targetBobAmp - bobAmp) * Math.min(1, BOB_SMOOTH * dt);
+    if (isMoving) bobPhase += speed * BOB_FREQ * dt;
+    bobOffset = bobAmp * Math.sin(bobPhase);
 
     // ── Battery drain ────────────────────────────────────────
     player.battery = Math.max(0, player.battery - BATTERY_DRAIN * dt);
