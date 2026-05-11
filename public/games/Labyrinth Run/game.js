@@ -9,8 +9,9 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const CELL_SIZE             = 1;
-const MOVE_SPEED            = 0.8;
-const RUN_SPEED             = 1.5;
+const MOVE_SPEED            = 1;
+const RUN_SPEED             = 1.8;
+const PENALTY_SPEED         = 0.8;
 const STAMINA_MAX           = 100;
 const STAMINA_DRAIN         = 30;
 const STAMINA_REGEN_NORMAL  = 15;
@@ -26,7 +27,7 @@ const SIDE_SHADE_MULT        = 0.85; // east/west faces are this much darker tha
 const FLICKER_CHANCE_BASE  = 0.02;  // flicker probability/sec at 100% battery
 const FLICKER_CHANCE_SCALE = 0.73;  // additional probability/sec added at 0% battery
 const RADIUS_DRAIN_CURVE   = 1.0;   // exponent on battery% for beam radius (1=linear, 2=drops faster early)
-const REACH_DRAIN_CURVE    = 0.75;   // exponent on battery% for distance reach
+const REACH_DRAIN_CURVE    = 0.75;   // exponent on battery% for distance reach (higher, drops faster. Always bottoms out at FLOOR)
 const REACH_FLOOR          = 0.40;  // minimum reach at 0% battery (fraction of FLASHLIGHT_REACH)
 const BRIGHTNESS_DRAIN     = 0.05; // how much darker the outer halo edge gets at 0% battery
 const MOUSE_SENSITIVITY     = 0.00075;
@@ -829,7 +830,7 @@ function updatePlayer(dt, grid, batteries) {
 
     // ── Stamina logic ───────────────────────────────────────
     const wantsRun = keys.shift && player.stamina > 0 && !player.staminaPenalty;
-    const speed = wantsRun ? RUN_SPEED : MOVE_SPEED;
+    const speed = wantsRun ? RUN_SPEED : player.staminaPenalty ? PENALTY_SPEED : MOVE_SPEED;
 
     if (wantsRun) {
         player.stamina -= STAMINA_DRAIN * dt;
