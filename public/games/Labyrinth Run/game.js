@@ -20,6 +20,7 @@ const BATTERY_DRAIN         = 6.0;
 const BATTERY_PICKUP_AMOUNT = 40;
 const FLASHLIGHT_RADIUS_FULL = 0.09;
 const FLASHLIGHT_REACH       = 4;   // world units before walls fade to black
+const SIDE_SHADE_MULT        = 0.90; // east/west faces are this much darker than north/south faces
 const MOUSE_SENSITIVITY     = 0.00075;
 const FOV                   = Math.PI * 90 / 180;
 const TEXTURE_SIZE          = 128;
@@ -491,7 +492,7 @@ function renderScene(grid, player, batteries) {
         // Distance darkening factor
         const distFactor = Math.max(0, 1 - perpWallDist / FLASHLIGHT_REACH);
         // Side darkening: y-side walls are 30% darker
-        const sideMult = side === 1 ? 0.70 : 1.0;
+        const sideMult = side === 1 ? SIDE_SHADE_MULT : 1.0;
 
         const isDoor = cellVal === 2;
         // Doors are less dark than walls so they stand out
