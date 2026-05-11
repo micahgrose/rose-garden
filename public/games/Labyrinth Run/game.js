@@ -23,7 +23,7 @@ const FLASHLIGHT_REACH       = 4;   // world units before walls fade to black
 const MOUSE_SENSITIVITY     = 0.00075;
 const FOV                   = Math.PI * 90 / 180;
 const TEXTURE_SIZE          = 128;
-const CELL_SCALE            = 0.5;  // each maze cell = 0.5 world units (tight corridors)
+const CELL_SCALE            = 0.75; // each maze cell = 0.75 world units (medium corridors)
 const LAB_SIZES             = [11, 15, 19];
 const NUM_BATTERIES_PER_LAB = [1, 1, 2];
 const MAX_LABYRINTHS        = 3;
