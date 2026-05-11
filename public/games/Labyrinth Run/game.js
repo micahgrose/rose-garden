@@ -24,11 +24,11 @@ const SIDE_SHADE_MULT        = 0.85; // east/west faces are this much darker tha
 
 // ── Flashlight deterioration rates (tune each axis independently) ──────────
 const FLICKER_CHANCE_BASE  = 0.02;  // flicker probability/sec at 100% battery
-const FLICKER_CHANCE_SCALE = 0.54;  // additional probability/sec added at 0% battery
+const FLICKER_CHANCE_SCALE = 0.73;  // additional probability/sec added at 0% battery
 const RADIUS_DRAIN_CURVE   = 1.0;   // exponent on battery% for beam radius (1=linear, 2=drops faster early)
-const REACH_DRAIN_CURVE    = 1.2;   // exponent on battery% for distance reach
-const REACH_FLOOR          = 0.30;  // minimum reach at 0% battery (fraction of FLASHLIGHT_REACH)
-const BRIGHTNESS_DRAIN     = 0.028; // how much darker the outer halo edge gets at 0% battery
+const REACH_DRAIN_CURVE    = 0.75;   // exponent on battery% for distance reach
+const REACH_FLOOR          = 0.40;  // minimum reach at 0% battery (fraction of FLASHLIGHT_REACH)
+const BRIGHTNESS_DRAIN     = 0.05; // how much darker the outer halo edge gets at 0% battery
 const MOUSE_SENSITIVITY     = 0.00075;
 const FOV                   = Math.PI * 90 / 180;
 const TEXTURE_SIZE          = 128;
