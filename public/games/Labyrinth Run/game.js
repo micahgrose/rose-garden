@@ -15,8 +15,8 @@ const STAMINA_MAX           = 100;
 const STAMINA_DRAIN         = 30;
 const STAMINA_REGEN_NORMAL  = 15;
 const STAMINA_REGEN_PENALTY = 5;
-const BATTERY_MAX           = 100;
-const BATTERY_DRAIN         = 6.0;
+const BATTERY_MAX           = 150;
+const BATTERY_DRAIN         = 1.5;
 const BATTERY_PICKUP_AMOUNT = 40;
 const FLASHLIGHT_RADIUS_FULL = 0.175;
 const FLASHLIGHT_REACH       = 4;   // world units before walls fade to black
@@ -85,6 +85,23 @@ function generateSandstoneTexture() {
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         ],
+
+        [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [1,0,0,0,1,1,1,1,0,0,0,1,0,0],
+            [1,0,0,1,0,0,0,0,1,0,0,1,0,0],
+            [1,0,0,1,0,0,0,0,1,0,0,1,0,0],
+            [1,0,0,0,1,1,1,1,0,0,0,1,0,0],
+            [0,1,0,0,0,0,0,0,0,0,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,1,0,0,0,0],
+            [0,0,0,0,1,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,1,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        ]
     ];
 
     // Only 2 bricks out of 16 get hieroglyphs (sparse)
@@ -622,8 +639,8 @@ function updateFlicker(dt, batteryPct) {
     } else if (flickerCooldown > 0) {
         flickerCooldown -= dt;
     } else {
-        // Chance per second: ~1% at full battery, ~55% at empty
-        const chance = (0.01 + 0.54 * (1 - batteryPct)) * dt;
+        // Chance per second: ~2% at full battery, ~56% at empty
+        const chance = (0.02 + 0.54 * (1 - batteryPct)) * dt;
         if (Math.random() < chance) {
             flickerMult  = Math.random() < 0.25 ? 0 : Math.random() * 0.2;
             flickerTimer = 0.04 + Math.random() * 0.13; // 40–170 ms flicker
@@ -1047,13 +1064,15 @@ let currentBats  = [];
 let doorX = 0, doorY = 0;
 let lastFrameTime = 0;
 let animFrameId   = 0;
-let runActive     = false;
+let runActive        = false;
+let batteryDeadTimer = -1; // countdown seconds after battery dies; -1 = not triggered
 
 function startRun() {
-    currentLab  = 0;
-    lapTimes    = [null, null, null];
-    runStart    = performance.now();
-    lapStart    = runStart;
+    currentLab       = 0;
+    lapTimes         = [null, null, null];
+    runStart         = performance.now();
+    lapStart         = runStart;
+    batteryDeadTimer = -1;
 
     resetPlayer();
     resetFlicker();
@@ -1104,6 +1123,26 @@ function gameLoop(now) {
         return;
     }
 
+    // Battery death: 5-second darkness then ripple back to menu
+    if (player.battery <= 0 && batteryDeadTimer < 0) {
+        batteryDeadTimer = 5.0;
+        if (document.pointerLockElement) document.exitPointerLock();
+        hudEl.classList.add('hidden');
+    }
+    if (batteryDeadTimer >= 0) {
+        batteryDeadTimer -= dt;
+        if (batteryDeadTimer <= 0) {
+            batteryDeadTimer = -1;
+            runActive = false;
+            cancelAnimationFrame(animFrameId);
+            const elapsed2 = (performance.now() - lapStart) / 1000;
+            const partialTimes = [...lapTimes];
+            saveStats({ completed: false, quit: true, lap_times: partialTimes, total_time: partialTimes.reduce((s, t) => s + (t || 0), 0) + elapsed2 });
+            playRippleTransition(showMenu);
+            return;
+        }
+    }
+
     animFrameId = requestAnimationFrame(gameLoop);
 }
 
@@ -1123,6 +1162,79 @@ function advanceLab(lapTime) {
         loadNextLab();
         animFrameId = requestAnimationFrame(gameLoop);
     }
+}
+
+function playRippleTransition(onComplete) {
+    const W = canvas.width, H = canvas.height;
+    const cx = W / 2, cy = H / 2;
+    const maxR = Math.hypot(cx, cy) * 1.15;
+    let start = null;
+    const DURATION = 2400;
+
+    canvas.classList.remove('hidden');
+
+    function frame(ts) {
+        if (!start) start = ts;
+        const t = Math.min(1, (ts - start) / DURATION);
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, W, H);
+
+        // Phase 1: dying flicker at center (t 0 → 0.28)
+        if (t < 0.28) {
+            const ft = t / 0.28;
+            const flickR = 40 * Math.sin(ft * Math.PI * 6) * (1 - ft);
+            if (flickR > 1) {
+                const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, flickR);
+                grd.addColorStop(0, `rgba(212,168,67,${0.5 * (1 - ft)})`);
+                grd.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = grd;
+                ctx.fillRect(0, 0, W, H);
+            }
+        }
+
+        // Phase 2: expanding rings (t 0.2 → 0.85)
+        if (t > 0.2) {
+            const rt = (t - 0.2) / 0.65;
+            const NUM_RINGS = 8;
+            for (let i = 0; i < NUM_RINGS; i++) {
+                const ringT = rt - (i / NUM_RINGS) * 0.55;
+                if (ringT <= 0 || ringT > 1) continue;
+                const r = ringT * maxR;
+                const alpha = Math.max(0, (1 - ringT) * 0.75);
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(212,168,67,${alpha})`;
+                ctx.lineWidth = (1 - ringT) * 5 + 1;
+                ctx.stroke();
+            }
+        }
+
+        // Phase 3: radial gold flash then gold wash (t 0.78 → 1.0)
+        if (t > 0.78) {
+            const ft = (t - 0.78) / 0.22;
+            const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
+            grd.addColorStop(0,   `rgba(212,168,67,${ft * 0.7})`);
+            grd.addColorStop(0.4, `rgba(212,168,67,${ft * 0.25})`);
+            grd.addColorStop(1,   'rgba(0,0,0,0)');
+            ctx.fillStyle = grd;
+            ctx.fillRect(0, 0, W, H);
+
+            if (ft > 0.65) {
+                const wft = (ft - 0.65) / 0.35;
+                ctx.fillStyle = `rgba(212,168,67,${wft * 0.95})`;
+                ctx.fillRect(0, 0, W, H);
+            }
+        }
+
+        if (t < 1) {
+            requestAnimationFrame(frame);
+        } else {
+            canvas.classList.add('hidden');
+            onComplete();
+        }
+    }
+    requestAnimationFrame(frame);
 }
 
 function onEscapeQuit() {
