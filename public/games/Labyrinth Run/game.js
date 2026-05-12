@@ -44,7 +44,7 @@ const MAX_LABYRINTHS        = 3;
 // Sounds
 const sndFootstep = new Audio('footstep.mp3');
 sndFootstep.volume = 1;
-const BASE_STEP_INTERVAL = 1.4; // seconds between footsteps at MOVE_SPEED
+const BASE_STEP_INTERVAL = .6; // seconds between footsteps at MOVE_SPEED
 
 const sndFlicker = new Audio('flashlightFlicker.mp3');
 sndFlicker.volume  = .75;
