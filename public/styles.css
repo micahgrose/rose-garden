@@ -146,6 +146,8 @@ body {
 .badge.maintenance      { background: #2a1a00; color: #e09030; border: 1px solid #a06010; }
 
 /* ── Modal ── */
+body:has(.modal:not(.hidden)) { overflow: hidden; }
+
 .modal {
     position: fixed;
     inset: 0;
@@ -155,6 +157,7 @@ body {
     justify-content: center;
     z-index: 100;
     padding: 20px;
+    overflow-y: auto;
 }
 .modal.hidden { display: none; }
 
@@ -164,6 +167,8 @@ body {
     padding: 36px;
     width: 100%;
     max-width: 400px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
     position: relative;
     border: 1px solid #2a2a2a;
 }
