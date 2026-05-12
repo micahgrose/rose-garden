@@ -28,7 +28,7 @@
                 <a href="/" class="btn btnSecondary">&#8592; Rose Garden</a>
                 <button id="controlsBtn" class="btn">CONTROLS</button>
                 <button id="enterBtn" class="btn btnPrimary">ENTER LABYRINTH</button>
-                <button id="modesBtn" class="btn btnDisabled" disabled>MODES</button>
+                <button id="modesBtn" class="btn">MODES</button>
             </div>
         </div>
     </div>
@@ -52,6 +52,31 @@
                 <p>Sprinting depletes stamina. Running out fully triggers a slow recovery penalty.</p>
             </div>
             <button id="controlsBackBtn" class="btn">&#8592; BACK</button>
+        </div>
+    </div>
+
+    <!-- ── MODES SCREEN ──────────────────────────────────────── -->
+    <div id="modesScreen" class="hidden">
+        <div id="modesInner">
+            <h2>MODES</h2>
+            <div id="modesDivider"></div>
+            <div id="modeCards">
+                <div class="modeCard selected" data-mode="speed">
+                    <div class="modeCardName">SPEED</div>
+                </div>
+                <div class="modeCard" data-mode="level">
+                    <div class="modeCardName">LEVEL</div>
+                </div>
+                <div class="modeCard modeCardLocked" data-mode="treasure">
+                    <div class="modeCardName">TREASURE</div>
+                </div>
+            </div>
+            <div id="diffButtons">
+                <button class="btn diffBtn selected" data-diff="easy">EASY</button>
+                <button class="btn diffBtn" data-diff="moderate">MODERATE</button>
+                <button class="btn diffBtn" data-diff="hard">HARD</button>
+            </div>
+            <button id="modesBackBtn" class="btn">&#8592; BACK</button>
         </div>
     </div>
 

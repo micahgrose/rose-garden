@@ -974,61 +974,57 @@ app.delete('/api/automata/saves/:id', requireAuth, async (req, res) => {
 // ── Labyrinth Run stats ────────────────────────────────
 
 app.get('/api/stats/labyrinth', requireAuth, async (req, res) => {
-    const stats = await db.collection('labyrinth_stats').findOne({ userId: new ObjectId(req.user.id) });
-    res.json(stats || {
-        total_runs: 0,
-        total_quits: 0,
-        best_total_time: null,
-        fastest_per_lab: [null, null, null],
-        total_playtime: 0
-    });
+    const { mode = 'speed', diff = 'easy' } = req.query;
+    const doc = await db.collection('labyrinth_stats').findOne({ userId: new ObjectId(req.user.id) });
+    const modeStats = doc?.[mode]?.[diff] || {};
+    const defaults = mode === 'speed'
+        ? { total_runs: 0, best_total_time: null, fastest_per_lab: [null, null, null] }
+        : { total_runs: 0, best_labs_cleared: 0, best_total_time: null };
+    res.json({ ...defaults, ...modeStats, total_playtime: doc?.total_playtime || 0 });
 });
 
 app.post('/api/stats/labyrinth', requireAuth, async (req, res) => {
-    const { completed, quit, lap_times, total_time } = req.body;
+    const { completed, mode = 'speed', diff = 'easy', lap_times, total_time, labs_cleared } = req.body;
     if (typeof total_time !== 'number')
         return res.status(400).json({ error: 'total_time required.' });
 
     const userId = new ObjectId(req.user.id);
-
-    // Fetch current document so we can compute conditional field updates
+    const prefix = `${mode}.${diff}`;
     const existing = await db.collection('labyrinth_stats').findOne({ userId });
 
     const $inc = { total_playtime: total_time || 0 };
-    if (completed) $inc.total_runs = 1;
-
     const $set = {};
 
-    // Update best_total_time if completed and better
-    if (completed && typeof total_time === 'number') {
-        if (!existing || existing.best_total_time == null || total_time < existing.best_total_time) {
-            $set.best_total_time = total_time;
+    if (mode === 'speed') {
+        if (completed) $inc[`${prefix}.total_runs`] = 1;
+        if (completed) {
+            const curBest = existing?.[mode]?.[diff]?.best_total_time;
+            if (curBest == null || total_time < curBest) $set[`${prefix}.best_total_time`] = total_time;
         }
-    }
-
-    // Update fastest_per_lab where new time is better
-    if (Array.isArray(lap_times)) {
-        const curFastest = existing?.fastest_per_lab || [null, null, null];
-        const newFastest = [...curFastest];
-        for (let i = 0; i < 3; i++) {
-            if (typeof lap_times[i] === 'number') {
-                if (newFastest[i] == null || lap_times[i] < newFastest[i]) {
+        if (completed && Array.isArray(lap_times)) {
+            const curFastest = existing?.[mode]?.[diff]?.fastest_per_lab || [null, null, null];
+            const newFastest = [...curFastest];
+            for (let i = 0; i < lap_times.length; i++) {
+                if (typeof lap_times[i] === 'number' && (newFastest[i] == null || lap_times[i] < newFastest[i]))
                     newFastest[i] = lap_times[i];
-                }
+            }
+            $set[`${prefix}.fastest_per_lab`] = newFastest;
+        }
+    } else if (mode === 'level') {
+        $inc[`${prefix}.total_runs`] = 1;
+        if (typeof labs_cleared === 'number') {
+            const curBest = existing?.[mode]?.[diff]?.best_labs_cleared || 0;
+            if (labs_cleared > curBest) {
+                $set[`${prefix}.best_labs_cleared`] = labs_cleared;
+                $set[`${prefix}.best_total_time`]   = total_time;
             }
         }
-        $set.fastest_per_lab = newFastest;
     }
 
     const update = { $inc };
     if (Object.keys($set).length > 0) update.$set = $set;
 
-    await db.collection('labyrinth_stats').updateOne(
-        { userId },
-        update,
-        { upsert: true }
-    );
-
+    await db.collection('labyrinth_stats').updateOne({ userId }, update, { upsert: true });
     res.json({ ok: true });
 });
 

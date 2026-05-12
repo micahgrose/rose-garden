@@ -41,9 +41,43 @@ const LAB_SIZES             = [11, 15, 19];
 const NUM_BATTERIES_PER_LAB = [1, 1, 2];
 const MAX_LABYRINTHS        = 3;
 
+// ── Mode / difficulty configs ───────────────────────────────────────────────
+const MODE_CONFIGS = {
+    speed: {
+        easy:     { labSizes: [11,15,19], batteries: [1,1,2], batMax: 150, batDrain: 1.5,  maxLabs: 3 },
+        moderate: { labSizes: [15,19,23], batteries: [1,2,3], batMax: 150, batDrain: 1.5,  maxLabs: 3 },
+        hard:     { labSizes: [19,23,27], batteries: [2,2,2], batMax: 125, batDrain: 1.75, maxLabs: 3 },
+    },
+    level: {
+        easy:     { startSize: 9,  sizeInc: 3, batMax: 200, batDrain: 1.5,  startBats: 1, batInc: 2, batIncEvery: 2 },
+        moderate: { startSize: 11, sizeInc: 4, batMax: 175, batDrain: 1.75, startBats: 1, batInc: 1, batIncEvery: 2 },
+        hard:     { startSize: 10, sizeInc: 6, batMax: 150, batDrain: 2.0,  startBats: 2, batInc: 1, batIncEvery: 3 },
+    },
+};
+
+let selectedMode = 'speed';
+let selectedDiff = 'easy';
+let runConfig    = MODE_CONFIGS.speed.easy;
+
+function applyRunConfig() {
+    runConfig = MODE_CONFIGS[selectedMode][selectedDiff];
+}
+
+function getLabSize(labIndex) {
+    if (selectedMode === 'speed') return runConfig.labSizes[labIndex];
+    const s = runConfig.startSize + labIndex * runConfig.sizeInc;
+    return s % 2 === 0 ? s + 1 : s;
+}
+
+function getLabBatteries(labIndex) {
+    if (selectedMode === 'speed') return runConfig.batteries[labIndex];
+    return runConfig.startBats + Math.floor(labIndex / runConfig.batIncEvery) * runConfig.batInc;
+}
+
 // Sounds
-const sndFootstep = new Audio('footstep.mp3');
-sndFootstep.volume = 1;
+const sndFootsteps = [new Audio('footstep1.mp3'), new Audio('footstep2.mp3')];
+sndFootsteps.forEach(s => s.volume = 1);
+let footstepIndex = 0;
 const BASE_STEP_INTERVAL = .6; // seconds between footsteps at MOVE_SPEED
 
 const sndFlicker = new Audio('flashlightFlicker.mp3');
@@ -55,7 +89,7 @@ const DROP_VOL_FLOOR = .25;
 const sndDrops = [new Audio('drop1.mp3'), new Audio('drop2.mp3'), new Audio('drop3.mp3')];
 
 const sndSwoosh = new Audio('swoosh.mp3');
-sndSwoosh.volume = 1;
+sndSwoosh.volume = 1;   
 const SWOOSH_LEAD_TIME = 0.75; // seconds before ripple that the swoosh plays
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -69,8 +103,10 @@ function updateAudio(dt, isMoving, speed) {
     if (isMoving) {
         footstepTimer -= dt;
         if (footstepTimer <= 0) {
-            sndFootstep.currentTime = 0;
-            sndFootstep.play().catch(() => {});
+            const snd = sndFootsteps[footstepIndex % sndFootsteps.length];
+            footstepIndex++;
+            snd.currentTime = 0;
+            snd.play().catch(() => {});
             footstepTimer = BASE_STEP_INTERVAL * (MOVE_SPEED / speed);
         }
     } else {
@@ -90,8 +126,7 @@ function updateAudio(dt, isMoving, speed) {
 }
 
 function stopAllAudio() {
-    sndFootstep.pause();
-    sndFootstep.currentTime = 0;
+    sndFootsteps.forEach(s => { s.pause(); s.currentTime = 0; });
     sndFlicker.pause();
     sndFlicker.currentTime = 0;
     sndDrops.forEach(s => { s.pause(); s.currentTime = 0; });
@@ -386,7 +421,7 @@ function bfsFurthest(grid, startX, startY) {
  * @returns {{ grid, batteries, doorX, doorY }}
  */
 function buildLevel(labIndex) {
-    const size = LAB_SIZES[labIndex];
+    const size = getLabSize(labIndex);
     const grid = generateMaze(size, size);
 
     // Door at cell furthest from start (1,1)
@@ -406,7 +441,7 @@ function buildLevel(labIndex) {
     grid[door.y][door.x] = 2; // door
 
     // Scatter batteries
-    const numBat = NUM_BATTERIES_PER_LAB[labIndex];
+    const numBat = getLabBatteries(labIndex);
     const batteries = [];
     const openCells = [];
     for (let y = 0; y < size; y++) {
@@ -800,7 +835,7 @@ function resetPlayer() {
     player.planeX = 0; player.planeY = PLANE_LEN;
     player.stamina = STAMINA_MAX;
     player.staminaPenalty = false;
-    player.battery = BATTERY_MAX;
+    player.battery = runConfig.batMax;
     pitch = 0;
     bobPhase = 0; bobAmp = 0; bobOffset = 0;
 }
@@ -948,7 +983,7 @@ function updatePlayer(dt, grid, batteries) {
     updateAudio(dt, isMoving, speed);
 
     // ── Battery drain ────────────────────────────────────────
-    player.battery = Math.max(0, player.battery - BATTERY_DRAIN * dt);
+    player.battery = Math.max(0, player.battery - runConfig.batDrain * dt);
 
     // ── Battery pickup (E key) ───────────────────────────────
     if (eJustPressed) {
@@ -959,7 +994,7 @@ function updatePlayer(dt, grid, batteries) {
             const dist = Math.sqrt((bx - player.x) ** 2 + (by - player.y) ** 2);
             if (dist <= 1.2 * CELL_SCALE) {
                 bat.active = false;
-                player.battery = Math.min(BATTERY_MAX, player.battery + BATTERY_PICKUP_AMOUNT);
+                player.battery = Math.min(runConfig.batMax, player.battery + BATTERY_PICKUP_AMOUNT);
                 break;
             }
         }
@@ -1005,7 +1040,9 @@ const batteryHint    = document.getElementById('batteryHint');
 
 function updateHUD(labNum, elapsedSec) {
     // Labyrinth label
-    labyrinthLabel.textContent = `LABYRINTH ${labNum} / ${MAX_LABYRINTHS}`;
+    labyrinthLabel.textContent = selectedMode === 'level'
+        ? `LABYRINTH ${labNum}`
+        : `LABYRINTH ${labNum} / ${runConfig.maxLabs}`;
 
     // Timer
     timerDisplay.textContent = formatTime(elapsedSec);
@@ -1020,7 +1057,7 @@ function updateHUD(labNum, elapsedSec) {
     }
 
     // Battery bar
-    const batPct = player.battery / BATTERY_MAX;
+    const batPct = player.battery / runConfig.batMax;
     batteryBar.style.width = (batPct * 100).toFixed(1) + '%';
     if (batPct < 0.25) {
         batteryBar.classList.add('low');
@@ -1048,20 +1085,26 @@ let gameState = 'menu'; // 'menu' | 'controls' | 'playing' | 'summary'
 // DOM references
 const menuEl          = document.getElementById('menu');
 const controlsScreen  = document.getElementById('controlsScreen');
+const modesScreen     = document.getElementById('modesScreen');
 const summaryScreen   = document.getElementById('summaryScreen');
 const summaryTitle    = document.getElementById('summaryTitle');
 const summaryBody     = document.getElementById('summaryBody');
 const summaryTotalEl  = document.getElementById('summaryTotalTime');
 const controlsBtn     = document.getElementById('controlsBtn');
 const enterBtn        = document.getElementById('enterBtn');
+const modesBtn        = document.getElementById('modesBtn');
 const controlsBackBtn = document.getElementById('controlsBackBtn');
+const modesBackBtn    = document.getElementById('modesBackBtn');
 const playAgainBtn    = document.getElementById('summaryPlayAgain');
 const menuBtn         = document.getElementById('summaryMenu');
+const modeCards       = document.querySelectorAll('.modeCard:not(.modeCardLocked)');
+const diffBtns        = document.querySelectorAll('.diffBtn');
 
 function showMenu() {
     gameState = 'menu';
     menuEl.classList.remove('hidden');
     controlsScreen.classList.add('hidden');
+    modesScreen.classList.add('hidden');
     canvas.classList.add('hidden');
     hudEl.classList.add('hidden');
     summaryScreen.classList.add('hidden');
@@ -1073,6 +1116,12 @@ function showControls() {
     gameState = 'controls';
     menuEl.classList.add('hidden');
     controlsScreen.classList.remove('hidden');
+}
+
+function showModes() {
+    gameState = 'modes';
+    menuEl.classList.add('hidden');
+    modesScreen.classList.remove('hidden');
 }
 
 function showGame() {
@@ -1098,7 +1147,8 @@ function showSummary(lapTimes, quit) {
     // Build table rows
     summaryBody.innerHTML = '';
     let totalTime = 0;
-    for (let i = 0; i < MAX_LABYRINTHS; i++) {
+    const rowCount = selectedMode === 'speed' ? runConfig.maxLabs : lapTimes.length;
+    for (let i = 0; i < rowCount; i++) {
         const tr = document.createElement('tr');
         const td1 = document.createElement('td');
         const td2 = document.createElement('td');
@@ -1114,22 +1164,40 @@ function showSummary(lapTimes, quit) {
         summaryBody.appendChild(tr);
     }
 
-    summaryTotalEl.textContent = quit ? '—' : formatTime(totalTime);
+    summaryTotalEl.textContent = (quit && selectedMode === 'speed') ? '—' : formatTime(totalTime);
 }
 
 // ── Button wiring ────────────────────────────────────────────
 controlsBtn.addEventListener('click', showControls);
 controlsBackBtn.addEventListener('click', showMenu);
+modesBtn.addEventListener('click', showModes);
+modesBackBtn.addEventListener('click', showMenu);
 enterBtn.addEventListener('click', startRun);
 playAgainBtn.addEventListener('click', startRun);
 menuBtn.addEventListener('click', showMenu);
+
+modeCards.forEach(card => {
+    card.addEventListener('click', () => {
+        selectedMode = card.dataset.mode;
+        modeCards.forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+    });
+});
+
+diffBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        selectedDiff = btn.dataset.diff;
+        diffBtns.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+    });
+});
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 10 — Run Logic
 // ══════════════════════════════════════════════════════════════════════════
 
 let currentLab   = 0; // 0-based index
-let lapTimes     = [null, null, null];
+let lapTimes     = [];
 let lapStart     = 0;  // performance.now() at start of current lap
 let runStart     = 0;  // performance.now() at start of run
 let currentGrid  = null;
@@ -1142,8 +1210,9 @@ let batteryDeadTimer = -1;             // countdown seconds after battery dies; 
 let effectiveReach   = FLASHLIGHT_REACH; // updated each frame based on battery level
 
 function startRun() {
+    applyRunConfig();
     currentLab       = 0;
-    lapTimes         = [null, null, null];
+    lapTimes         = [];
     runStart         = performance.now();
     lapStart         = runStart;
     batteryDeadTimer = -1;
@@ -1168,7 +1237,7 @@ function loadNextLab() {
 
     // Reset player to start position
     player.x = 1.5 * CELL_SCALE; player.y = 1.5 * CELL_SCALE;
-    player.battery = BATTERY_MAX;
+    player.battery = runConfig.batMax;
 }
 
 function gameLoop(now) {
@@ -1181,7 +1250,7 @@ function gameLoop(now) {
     // Update player
     updatePlayer(dt, currentGrid, currentBats);
 
-    const batPct = player.battery / BATTERY_MAX;
+    const batPct = player.battery / runConfig.batMax;
 
     // Update effective reach based on battery level
     effectiveReach = FLASHLIGHT_REACH * (REACH_FLOOR + (1 - REACH_FLOOR) * Math.pow(batPct, REACH_DRAIN_CURVE));
@@ -1221,7 +1290,10 @@ function gameLoop(now) {
             cancelAnimationFrame(animFrameId);
             stopAllAudio();
             const elapsed2 = (performance.now() - lapStart) / 1000;
-            const partialTimes = [...lapTimes];
+            const total2 = lapTimes.reduce((s, t) => s + (t || 0), 0) + elapsed2;
+            if (selectedMode === 'level') {
+                saveStats({ completed: false, total_time: total2, labs_cleared: lapTimes.length });
+            }
             playRippleTransition(showMenu);
             return;
         }
@@ -1234,8 +1306,8 @@ function advanceLab(lapTime) {
     lapTimes[currentLab] = lapTime;
     currentLab++;
 
-    if (currentLab >= MAX_LABYRINTHS) {
-        // Run complete
+    if (selectedMode === 'speed' && currentLab >= runConfig.maxLabs) {
+        // Speed mode complete
         runActive = false;
         cancelAnimationFrame(animFrameId);
         stopAllAudio();
@@ -1327,9 +1399,11 @@ function onEscapeQuit() {
     cancelAnimationFrame(animFrameId);
     stopAllAudio();
     const elapsed = (performance.now() - lapStart) / 1000;
-    // Current lab time is partial — leave as null (abandoned)
     const partialTimes = [...lapTimes];
     const total = partialTimes.reduce((s, t) => s + (t || 0), 0) + elapsed;
+    if (selectedMode === 'level') {
+        saveStats({ completed: false, total_time: total, labs_cleared: lapTimes.length });
+    }
     showSummary(partialTimes, true);
 }
 
@@ -1351,7 +1425,7 @@ async function loadStats() {
     }
 
     try {
-        const res = await fetch('/api/stats/labyrinth', {
+        const res = await fetch(`/api/stats/labyrinth?mode=${selectedMode}&diff=${selectedDiff}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error('Not authorized');
@@ -1363,18 +1437,29 @@ async function loadStats() {
 }
 
 function renderStats(stats) {
-    const best = stats.best_total_time != null ? formatTime(stats.best_total_time) : '—';
-    const fpl  = stats.fastest_per_lab || [null, null, null];
-    const rows = [
-        ['Runs Completed',  stats.total_runs  ?? 0],
-        ['Best Total Time', best],
-        ['Fastest Lab 1',   fpl[0] != null ? formatTime(fpl[0]) : '—'],
-        ['Fastest Lab 2',   fpl[1] != null ? formatTime(fpl[1]) : '—'],
-        ['Fastest Lab 3',   fpl[2] != null ? formatTime(fpl[2]) : '—'],
-    ];
-    statsContent.innerHTML = rows.map(([label, val]) =>
-        `<div class="statsRow"><span class="statsLabel">${label}</span><span class="statsValue">${val}</span></div>`
-    ).join('');
+    const modeLabel = `${selectedMode.toUpperCase()} · ${selectedDiff.toUpperCase()}`;
+    let rows;
+    if (selectedMode === 'speed') {
+        const fpl = stats.fastest_per_lab || [null, null, null];
+        rows = [
+            ['Runs Completed',  stats.total_runs  ?? 0],
+            ['Best Total Time', stats.best_total_time != null ? formatTime(stats.best_total_time) : '—'],
+            ['Fastest Lab 1',   fpl[0] != null ? formatTime(fpl[0]) : '—'],
+            ['Fastest Lab 2',   fpl[1] != null ? formatTime(fpl[1]) : '—'],
+            ['Fastest Lab 3',   fpl[2] != null ? formatTime(fpl[2]) : '—'],
+        ];
+    } else {
+        rows = [
+            ['Runs',         stats.total_runs      ?? 0],
+            ['Best Cleared', stats.best_labs_cleared ?? 0],
+            ['Best Time',    stats.best_total_time != null ? formatTime(stats.best_total_time) : '—'],
+        ];
+    }
+    statsContent.innerHTML =
+        `<div class="statsRow"><span class="statsLabel" style="color:var(--gold-dim);font-size:0.68rem;letter-spacing:0.12em;">${modeLabel}</span></div>` +
+        rows.map(([label, val]) =>
+            `<div class="statsRow"><span class="statsLabel">${label}</span><span class="statsValue">${val}</span></div>`
+        ).join('');
 }
 
 async function saveStats(runData) {
@@ -1388,7 +1473,7 @@ async function saveStats(runData) {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type':  'application/json'
             },
-            body: JSON.stringify(runData)
+            body: JSON.stringify({ ...runData, mode: selectedMode, diff: selectedDiff })
         });
     } catch (err) {
         console.warn('Failed to save stats:', err);
