@@ -56,6 +56,7 @@ const sndDrops = [new Audio('drop1.mp3'), new Audio('drop2.mp3'), new Audio('dro
 
 const sndSwoosh = new Audio('swoosh.mp3');
 sndSwoosh.volume = 1;
+const SWOOSH_LEAD_TIME = 0.75; // seconds before ripple that the swoosh plays
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
@@ -1210,7 +1211,7 @@ function gameLoop(now) {
     }
     if (batteryDeadTimer >= 0) {
         batteryDeadTimer -= dt;
-        if (batteryDeadTimer <= 0.75 && batteryDeadTimer + dt > 0.75) {
+        if (batteryDeadTimer <= SWOOSH_LEAD_TIME && batteryDeadTimer + dt > SWOOSH_LEAD_TIME) {
             sndSwoosh.currentTime = 0;
             sndSwoosh.play().catch(() => {});
         }
