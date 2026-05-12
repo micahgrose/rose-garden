@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 /* ══════════════════════════════════════════════════════════════════════════
    LABYRINTH RUN — game.js
    Raycasted 3-D maze game, Egyptian sandstone aesthetic
@@ -11,7 +11,7 @@
 const CELL_SIZE             = 1;
 const MOVE_SPEED            = 1;
 const RUN_SPEED             = 1.8;
-const PENALTY_SPEED         = 0.8;
+const PENALTY_SPEED         = 0.3;
 const STAMINA_MAX           = 100;
 const STAMINA_DRAIN         = 30;
 const STAMINA_REGEN_NORMAL  = 15;
@@ -288,20 +288,20 @@ function generateDoorTexture() {
     const img  = new ImageData(size, size);
     const d    = img.data;
 
-    // Precompute grain lines (varying widths and lightness offsets)
+    // Precompute grain lines per y-row → horizontal planks (rotated 90°)
     const grainLines = [];
-    for (let x = 0; x < size; x++) {
-        const v = Math.sin(x * 0.47 + Math.random() * 0.5) * 12 + (Math.random() - 0.5) * 6;
+    for (let y = 0; y < size; y++) {
+        const v = Math.sin(y * 0.47 + Math.random() * 0.5) * 12 + (Math.random() - 0.5) * 6;
         grainLines.push(v);
     }
 
     const BORDER = 3; // metal border width
 
     for (let y = 0; y < size; y++) {
-        const panelLine = (y === Math.floor(size / 3) || y === Math.floor(2 * size / 3));
         const isBorderY = y < BORDER || y >= size - BORDER;
 
         for (let x = 0; x < size; x++) {
+            const panelLine = (x === Math.floor(size / 3) || x === Math.floor(2 * size / 3));
             const isBorderX = x < BORDER || x >= size - BORDER;
             const isBorder  = isBorderX || isBorderY;
             const idx = (y * size + x) * 4;
@@ -310,11 +310,11 @@ function generateDoorTexture() {
                 // Dark iron border
                 d[idx] = 52; d[idx+1] = 44; d[idx+2] = 36; d[idx+3] = 255;
             } else if (panelLine) {
-                // Horizontal panel groove
+                // Vertical panel groove
                 d[idx] = 72; d[idx+1] = 44; d[idx+2] = 18; d[idx+3] = 255;
             } else {
-                // Wood grain — lighter base so texture survives the darkness multiplier
-                const grain = grainLines[x];
+                // Wood grain — horizontal planks, grain varies by row
+                const grain = grainLines[y];
                 const noise = (Math.random() - 0.5) * 14;
                 const r = Math.min(255, Math.max(0, 110 + grain * 0.9 + noise));
                 const g = Math.min(255, Math.max(0,  68 + grain * 0.55 + noise * 0.7));
@@ -636,12 +636,14 @@ function renderScene(grid, player, batteries) {
             const texY = Math.floor(texPos) & (TEXTURE_SIZE - 1);
             texPos += step;
 
-            // For door cells: top/bottom fringe uses sandstone (embedded look)
+            // For door cells: top/bottom fringe uses sandstone at wall brightness
             let useTexImg = texImg;
+            let isFringe = false;
             if (isDoor) {
                 const wallFrac = drawEnd > drawStart ? (y - drawStart) / (drawEnd - drawStart) : 0.5;
                 if (wallFrac < DOOR_GAP_FRAC || wallFrac > 1 - DOOR_GAP_FRAC) {
                     useTexImg = sandstoneImg;
+                    isFringe = true;
                 }
             }
 
@@ -654,7 +656,9 @@ function renderScene(grid, player, batteries) {
             }
 
             // Global darkness + distance + side darkening
-            const bright = distFactor * sideMult * darkMult;
+            // Fringe uses wall darkMult so it matches adjacent sandstone
+            const pixDark = (isDoor && !isFringe) ? darkMult : 0.25;
+            const bright = distFactor * sideMult * pixDark;
             r = Math.floor(r * bright);
             g = Math.floor(g * bright);
             b = Math.floor(b * bright);
@@ -663,8 +667,8 @@ function renderScene(grid, player, batteries) {
             g = Math.floor(g * 0.85);
             b = Math.floor(b * 0.65);
 
-            // Door glow: subtle warm hint so it reads in the dark
-            if (isDoor) {
+            // Door glow only on the wood portion, not the stone frame
+            if (isDoor && !isFringe) {
                 const glowStrength = 0.18 * distFactor;
                 r = Math.min(255, r + Math.floor(200 * glowStrength));
                 g = Math.min(255, g + Math.floor(110 * glowStrength));
