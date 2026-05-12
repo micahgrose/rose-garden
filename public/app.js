@@ -192,8 +192,10 @@ async function submitLogin() {
     const username = document.getElementById('loginUsername').value.trim();
     const password = document.getElementById('loginPassword').value;
     const errEl    = document.getElementById('loginError');
+    const btn      = document.getElementById('loginBtn');
     errEl.textContent = '';
 
+    setLoading(btn, true);
     try {
         const res  = await fetch('/api/login', {
             method: 'POST',
@@ -220,6 +222,8 @@ async function submitLogin() {
         if (data.noEmailWarning) showAccount();
     } catch {
         errEl.textContent = 'Something went wrong. Try again.';
+    } finally {
+        setLoading(btn, false);
     }
 }
 
