@@ -307,18 +307,18 @@ function generateDoorTexture() {
             const idx = (y * size + x) * 4;
 
             if (isBorder) {
-                // Dark grey metal border
-                d[idx] = 38; d[idx+1] = 38; d[idx+2] = 42; d[idx+3] = 255;
+                // Dark iron border
+                d[idx] = 52; d[idx+1] = 44; d[idx+2] = 36; d[idx+3] = 255;
             } else if (panelLine) {
-                // Horizontal panel divider - slightly lighter
-                d[idx] = 55; d[idx+1] = 32; d[idx+2] = 10; d[idx+3] = 255;
+                // Horizontal panel groove
+                d[idx] = 72; d[idx+1] = 44; d[idx+2] = 18; d[idx+3] = 255;
             } else {
-                // Wood grain
+                // Wood grain — lighter base so texture survives the darkness multiplier
                 const grain = grainLines[x];
-                const noise = (Math.random() - 0.5) * 8;
-                const r = Math.min(255, Math.max(0, 45 + grain * 0.4 + noise));
-                const g = Math.min(255, Math.max(0, 26 + grain * 0.25 + noise * 0.6));
-                const b = Math.min(255, Math.max(0, 10 + grain * 0.1 + noise * 0.3));
+                const noise = (Math.random() - 0.5) * 14;
+                const r = Math.min(255, Math.max(0, 110 + grain * 0.9 + noise));
+                const g = Math.min(255, Math.max(0,  68 + grain * 0.55 + noise * 0.7));
+                const b = Math.min(255, Math.max(0,  28 + grain * 0.2  + noise * 0.35));
                 d[idx] = r; d[idx+1] = g; d[idx+2] = b; d[idx+3] = 255;
             }
         }
@@ -623,7 +623,7 @@ function renderScene(grid, player, batteries) {
 
         const isDoor = cellVal === 2;
         // Doors are less dark than walls so they stand out
-        const darkMult = isDoor ? 0.55 : 0.25;
+        const darkMult = isDoor ? 0.70 : 0.25;
 
         // Door opening covers middle 65% of the wall column; top/bottom 17.5% = stone frame
         const DOOR_GAP_FRAC = 0.175;
@@ -663,12 +663,12 @@ function renderScene(grid, player, batteries) {
             g = Math.floor(g * 0.85);
             b = Math.floor(b * 0.65);
 
-            // Door glow: warm amber additive tint
+            // Door glow: subtle warm hint so it reads in the dark
             if (isDoor) {
-                const glowStrength = 0.9 * distFactor;
-                r = Math.min(255, r + Math.floor(212 * glowStrength));
-                g = Math.min(255, g + Math.floor(136 * glowStrength));
-                b = Math.min(255, b + Math.floor(34  * glowStrength));
+                const glowStrength = 0.18 * distFactor;
+                r = Math.min(255, r + Math.floor(200 * glowStrength));
+                g = Math.min(255, g + Math.floor(110 * glowStrength));
+                b = Math.min(255, b + Math.floor(30  * glowStrength));
             }
 
             setPixel(screenX, y, r, g, b);
@@ -954,7 +954,7 @@ function updatePlayer(dt, grid, batteries) {
     // Strafe
     const moveSide = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
 
-    const MARGIN = 0.38 * CELL_SCALE;
+    const MARGIN = 0.33 * CELL_SCALE;
 
     if (moveFwd !== 0) {
         const moveSpeed = speed * dt * moveFwd;
