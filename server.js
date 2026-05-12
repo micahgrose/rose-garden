@@ -22,7 +22,15 @@ MongoClient.connect(process.env.MONGODB_URI)
     .then(async client => {
         db = client.db('rosegarden');
         await db.collection('users').createIndex({ username: 1 }, { unique: true });
-        await db.collection('users').dropIndex('email_1').catch(() => {});
+        // Drop any existing email index by key (name may vary) then recreate as sparse
+        try {
+            const idxs = await db.collection('users').listIndexes().toArray();
+            for (const idx of idxs) {
+                if (idx.key && 'email' in idx.key) {
+                    await db.collection('users').dropIndex(idx.name);
+                }
+            }
+        } catch (e) { console.warn('email index drop:', e.message); }
         await db.collection('users').createIndex({ email: 1 }, { unique: true, sparse: true });
         console.log('Connected to MongoDB');
 
