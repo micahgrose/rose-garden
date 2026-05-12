@@ -191,7 +191,7 @@ function generateSandstoneTexture() {
     // Shuffles glyph pool so each placement gets a distinct glyph type.
     // Adding more entries to HIEROGLYPHS above automatically increases the pool.
     const centY    = Math.floor((size - 14) / 2);
-    const numGlyphs = Math.min(HIEROGLYPHS.length, 2 + Math.floor(Math.random() * 2)); // 2–3
+    const numGlyphs = HIEROGLYPHS.length;
     const MIN_GAP  = 22; // min pixels between glyph left edges
     const glyphPool = HIEROGLYPHS.map((_, i) => i).sort(() => Math.random() - 0.5);
     const PLACEMENTS = [];
