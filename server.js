@@ -55,6 +55,7 @@ MongoClient.connect(process.env.MONGODB_URI)
                     const ids = staleNoEmail.map(u => u._id);
                     await db.collection('users').deleteMany({ _id: { $in: ids } });
                     await db.collection('saves').deleteMany({ userId: { $in: ids } });
+                    await db.collection('labyrinth_stats').deleteMany({ userId: { $in: ids } });
                     console.log(`Cleanup: removed ${staleNoEmail.length} inactive no-email account(s).`);
                 }
 
@@ -67,6 +68,7 @@ MongoClient.connect(process.env.MONGODB_URI)
                     const ids = staleEmail.map(u => u._id);
                     await db.collection('users').deleteMany({ _id: { $in: ids } });
                     await db.collection('saves').deleteMany({ userId: { $in: ids } });
+                    await db.collection('labyrinth_stats').deleteMany({ userId: { $in: ids } });
                     console.log(`Cleanup: removed ${staleEmail.length} inactive email account(s).`);
                 }
 
@@ -930,6 +932,7 @@ app.delete('/api/account', requireAuth, async (req, res) => {
 
     await dbRemove({ _id: user._id });
     await svRemoveAll({ userId: user._id });
+    await db.collection('labyrinth_stats').deleteOne({ userId: user._id });
     res.json({ message: 'Account deleted.' });
 });
 
