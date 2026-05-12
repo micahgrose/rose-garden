@@ -43,12 +43,14 @@ const MAX_LABYRINTHS        = 3;
 
 // Sounds
 const sndFootstep = new Audio('footstep.mp3');
-sndFootstep.volume = 2;
+sndFootstep.volume = 1;
 const BASE_STEP_INTERVAL = 1.4; // seconds between footsteps at MOVE_SPEED
 
 const sndFlicker = new Audio('flashlightFlicker.mp3');
 sndFlicker.volume  = .75;
 sndFlicker.playbackRate = 1.25;
+const DROP_VOL_RANGE = .25;
+const DROP_VOL_FLOOR = .25;
 
 const sndDrops = [new Audio('drop1.mp3'), new Audio('drop2.mp3'), new Audio('drop3.mp3')];
 
@@ -77,7 +79,7 @@ function updateAudio(dt, isMoving, speed) {
     if (dropTimer <= 0) {
         const sndDrop = sndDrops[Math.floor(Math.random() * sndDrops.length)];
         sndDrop.currentTime = 0;
-        sndDrop.volume = (Math.random() * 0.5) + 0.25;
+        sndDrop.volume = (Math.random() * DROP_VOL_RANGE) + DROP_VOL_FLOOR;
         sndDrop.play().catch(() => {});
         dropTimer = 1 + Math.random() * 15;
     }
