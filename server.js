@@ -668,7 +668,6 @@ app.post('/api/register', async (req, res) => {
         try {
             inserted = await dbInsert({
                 username, password_hash,
-                email: null,
                 email_verified: false,
                 last_active: new Date(),
                 created_at: new Date().toISOString()
