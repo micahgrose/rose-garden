@@ -90,7 +90,7 @@ const sndDrops = [new Audio('drop1.mp3'), new Audio('drop2.mp3'), new Audio('dro
 
 const sndSwoosh = new Audio('swoosh.mp3');
 sndSwoosh.volume = 1;   
-const SWOOSH_LEAD_TIME = 0.75; // seconds before ripple that the swoosh plays
+const SWOOSH_LEAD_TIME = 0.5; // seconds before ripple that the swoosh plays
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
@@ -1001,7 +1001,7 @@ function updatePlayer(dt, grid, batteries) {
     if (isMoving) bobPhase += speed * BOB_FREQ * dt;
     bobOffset = bobAmp * Math.sin(bobPhase);
 
-    updateAudio(dt, isMoving, speed);
+    if (batteryDeadTimer < 0) updateAudio(dt, isMoving, speed);
 
     // ── Battery drain ────────────────────────────────────────
     player.battery = Math.max(0, player.battery - runConfig.batDrain * dt);
@@ -1278,7 +1278,7 @@ function gameLoop(now) {
     effectiveReach = FLASHLIGHT_REACH * (REACH_FLOOR + (1 - REACH_FLOOR) * Math.pow(batPct, REACH_DRAIN_CURVE));
 
     // Update flashlight flicker
-    updateFlicker(dt, batPct);
+    if (batteryDeadTimer < 0) updateFlicker(dt, batPct);
 
     // Render
     renderScene(currentGrid, player, currentBats);
