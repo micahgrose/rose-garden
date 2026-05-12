@@ -96,8 +96,8 @@ sndSwoosh.playbackRate = .85;
 const SWOOSH_LEAD_TIME   = 0;   // seconds before ripple that the swoosh plays
 
 const sndSpooks = ['Spook1.mp3','Spook2.mp3','Spook3.mp3','Spook4.mp3'].map(f => new Audio(f));
-const SPOOK_INTERVAL_MIN = 10;
-const SPOOK_INTERVAL_MAX = 20;
+const SPOOK_INTERVAL_MIN = 15;
+const SPOOK_INTERVAL_MAX = 30;
 
 const sndSpookSong = new Audio('SpookSong.mp3');
 sndSpookSong.loop   = true;
@@ -109,10 +109,10 @@ const SPOOK_SONG_MAX_VOL = 0.6;
 const sndWhispers = new Audio('Whisphers.mp3');
 sndWhispers.loop   = true;
 sndWhispers.volume = 0;
-const WHISPERS_MAX_VOL     = 0.8;
+const WHISPERS_MAX_VOL     = 0.75;
 const WHISPERS_FADE_IN_DUR = 2.0; // seconds to fade Whispers in on battery death
 const WHISPERS_FADE_OUT_DUR = 2.4; // seconds to fade Whispers out (matches ripple duration)
-const DEATH_FADE_OUT_DUR   = 1.5; // seconds to fade gameplay audio out on battery death
+const DEATH_FADE_OUT_DUR   = 1; // seconds to fade gameplay audio out on battery death
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
