@@ -844,6 +844,24 @@ function resetPlayer() {
     bobPhase = 0; bobAmp = 0; bobOffset = 0;
 }
 
+/** Face the first open corridor from the spawn cell so the player never starts wall-staring. */
+function setSpawnDirection(grid) {
+    const dirs = [
+        { gx: 1,  gy: 0,  dirX: 1,  dirY: 0,  planeX: 0,          planeY: PLANE_LEN  }, // East
+        { gx: 0,  gy: 1,  dirX: 0,  dirY: 1,  planeX: -PLANE_LEN, planeY: 0          }, // South
+        { gx: -1, gy: 0,  dirX: -1, dirY: 0,  planeX: 0,          planeY: -PLANE_LEN }, // West
+        { gx: 0,  gy: -1, dirX: 0,  dirY: -1, planeX: PLANE_LEN,  planeY: 0          }, // North
+    ];
+    for (const d of dirs) {
+        const nx = 1 + d.gx, ny = 1 + d.gy;
+        if (ny >= 0 && ny < grid.length && nx >= 0 && nx < grid[0].length && grid[ny][nx] === 0) {
+            player.dirX = d.dirX; player.dirY = d.dirY;
+            player.planeX = d.planeX; player.planeY = d.planeY;
+            return;
+        }
+    }
+}
+
 /** Rotate player direction by angle (radians) */
 function rotatePlayer(angle) {
     const cos = Math.cos(angle), sin = Math.sin(angle);
@@ -1242,6 +1260,7 @@ function loadNextLab() {
     // Reset player to start position
     player.x = 1.5 * CELL_SCALE; player.y = 1.5 * CELL_SCALE;
     player.battery = runConfig.batMax;
+    setSpawnDirection(currentGrid);
 }
 
 function gameLoop(now) {
