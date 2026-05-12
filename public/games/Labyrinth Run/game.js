@@ -41,20 +41,20 @@ const LAB_SIZES             = [11, 15, 19];
 const NUM_BATTERIES_PER_LAB = [1, 1, 2];
 const MAX_LABYRINTHS        = 3;
 
+// Sounds
+const sndFootstep = new Audio('footstep.mp3');
+sndFootstep.volume = 1;
+const BASE_STEP_INTERVAL = 0.45; // seconds between footsteps at MOVE_SPEED
+
+const sndFlicker = new Audio('flashlightFlicker.mp3');
+sndFlicker.volume  = 1;
+
+const sndDrop = new Audio('drop.mp3');
+sndDrop.volume = .5;
+
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
 // ══════════════════════════════════════════════════════════════════════════
-
-const sndFootstep = new Audio('footstep.mp3');
-sndFootstep.volume = 0.5;
-
-const sndFlicker = new Audio('flashlightFlicker.mp3');
-sndFlicker.volume  = 0.45;
-
-const sndDrop = new Audio('drop.mp3');
-sndDrop.volume = 0.4;
-
-const BASE_STEP_INTERVAL = 0.45; // seconds between footsteps at MOVE_SPEED
 let footstepTimer = 0;           // countdown to next footstep
 let dropTimer     = 5 + Math.random() * 8; // first drop: 5–13 s in
 
@@ -1025,42 +1025,6 @@ function formatTime(seconds) {
     return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${t}`;
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// SECTION 8 — Ambient Sound
-// ══════════════════════════════════════════════════════════════════════════
-
-let ambientStarted = false;
-let ambientGain    = null;
-
-function createAmbientSound() {
-    if (ambientStarted) return;
-    ambientStarted = true;
-
-    try {
-        const audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
-        const bufferSize = audioCtx.sampleRate * 2;
-        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-        const data   = buffer.getChannelData(0);
-        let lastOut  = 0;
-        for (let i = 0; i < bufferSize; i++) {
-            const white = Math.random() * 2 - 1;
-            data[i]  = (lastOut + 0.02 * white) / 1.02;
-            lastOut  = data[i];
-            data[i] *= 3.5;
-        }
-        const source = audioCtx.createBufferSource();
-        source.buffer = buffer;
-        source.loop   = true;
-        const gainNode = audioCtx.createGain();
-        gainNode.gain.value = 0.04;
-        ambientGain = gainNode;
-        source.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        source.start();
-    } catch (err) {
-        console.warn('Audio failed:', err);
-    }
-}
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 9 — Game State Machine
@@ -1106,7 +1070,6 @@ function showGame() {
     hudEl.classList.remove('hidden');
     summaryScreen.classList.add('hidden');
     canvas.requestPointerLock();
-    createAmbientSound();
 }
 
 function showSummary(lapTimes, quit) {
