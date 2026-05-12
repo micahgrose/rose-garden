@@ -14,8 +14,8 @@ const RUN_SPEED             = 1.8;
 const PENALTY_SPEED         = 0.7;
 const STAMINA_MAX           = 100;
 const STAMINA_DRAIN         = 30;
-const STAMINA_REGEN_NORMAL  = 15;
-const STAMINA_REGEN_PENALTY = 5;
+const STAMINA_REGEN_NORMAL  = 30;
+const STAMINA_REGEN_PENALTY = 10;
 const BOB_AMP               = 8;   // head-bob amplitude in pixels at normal walk speed
 const BOB_FREQ              = 8;   // bob cycles per world unit traveled
 const BOB_SMOOTH            = 10;  // amplitude lerp speed (attack/release)
@@ -90,6 +90,7 @@ const sndDrops = [new Audio('drop1.mp3'), new Audio('drop2.mp3'), new Audio('dro
 
 const sndSwoosh = new Audio('swoosh.mp3');
 sndSwoosh.volume = 1;   
+sndSwoosh.playbackRate = .5;
 const SWOOSH_LEAD_TIME = 0.5; // seconds before ripple that the swoosh plays
 
 // ══════════════════════════════════════════════════════════════════════════
