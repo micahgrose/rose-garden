@@ -54,6 +54,9 @@ const DROP_VOL_FLOOR = .25;
 
 const sndDrops = [new Audio('drop1.mp3'), new Audio('drop2.mp3'), new Audio('drop3.mp3')];
 
+const sndSwoosh = new Audio('swoosh.mp3');
+sndSwoosh.volume = 1;
+
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
 // ══════════════════════════════════════════════════════════════════════════
@@ -86,6 +89,11 @@ function updateAudio(dt, isMoving, speed) {
 }
 
 function stopAllAudio() {
+    sndFootstep.pause();
+    sndFootstep.currentTime = 0;
+    sndFlicker.pause();
+    sndFlicker.currentTime = 0;
+    sndDrops.forEach(s => { s.pause(); s.currentTime = 0; });
     footstepTimer = 0;
     dropTimer = 5 + Math.random() * 8;
 }
@@ -1196,11 +1204,16 @@ function gameLoop(now) {
     // Battery death: 5-second darkness then ripple back to menu
     if (player.battery <= 0 && batteryDeadTimer < 0) {
         batteryDeadTimer = 5.0;
+        stopAllAudio();
         if (document.pointerLockElement) document.exitPointerLock();
         hudEl.classList.add('hidden');
     }
     if (batteryDeadTimer >= 0) {
         batteryDeadTimer -= dt;
+        if (batteryDeadTimer <= 0.75 && batteryDeadTimer + dt > 0.75) {
+            sndSwoosh.currentTime = 0;
+            sndSwoosh.play().catch(() => {});
+        }
         if (batteryDeadTimer <= 0) {
             batteryDeadTimer = -1;
             runActive = false;
