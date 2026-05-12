@@ -22,17 +22,17 @@ const BOB_SMOOTH            = 10;  // amplitude lerp speed (attack/release)
 const BATTERY_MAX           = 150;
 const BATTERY_DRAIN         = 1.5;
 const BATTERY_PICKUP_AMOUNT = 40;
-const FLASHLIGHT_RADIUS_FULL = 0.175;
-const FLASHLIGHT_REACH       = 4;    // world units before walls fade to black (at full battery)
+const FLASHLIGHT_RADIUS_FULL = 0.2;
+const FLASHLIGHT_REACH       = 5;    // world units before walls fade to black (at full battery)
 const SIDE_SHADE_MULT        = 0.85; // east/west faces are this much darker than north/south faces
 
 // ── Flashlight deterioration rates (tune each axis independently) ──────────
 const FLICKER_CHANCE_BASE  = 0.02;  // flicker probability/sec at 100% battery
-const FLICKER_CHANCE_SCALE = 0.73;  // additional probability/sec added at 0% battery
-const RADIUS_DRAIN_CURVE   = 1.0;   // exponent on battery% for beam radius (1=linear, 2=drops faster early)
-const REACH_DRAIN_CURVE    = 0.75;   // exponent on battery% for distance reach (higher, drops faster. Always bottoms out at FLOOR)
-const REACH_FLOOR          = 0.40;  // minimum reach at 0% battery (fraction of FLASHLIGHT_REACH)
-const BRIGHTNESS_DRAIN     = 0.05; // how much darker the outer halo edge gets at 0% battery
+const FLICKER_CHANCE_SCALE = 0.48;  // additional probability/sec added at 0% battery
+const RADIUS_DRAIN_CURVE   = 1;   // exponent on battery% for beam radius (1=linear, 2=drops faster early)
+const REACH_DRAIN_CURVE    = 0.6;   // exponent on battery% for distance reach (higher, drops faster. Always bottoms out at FLOOR)
+const REACH_FLOOR          = 0.50;  // minimum reach at 0% battery (fraction of FLASHLIGHT_REACH)
+const BRIGHTNESS_DRAIN     = 0.04; // how much darker the outer halo edge gets at 0% battery
 const MOUSE_SENSITIVITY     = 0.00075;
 const FOV                   = Math.PI * 90 / 180;
 const TEXTURE_SIZE          = 128;
@@ -43,14 +43,15 @@ const MAX_LABYRINTHS        = 3;
 
 // Sounds
 const sndFootstep = new Audio('footstep.mp3');
-sndFootstep.volume = 1;
+sndFootstep.volume = .5;
 const BASE_STEP_INTERVAL = 0.45; // seconds between footsteps at MOVE_SPEED
 
 const sndFlicker = new Audio('flashlightFlicker.mp3');
-sndFlicker.volume  = 1;
+sndFlicker.volume  = .75;
+sndFlicker.playbackRate = 1.25;
 
 const sndDrop = new Audio('drop.mp3');
-sndDrop.volume = .5;
+sndDrop.volume = 0;
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
@@ -72,12 +73,13 @@ function updateAudio(dt, isMoving, speed) {
         footstepTimer = 0;
     }
 
-    // ── Ambient drip ─────────────────────────────────────────
+    // Ambient drip 
     dropTimer -= dt;
     if (dropTimer <= 0) {
         sndDrop.currentTime = 0;
+        sndDrop.volume = (Math.random()*.5)+.25
         sndDrop.play().catch(() => {});
-        dropTimer = 5 + Math.random() * 15;
+        dropTimer = 1 + Math.random() * 15;
     }
 }
 
