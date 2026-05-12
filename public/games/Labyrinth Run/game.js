@@ -41,6 +41,8 @@ const LAB_SIZES             = [11, 15, 19];
 const NUM_BATTERIES_PER_LAB = [1, 1, 2];
 const MAX_LABYRINTHS        = 3;
 
+const BATTERY_DEAD_DELAY = 1.5; // seconds of darkness after battery dies before ripple
+
 // ── Mode / difficulty configs ───────────────────────────────────────────────
 const MODE_CONFIGS = {
     speed: {
@@ -91,7 +93,8 @@ const sndDrops = [new Audio('drop1.mp3'), new Audio('drop2.mp3'), new Audio('dro
 const sndSwoosh = new Audio('swoosh.mp3');
 sndSwoosh.volume = 1;   
 sndSwoosh.playbackRate = .85;
-const SWOOSH_LEAD_TIME = 0; // seconds before ripple that the swoosh plays
+const SWOOSH_LEAD_TIME   = 0;   // seconds before ripple that the swoosh plays
+
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
@@ -1296,7 +1299,7 @@ function gameLoop(now) {
 
     // Battery death: 5-second darkness then ripple back to menu
     if (player.battery <= 0 && batteryDeadTimer < 0) {
-        batteryDeadTimer = 5.0;
+        batteryDeadTimer = BATTERY_DEAD_DELAY;
         stopAllAudio();
         if (document.pointerLockElement) document.exitPointerLock();
         hudEl.classList.add('hidden');
