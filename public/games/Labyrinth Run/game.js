@@ -45,7 +45,7 @@ const MAX_LABYRINTHS        = 3;
 const MODE_CONFIGS = {
     speed: {
         easy:     { labSizes: [11,15,19], batteries: [1,1,2], batMax: 150, batDrain: 1.5,  maxLabs: 3 },
-        moderate: { labSizes: [15,19,23], batteries: [1,2,3], batMax: 150, batDrain: 1.5,  maxLabs: 3 },
+        moderate: { labSizes: [15,19,23], batteries: [1,2,3], batMax: 150, batDrain: 1.75,  maxLabs: 3 },
         hard:     { labSizes: [19,23,27], batteries: [2,2,2], batMax: 125, batDrain: 1.75, maxLabs: 3 },
     },
     level: {
@@ -90,8 +90,8 @@ const sndDrops = [new Audio('drop1.mp3'), new Audio('drop2.mp3'), new Audio('dro
 
 const sndSwoosh = new Audio('swoosh.mp3');
 sndSwoosh.volume = 1;   
-sndSwoosh.playbackRate = .5;
-const SWOOSH_LEAD_TIME = 0.5; // seconds before ripple that the swoosh plays
+sndSwoosh.playbackRate = .85;
+const SWOOSH_LEAD_TIME = 0; // seconds before ripple that the swoosh plays
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
