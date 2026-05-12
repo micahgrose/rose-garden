@@ -29,10 +29,10 @@ const SIDE_SHADE_MULT        = 0.85; // east/west faces are this much darker tha
 // ── Flashlight deterioration rates (tune each axis independently) ──────────
 const FLICKER_CHANCE_BASE  = 0.02;  // flicker probability/sec at 100% battery
 const FLICKER_CHANCE_SCALE = 0.48;  // additional probability/sec added at 0% battery
-const RADIUS_DRAIN_CURVE   = 1;   // exponent on battery% for beam radius (1=linear, 2=drops faster early)
-const REACH_DRAIN_CURVE    = 0.6;   // exponent on battery% for distance reach (higher, drops faster. Always bottoms out at FLOOR)
-const REACH_FLOOR          = 0.50;  // minimum reach at 0% battery (fraction of FLASHLIGHT_REACH)
-const BRIGHTNESS_DRAIN     = 0.04; // how much darker the outer halo edge gets at 0% battery
+const RADIUS_DRAIN_CURVE   = .75;   // exponent on battery% for beam radius (1=linear, 2=drops faster early)
+const REACH_DRAIN_CURVE    = 0.45;   // exponent on battery% for distance reach (higher, drops faster. Always bottoms out at FLOOR)
+const REACH_FLOOR          = 0.70;  // minimum reach at 0% battery (fraction of FLASHLIGHT_REACH)
+const BRIGHTNESS_DRAIN     = 0.01; // how much darker the outer halo edge gets at 0% battery
 const MOUSE_SENSITIVITY     = 0.00075;
 const FOV                   = Math.PI * 90 / 180;
 const TEXTURE_SIZE          = 128;
@@ -625,7 +625,7 @@ function renderScene(grid, player, batteries) {
         // Doors are less dark than walls so they stand out
         const darkMult = isDoor ? 0.70 : 0.25;
 
-        // Door opening covers middle 65% of the wall column; top/bottom 17.5% = stone frame
+        // Door opening covers middle 65% of cell width; left/right 17.5% = stone frame
         const DOOR_GAP_FRAC = 0.175;
 
         // Draw wall column pixel by pixel
@@ -636,12 +636,11 @@ function renderScene(grid, player, batteries) {
             const texY = Math.floor(texPos) & (TEXTURE_SIZE - 1);
             texPos += step;
 
-            // For door cells: top/bottom fringe uses sandstone at wall brightness
+            // For door cells: left/right fringe uses sandstone so door reads as tall & narrow
             let useTexImg = texImg;
             let isFringe = false;
             if (isDoor) {
-                const wallFrac = drawEnd > drawStart ? (y - drawStart) / (drawEnd - drawStart) : 0.5;
-                if (wallFrac < DOOR_GAP_FRAC || wallFrac > 1 - DOOR_GAP_FRAC) {
+                if (wallX < DOOR_GAP_FRAC || wallX > 1 - DOOR_GAP_FRAC) {
                     useTexImg = sandstoneImg;
                     isFringe = true;
                 }
