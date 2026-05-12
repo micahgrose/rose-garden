@@ -41,7 +41,7 @@ const LAB_SIZES             = [11, 15, 19];
 const NUM_BATTERIES_PER_LAB = [1, 1, 2];
 const MAX_LABYRINTHS        = 3;
 
-const BATTERY_DEAD_DELAY = 1.5; // seconds of darkness after battery dies before ripple
+const BATTERY_DEAD_DELAY = 10; // seconds of darkness after battery dies before ripple
 
 // ── Mode / difficulty configs ───────────────────────────────────────────────
 const MODE_CONFIGS = {
@@ -95,12 +95,44 @@ sndSwoosh.volume = 1;
 sndSwoosh.playbackRate = .85;
 const SWOOSH_LEAD_TIME   = 0;   // seconds before ripple that the swoosh plays
 
+const sndSpooks = ['Spook1.mp3','Spook2.mp3','Spook3.mp3','Spook4.mp3'].map(f => new Audio(f));
+const SPOOK_INTERVAL_MIN = 10;
+const SPOOK_INTERVAL_MAX = 20;
+
+const sndSpookSong = new Audio('SpookSong.mp3');
+sndSpookSong.loop   = true;
+sndSpookSong.volume = 0;
+const SPOOK_SONG_DELAY   = 45;  // seconds into run before song starts
+const SPOOK_SONG_FADE_IN = 5;   // seconds to fade in
+const SPOOK_SONG_MAX_VOL = 0.6;
+
+const sndWhispers = new Audio('Whisphers.mp3');
+sndWhispers.loop   = true;
+sndWhispers.volume = 0;
+const WHISPERS_MAX_VOL     = 0.8;
+const WHISPERS_FADE_IN_DUR = 2.0; // seconds to fade Whispers in on battery death
+const WHISPERS_FADE_OUT_DUR = 2.4; // seconds to fade Whispers out (matches ripple duration)
+const DEATH_FADE_OUT_DUR   = 1.5; // seconds to fade gameplay audio out on battery death
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
 // ══════════════════════════════════════════════════════════════════════════
-let footstepTimer = 0;           // countdown to next footstep
-let dropTimer     = 5 + Math.random() * 8; // first drop: 5–13 s in
+let footstepTimer    = 0;
+let dropTimer        = 5 + Math.random() * 8;
+let spookTimer       = SPOOK_INTERVAL_MIN + Math.random() * (SPOOK_INTERVAL_MAX - SPOOK_INTERVAL_MIN);
+let spookSongStarted = false;
+
+/** Smoothly ramp an Audio element's volume to targetVol over duration seconds. */
+function fadeAudio(audio, targetVol, duration, onComplete) {
+    const startVol = audio.volume;
+    const startTime = performance.now();
+    (function tick() {
+        const t = Math.min(1, (performance.now() - startTime) / (duration * 1000));
+        audio.volume = startVol + (targetVol - startVol) * t;
+        if (t < 1) requestAnimationFrame(tick);
+        else if (onComplete) onComplete();
+    })();
+}
 
 function updateAudio(dt, isMoving, speed) {
     // ── Footstep trigger ─────────────────────────────────────
@@ -114,7 +146,6 @@ function updateAudio(dt, isMoving, speed) {
             footstepTimer = BASE_STEP_INTERVAL * (MOVE_SPEED / speed);
         }
     } else {
-        // Reset so the first step fires promptly when movement resumes
         footstepTimer = 0;
     }
 
@@ -127,15 +158,37 @@ function updateAudio(dt, isMoving, speed) {
         sndDrop.play().catch(() => {});
         dropTimer = 1 + Math.random() * 15;
     }
+
+    // Spook stings
+    spookTimer -= dt;
+    if (spookTimer <= 0) {
+        const snd = sndSpooks[Math.floor(Math.random() * sndSpooks.length)];
+        snd.currentTime = 0;
+        snd.play().catch(() => {});
+        spookTimer = SPOOK_INTERVAL_MIN + Math.random() * (SPOOK_INTERVAL_MAX - SPOOK_INTERVAL_MIN);
+    }
+
+    // SpookSong: start after SPOOK_SONG_DELAY seconds into run, fade in
+    const runElapsed = (performance.now() - runStart) / 1000;
+    if (!spookSongStarted && runElapsed >= SPOOK_SONG_DELAY) {
+        spookSongStarted = true;
+        sndSpookSong.currentTime = 0;
+        sndSpookSong.play().catch(() => {});
+        fadeAudio(sndSpookSong, SPOOK_SONG_MAX_VOL, SPOOK_SONG_FADE_IN);
+    }
 }
 
 function stopAllAudio() {
-    sndFootsteps.forEach(s => { s.pause(); s.currentTime = 0; });
-    sndFlicker.pause();
-    sndFlicker.currentTime = 0;
+    sndFootsteps.forEach(s => { s.pause(); s.currentTime = 0; s.volume = 1; });
+    sndFlicker.pause(); sndFlicker.currentTime = 0;
     sndDrops.forEach(s => { s.pause(); s.currentTime = 0; });
-    footstepTimer = 0;
-    dropTimer = 5 + Math.random() * 8;
+    sndSpooks.forEach(s => { s.pause(); s.currentTime = 0; s.volume = 1; });
+    sndSpookSong.pause(); sndSpookSong.currentTime = 0; sndSpookSong.volume = 0;
+    sndWhispers.pause(); sndWhispers.currentTime = 0; sndWhispers.volume = 0;
+    footstepTimer    = 0;
+    dropTimer        = 5 + Math.random() * 8;
+    spookTimer       = SPOOK_INTERVAL_MIN + Math.random() * (SPOOK_INTERVAL_MAX - SPOOK_INTERVAL_MIN);
+    spookSongStarted = false;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -236,6 +289,40 @@ function generateSandstoneTexture() {
             [0,0,0,1,1,0,0,0,0,1,1,0,0,0],
             [0,0,0,1,1,0,0,0,0,1,1,0,0,0],
             [0,0,1,1,1,0,0,0,0,1,1,1,0,0]
+        ],
+        //sphinx
+        [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,1,1,0,0,0,0,0,0,0,0,0,0,0],
+            [0,1,0,0,0,0,0,0,0,1,1,1,1,0],
+            [1,0,0,0,0,0,0,0,1,0,0,0,0,1],
+            [1,0,0,1,1,1,1,1,1,0,0,0,0,1],
+            [0,1,1,0,0,0,0,0,1,0,0,0,1,0],
+            [1,0,0,0,1,0,0,0,1,1,0,1,1,0],
+            [1,0,0,0,0,1,1,1,0,0,0,0,0,1],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        ],
+        //wolfman
+        [
+            [0,0,1,0,0,1,0,0,0,0,0,0,0,0],
+            [0,0,1,1,0,1,1,0,0,0,0,0,0,0],
+            [0,0,1,1,0,1,1,0,0,0,0,0,0,0],
+            [0,0,1,1,1,1,1,0,0,0,0,0,0,0],
+            [0,1,0,0,0,0,1,1,1,0,0,0,0,0],
+            [1,0,0,0,0,0,0,0,0,1,1,1,0,0],
+            [1,0,0,0,0,0,0,1,1,1,1,0,0,0],
+            [0,1,0,0,0,0,1,0,0,0,0,1,1,1],
+            [0,0,1,0,0,1,0,0,0,1,1,1,1,1],
+            [0,0,1,0,0,1,0,0,0,0,0,0,1,0],
+            [1,1,1,0,0,1,1,1,1,1,0,0,1,0],
+            [0,0,0,0,0,0,0,0,0,0,1,0,1,0],
+            [0,0,0,0,0,0,1,1,0,0,1,0,1,0],
+            [0,0,0,0,0,0,1,0,1,0,0,1,1,0]
         ]
     ];
 
@@ -1300,7 +1387,16 @@ function gameLoop(now) {
     // Battery death: 5-second darkness then ripple back to menu
     if (player.battery <= 0 && batteryDeadTimer < 0) {
         batteryDeadTimer = BATTERY_DEAD_DELAY;
-        stopAllAudio();
+        // Fade out gameplay audio
+        sndFootsteps.forEach(s => fadeAudio(s, 0, DEATH_FADE_OUT_DUR));
+        sndDrops.forEach(s => fadeAudio(s, 0, DEATH_FADE_OUT_DUR));
+        sndSpooks.forEach(s => fadeAudio(s, 0, DEATH_FADE_OUT_DUR));
+        if (spookSongStarted) fadeAudio(sndSpookSong, 0, DEATH_FADE_OUT_DUR);
+        sndFlicker.pause(); sndFlicker.currentTime = 0;
+        // Fade in Whispers
+        sndWhispers.currentTime = 0;
+        sndWhispers.play().catch(() => {});
+        fadeAudio(sndWhispers, WHISPERS_MAX_VOL, WHISPERS_FADE_IN_DUR);
         if (document.pointerLockElement) document.exitPointerLock();
         hudEl.classList.add('hidden');
     }
@@ -1314,7 +1410,8 @@ function gameLoop(now) {
             batteryDeadTimer = -1;
             runActive = false;
             cancelAnimationFrame(animFrameId);
-            stopAllAudio();
+            // Fade Whispers out over the ripple animation duration
+            fadeAudio(sndWhispers, 0, WHISPERS_FADE_OUT_DUR, () => { sndWhispers.pause(); sndWhispers.currentTime = 0; });
             const elapsed2 = (performance.now() - lapStart) / 1000;
             const total2 = lapTimes.reduce((s, t) => s + (t || 0), 0) + elapsed2;
             if (selectedMode === 'level') {
