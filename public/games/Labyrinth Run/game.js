@@ -16,7 +16,7 @@ const STAMINA_MAX           = 100;
 const STAMINA_DRAIN         = 30;
 const STAMINA_REGEN_NORMAL  = 15;
 const STAMINA_REGEN_PENALTY = 5;
-const BOB_AMP               = 4;   // head-bob amplitude in pixels at normal walk speed
+const BOB_AMP               = 8;   // head-bob amplitude in pixels at normal walk speed
 const BOB_FREQ              = 8;   // bob cycles per world unit traveled
 const BOB_SMOOTH            = 10;  // amplitude lerp speed (attack/release)
 const BATTERY_MAX           = 150;
@@ -40,6 +40,51 @@ const CELL_SCALE            = 1; // each maze cell = 1 world unit (wide corridor
 const LAB_SIZES             = [11, 15, 19];
 const NUM_BATTERIES_PER_LAB = [1, 1, 2];
 const MAX_LABYRINTHS        = 3;
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 1.5 — Audio
+// ══════════════════════════════════════════════════════════════════════════
+
+const sndFootstep = new Audio('footstep.mp3');
+sndFootstep.volume = 0.5;
+
+const sndFlicker = new Audio('flashlightFlicker.mp3');
+sndFlicker.volume  = 0.45;
+
+const sndDrop = new Audio('drop.mp3');
+sndDrop.volume = 0.4;
+
+const BASE_STEP_INTERVAL = 0.45; // seconds between footsteps at MOVE_SPEED
+let footstepTimer = 0;           // countdown to next footstep
+let dropTimer     = 5 + Math.random() * 8; // first drop: 5–13 s in
+
+function updateAudio(dt, isMoving, speed) {
+    // ── Footstep trigger ─────────────────────────────────────
+    if (isMoving) {
+        footstepTimer -= dt;
+        if (footstepTimer <= 0) {
+            sndFootstep.currentTime = 0;
+            sndFootstep.play().catch(() => {});
+            footstepTimer = BASE_STEP_INTERVAL * (MOVE_SPEED / speed);
+        }
+    } else {
+        // Reset so the first step fires promptly when movement resumes
+        footstepTimer = 0;
+    }
+
+    // ── Ambient drip ─────────────────────────────────────────
+    dropTimer -= dt;
+    if (dropTimer <= 0) {
+        sndDrop.currentTime = 0;
+        sndDrop.play().catch(() => {});
+        dropTimer = 5 + Math.random() * 15;
+    }
+}
+
+function stopAllAudio() {
+    footstepTimer = 0;
+    dropTimer = 5 + Math.random() * 8;
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 2 — Texture Generation
@@ -681,6 +726,8 @@ function updateFlicker(dt, batteryPct) {
         if (Math.random() < chance) {
             flickerMult  = Math.random() < 0.25 ? 0 : Math.random() * 0.2;
             flickerTimer = 0.04 + Math.random() * 0.13; // 40–170 ms flicker
+            sndFlicker.currentTime = 0;
+            sndFlicker.play().catch(() => {});
         }
     }
 }
@@ -884,6 +931,8 @@ function updatePlayer(dt, grid, batteries) {
     bobAmp += (targetBobAmp - bobAmp) * Math.min(1, BOB_SMOOTH * dt);
     if (isMoving) bobPhase += speed * BOB_FREQ * dt;
     bobOffset = bobAmp * Math.sin(bobPhase);
+
+    updateAudio(dt, isMoving, speed);
 
     // ── Battery drain ────────────────────────────────────────
     player.battery = Math.max(0, player.battery - BATTERY_DRAIN * dt);
@@ -1189,6 +1238,7 @@ function gameLoop(now) {
             batteryDeadTimer = -1;
             runActive = false;
             cancelAnimationFrame(animFrameId);
+            stopAllAudio();
             const elapsed2 = (performance.now() - lapStart) / 1000;
             const partialTimes = [...lapTimes];
             playRippleTransition(showMenu);
@@ -1207,6 +1257,7 @@ function advanceLab(lapTime) {
         // Run complete
         runActive = false;
         cancelAnimationFrame(animFrameId);
+        stopAllAudio();
         const total = lapTimes.reduce((s, t) => s + (t || 0), 0);
         saveStats({ completed: true, quit: false, lap_times: lapTimes, total_time: total });
         showSummary(lapTimes, false);
@@ -1293,6 +1344,7 @@ function playRippleTransition(onComplete) {
 function onEscapeQuit() {
     runActive = false;
     cancelAnimationFrame(animFrameId);
+    stopAllAudio();
     const elapsed = (performance.now() - lapStart) / 1000;
     // Current lab time is partial — leave as null (abandoned)
     const partialTimes = [...lapTimes];
