@@ -49,9 +49,9 @@ const MODE_CONFIGS = {
         hard:     { labSizes: [19,23,27], batteries: [2,2,2], batMax: 125, batDrain: 1.75, maxLabs: 3 },
     },
     level: {
-        easy:     { startSize: 9,  sizeInc: 3, batMax: 200, batDrain: 1.5,  startBats: 1, batInc: 2, batIncEvery: 2 },
-        moderate: { startSize: 11, sizeInc: 4, batMax: 175, batDrain: 1.75, startBats: 1, batInc: 1, batIncEvery: 2 },
-        hard:     { startSize: 10, sizeInc: 6, batMax: 150, batDrain: 2.0,  startBats: 2, batInc: 1, batIncEvery: 3 },
+        easy:     { startSize: 9,  sizeInc: 3, batMax: 200, batDrain: 1.5,  startBats: 1, batInc: 1, batIncEvery: 1 },
+        moderate: { startSize: 11, sizeInc: 4, batMax: 175, batDrain: 1.75, startBats: 1, batInc: 2, batIncEvery: 2 },
+        hard:     { startSize: 10, sizeInc: 5, batMax: 150, batDrain: 1.75,  startBats: 2, batInc: 2, batIncEvery: 3 },
     },
 };
 
