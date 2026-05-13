@@ -29,7 +29,7 @@ const SIDE_SHADE_MULT        = 0.85; // east/west faces are this much darker tha
 // ── Flashlight deterioration rates (tune each axis independently) ──────────
 const FLICKER_CHANCE_BASE  = 0.02;  // flicker probability/sec at 100% battery
 const FLICKER_CHANCE_SCALE = 0.48;  // additional probability/sec added at 0% battery
-const RADIUS_DRAIN_CURVE   = .75;   // exponent on battery% for beam radius (1=linear, 2=drops faster early)
+const RADIUS_DRAIN_CURVE   = .55;   // exponent on battery% for beam radius (1=linear, 2=drops faster early)
 const REACH_DRAIN_CURVE    = 0.45;   // exponent on battery% for distance reach (higher, drops faster. Always bottoms out at FLOOR)
 const REACH_FLOOR          = 0.70;  // minimum reach at 0% battery (fraction of FLASHLIGHT_REACH)
 const BRIGHTNESS_DRAIN     = 0.01; // how much darker the outer halo edge gets at 0% battery
@@ -110,9 +110,9 @@ const sndWhispers = new Audio('Whisphers.mp3');
 sndWhispers.loop   = true;
 sndWhispers.volume = 0;
 const WHISPERS_MAX_VOL     = 0.75;
-const WHISPERS_FADE_IN_DUR = 2.0; // seconds to fade Whispers in on battery death
+const WHISPERS_FADE_IN_DUR = 5.0; // seconds to fade Whispers in on battery death
 const WHISPERS_FADE_OUT_DUR = 2.4; // seconds to fade Whispers out (matches ripple duration)
-const DEATH_FADE_OUT_DUR   = 1; // seconds to fade gameplay audio out on battery death
+const DEATH_FADE_OUT_DUR   = 4; // seconds to fade gameplay audio out on battery death
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
@@ -314,15 +314,15 @@ function generateSandstoneTexture() {
             [0,0,1,1,0,1,1,0,0,0,0,0,0,0],
             [0,0,1,1,1,1,1,0,0,0,0,0,0,0],
             [0,1,0,0,0,0,1,1,1,0,0,0,0,0],
-            [1,0,0,0,0,0,0,0,0,1,1,1,0,0],
-            [1,0,0,0,0,0,0,1,1,1,1,0,0,0],
+            [1,0,1,1,1,1,0,0,0,1,1,1,0,0],
+            [1,0,1,1,0,0,0,1,1,1,1,0,0,0],
             [0,1,0,0,0,0,1,0,0,0,0,1,1,1],
             [0,0,1,0,0,1,0,0,0,1,1,1,1,1],
             [0,0,1,0,0,1,0,0,0,0,0,0,1,0],
             [1,1,1,0,0,1,1,1,1,1,0,0,1,0],
-            [0,0,0,0,0,0,0,0,0,0,1,0,1,0],
-            [0,0,0,0,0,0,1,1,0,0,1,0,1,0],
-            [0,0,0,0,0,0,1,0,1,0,0,1,1,0]
+            [1,0,0,0,0,0,0,0,0,0,1,0,1,0],
+            [1,0,0,0,0,0,1,1,0,0,1,0,1,0],
+            [1,1,1,1,1,1,1,0,1,0,0,1,1,0]
         ]
     ];
 
