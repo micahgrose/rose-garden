@@ -741,6 +741,12 @@ html, body {
     color: var(--gold-bright);
 }
 
+.diffBtn.diffDisabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 /* ── Health Bar ─────────────────────────────────────────────── */
 #healthBarGroup {
     display: flex;

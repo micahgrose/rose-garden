@@ -57,7 +57,7 @@ const MODE_CONFIGS = {
         hard:     { startSize: 10, sizeInc: 5, batMax: 150, batDrain: 1.75,  startBats: 2, batInc: 2, batIncEvery: 3 },
     },
     'tomb-robber': {
-        easy:     { labSizes: [21, 51], batteries: [3, 7], batMax: 500, batDrain: 1.0, maxLabs: 2 },
+        easy:     { labSizes: [21, 51], batteries: [1, 5], batMax: 500, batDrain: 1.0, maxLabs: 2 },
         moderate: { labSizes: [21, 51], batteries: [3, 7], batMax: 500, batDrain: 1.0, maxLabs: 2 },
         hard:     { labSizes: [21, 51], batteries: [3, 7], batMax: 500, batDrain: 1.0, maxLabs: 2 },
     },
@@ -876,8 +876,14 @@ function renderScene(grid, player, batteries) {
 
         // Wall height on screen
         const lineH  = Math.min(H, Math.floor(H / Math.max(0.001, perpWallDist)));
-        const drawStart = Math.max(0, horizon - (lineH >> 1));
-        const drawEnd   = Math.min(H - 1, horizon + (lineH >> 1));
+        // Cheat: slide very-close strips downward so the phantom-branch at the top disappears
+        const CLOSE_SHIFT_DIST = 0.38;
+        const closeShift = perpWallDist < CLOSE_SHIFT_DIST
+            ? Math.floor((1.0 - perpWallDist / CLOSE_SHIFT_DIST) ** 1.5 * H * 0.28)
+            : 0;
+        const virtualCenter = horizon + closeShift;
+        const drawStart = Math.max(0, virtualCenter - (lineH >> 1));
+        const drawEnd   = Math.min(H - 1, virtualCenter + (lineH >> 1));
 
         // Where on the wall the ray hits (normalize to [0,1) within cell)
         let wallX;
@@ -909,7 +915,7 @@ function renderScene(grid, player, batteries) {
 
         // Draw wall column pixel by pixel
         const step = TEXTURE_SIZE / lineH;
-        let texPos = (drawStart - horizon + (lineH >> 1)) * step;
+        let texPos = (drawStart - virtualCenter + (lineH >> 1)) * step;
 
         for (let y = drawStart; y <= drawEnd; y++) {
             const texY = Math.floor(texPos) & (TEXTURE_SIZE - 1);
@@ -936,9 +942,7 @@ function renderScene(grid, player, batteries) {
             // Global darkness + distance + side darkening
             // Fringe uses wall darkMult so it matches adjacent sandstone
             const pixDark = (isDoor && !isFringe) ? darkMult : 0.25;
-            // Near-fog: fade strips to black when pressed against a wall to suppress phantom-branch artifact
-            const nearFog = perpWallDist < 0.45 ? (perpWallDist / 0.45) ** 2 : 1.0;
-            const bright = distFactor * sideMult * pixDark * nearFog;
+            const bright = distFactor * sideMult * pixDark;
             r = Math.floor(r * bright);
             g = Math.floor(g * bright);
             b = Math.floor(b * bright);
@@ -1590,17 +1594,24 @@ enterBtn.addEventListener('click', startRun);
 playAgainBtn.addEventListener('click', startRun);
 menuBtn.addEventListener('click', showMenu);
 
+function syncDiffButtons() {
+    const locked = selectedMode === 'tomb-robber';
+    diffBtns.forEach(b => b.classList.toggle('diffDisabled', locked));
+}
+
 modeCards.forEach(card => {
     card.addEventListener('click', () => {
         if (card.classList.contains('modeCardLocked')) return;
         selectedMode = card.dataset.mode;
         modeCards.forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
+        syncDiffButtons();
     });
 });
 
 diffBtns.forEach(btn => {
     btn.addEventListener('click', () => {
+        if (selectedMode === 'tomb-robber') return;
         selectedDiff = btn.dataset.diff;
         diffBtns.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
@@ -1964,6 +1975,7 @@ resizeCanvas();
     selectedDiff = diffs[Math.floor(Math.random() * diffs.length)];
     modeCards.forEach(c => c.classList.toggle('selected', c.dataset.mode === selectedMode));
     diffBtns.forEach(b => b.classList.toggle('selected', b.dataset.diff === selectedDiff));
+    syncDiffButtons();
 })();
 
 showMenu();
