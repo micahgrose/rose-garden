@@ -1718,8 +1718,43 @@ function isWall(grid, px, py, margin) {
         const mx = Math.floor(cx / CELL_SCALE), my = Math.floor(cy / CELL_SCALE);
         if (mx < 0 || mx >= w || my < 0 || my >= h) return true;
         if (grid[my][mx] === 1) return true;
+        // Squeeze virtual slabs: corner inside a closing wall panel counts as solid
+        const sq = squeezeGrid[mx + ',' + my];
+        if (sq) {
+            const depth = sq.progress * 0.5 * CELL_SCALE;
+            if (sq.axis === 'y') {
+                if (cx < mx * CELL_SCALE + depth || cx > (mx + 1) * CELL_SCALE - depth) return true;
+            } else {
+                if (cy < my * CELL_SCALE + depth || cy > (my + 1) * CELL_SCALE - depth) return true;
+            }
+        }
     }
     return false;
+}
+
+// After squeeze timers update, push the player out of any slab that closed in on them.
+// This makes the wall carry the player toward center rather than phasing through them.
+function pushPlayerFromSqueezeWalls() {
+    const pcx = Math.floor(player.x / CELL_SCALE);
+    const pcy = Math.floor(player.y / CELL_SCALE);
+    for (const trap of squeezeTraps) {
+        if (trap.state === 'idle') continue;
+        const progress = trap.state === 'closed' ? 1 : Math.min(1, trap.timer / SQUEEZE_CLOSE_DUR);
+        if (progress <= 0) continue;
+        if (!trap.cells.some(c => c.x === pcx && c.y === pcy)) continue;
+        const depth = progress * 0.5 * CELL_SCALE;
+        if (trap.axis === 'y') {
+            const leftWall  = pcx * CELL_SCALE + depth;
+            const rightWall = (pcx + 1) * CELL_SCALE - depth;
+            if (player.x < leftWall)  player.x = leftWall;
+            if (player.x > rightWall) player.x = rightWall;
+        } else {
+            const topWall    = pcy * CELL_SCALE + depth;
+            const bottomWall = (pcy + 1) * CELL_SCALE - depth;
+            if (player.y < topWall)    player.y = topWall;
+            if (player.y > bottomWall) player.y = bottomWall;
+        }
+    }
 }
 
 /**
@@ -2164,7 +2199,10 @@ function gameLoop(now) {
 
     // Update player
     updatePlayer(dt, currentGrid, currentBats);
-    if (selectedMode === 'tomb-robber') updateSqueezeTraps(dt);
+    if (selectedMode === 'tomb-robber') {
+        updateSqueezeTraps(dt);
+        pushPlayerFromSqueezeWalls();
+    }
 
     const batPct = player.battery / runConfig.batMax;
 
