@@ -817,7 +817,22 @@ function buildTombRobberEntry(mazeSize) {
 // ══════════════════════════════════════════════════════════════════════════
 
 function initSqueezeTraps(arr) {
-    squeezeTraps = (arr || []).map(cells => ({ cells, state: 'idle', timer: 0 }));
+    squeezeTraps = (arr || []).map(cells => {
+        // If all cells share the same x, corridor runs vertically (walls squeeze in x-direction)
+        const axis = cells.every(c => c.x === cells[0].x) ? 'y' : 'x';
+        return { cells, state: 'idle', timer: 0, axis };
+    });
+    squeezeGrid = {};
+}
+
+function rebuildSqueezeGrid() {
+    squeezeGrid = {};
+    for (const trap of squeezeTraps) {
+        if (trap.state === 'idle') continue;
+        const progress = trap.state === 'closed' ? 1 : Math.min(1, trap.timer / SQUEEZE_CLOSE_DUR);
+        if (progress <= 0) continue;
+        for (const c of trap.cells) squeezeGrid[c.x + ',' + c.y] = { progress, axis: trap.axis };
+    }
 }
 
 // Returns candidate 3-cell groups from straight, 1-wide corridors in the maze
@@ -876,36 +891,7 @@ function updateSqueezeTraps(dt) {
             }
         }
     }
-}
-
-function drawSqueezeOverlay() {
-    let anyActive = false;
-    for (const trap of squeezeTraps) {
-        if (trap.state !== 'idle') { anyActive = true; break; }
-    }
-    if (!anyActive) return;
-    const W = canvas.width, H = canvas.height;
-    for (const trap of squeezeTraps) {
-        if (trap.state === 'idle') continue;
-        const progress = trap.state === 'closed' ? 1 : trap.timer / SQUEEZE_CLOSE_DUR;
-        const ease = progress * progress;
-        const panelW = ease * SQUEEZE_MAX_PANEL * W;
-        if (panelW < 1) continue;
-        ctx.save();
-        ctx.fillStyle = `rgba(52, 46, 38, ${Math.min(1, ease * 1.3)})`;
-        ctx.fillRect(0, 0, panelW, H);
-        ctx.fillRect(W - panelW, 0, panelW, H);
-        // Stone crack lines for texture
-        ctx.strokeStyle = `rgba(25, 20, 15, ${ease * 0.55})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let ly = 24; ly < H; ly += 36) {
-            ctx.moveTo(0, ly); ctx.lineTo(panelW, ly);
-            ctx.moveTo(W, ly); ctx.lineTo(W - panelW, ly);
-        }
-        ctx.stroke();
-        ctx.restore();
-    }
+    rebuildSqueezeGrid(); // keep lookup fresh for this frame's render
 }
 
 // Hardcoded demo room: narrow corridor with one squeeze trap, door at top
@@ -1078,6 +1064,7 @@ function renderScene(grid, player, batteries) {
 
         // DDA
         let hit = 0, side = 0, cellVal = 0;
+        let squeezeHit = false, squeezePerpDist = 0;
         const gridH = grid.length, gridW = grid[0].length;
         for (let i = 0; i < 64; i++) {
             if (sideDistX < sideDistY) {
@@ -1090,13 +1077,38 @@ function renderScene(grid, player, batteries) {
                 side       = 1;
             }
             if (mapX < 0 || mapX >= gridW || mapY < 0 || mapY >= gridH) { hit = 1; cellVal = 1; break; }
+
+            // Squeeze: inject virtual wall planes inside open corridor cells
+            const sq = squeezeGrid[mapX + ',' + mapY];
+            if (sq) {
+                const depth = sq.progress * 0.45 * CELL_SCALE;
+                let sqD = -1, sqS = -1;
+                if (sq.axis === 'y' && Math.abs(rayDirX) > 1e-10) {
+                    // Vertical corridor — squeeze walls are vertical planes moving in x
+                    const d1 = (mapX * CELL_SCALE + depth - player.x) / rayDirX;
+                    const d2 = (mapX * CELL_SCALE + CELL_SCALE - depth - player.x) / rayDirX;
+                    if (d1 > 1e-4) { sqD = d1; sqS = 0; }
+                    if (d2 > 1e-4 && (sqD < 0 || d2 < sqD)) { sqD = d2; sqS = 0; }
+                } else if (sq.axis === 'x' && Math.abs(rayDirY) > 1e-10) {
+                    // Horizontal corridor — squeeze walls are horizontal planes moving in y
+                    const d1 = (mapY * CELL_SCALE + depth - player.y) / rayDirY;
+                    const d2 = (mapY * CELL_SCALE + CELL_SCALE - depth - player.y) / rayDirY;
+                    if (d1 > 1e-4) { sqD = d1; sqS = 1; }
+                    if (d2 > 1e-4 && (sqD < 0 || d2 < sqD)) { sqD = d2; sqS = 1; }
+                }
+                if (sqD > 1e-4) {
+                    hit = 1; cellVal = 1; squeezeHit = true; squeezePerpDist = sqD; side = sqS;
+                    break;
+                }
+            }
+
             if (grid[mapY][mapX] !== 0) { hit = 1; cellVal = grid[mapY][mapX]; break; }
         }
 
-        // Perpendicular wall distance
-        const perpWallDist = side === 0
-            ? (sideDistX - deltaDistX)
-            : (sideDistY - deltaDistY);
+        // Perpendicular wall distance — use squeeze intercept when applicable
+        const perpWallDist = squeezeHit
+            ? squeezePerpDist
+            : (side === 0 ? (sideDistX - deltaDistX) : (sideDistY - deltaDistY));
 
         zBuffer[screenX] = perpWallDist;
 
@@ -2041,7 +2053,8 @@ let currentBats  = [];
 let doorX = 0, doorY = 0;
 let ladderX = -1, ladderY = -1;
 let ladderCutsceneActive = false;
-let squeezeTraps = []; // [{ cells:[{x,y}], state:'idle'|'closing'|'closed', timer:0 }]
+let squeezeTraps = []; // [{ cells:[{x,y}], state:'idle'|'closing'|'closed', timer:0, axis:'x'|'y' }]
+let squeezeGrid  = {}; // key: 'gx,gy' → { progress, axis } — rebuilt every frame for DDA lookup
 let lastFrameTime = 0;
 let animFrameId   = 0;
 let runActive        = false;
@@ -2126,7 +2139,6 @@ function gameLoop(now) {
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
-    drawSqueezeOverlay();
 
     // HUD
     updateHUD(currentLab + 1, elapsed);
