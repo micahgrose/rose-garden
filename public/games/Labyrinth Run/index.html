@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" type="image/png" href="Images/LabyrinthIcon.png">
+    <link rel="icon" type="image/png" href="/images/LabyrinthIcon.png">
 </head>
 <body>
 
@@ -43,13 +43,16 @@
                 <li><span class="key">W A S D</span> <span class="desc">Move</span></li>
                 <li><span class="key">MOUSE</span> <span class="desc">Look around</span></li>
                 <li><span class="key">SHIFT</span> <span class="desc">Sprint (drains stamina)</span></li>
-                <li><span class="key">E</span> <span class="desc">Pick up battery</span></li>
+                <li><span class="key">E</span> <span class="desc">Pick up item</span></li>
+                <li><span class="key">1 – 5</span> <span class="desc">Select hotbar slot</span></li>
+                <li><span class="key">LMB</span> <span class="desc">Use selected item</span></li>
                 <li><span class="key">ESC</span> <span class="desc">Quit run</span></li>
                 <li><span class="key">CLICK</span> <span class="desc">Lock mouse (required to look)</span></li>
             </ul>
             <div id="controlsNotes">
                 <p>Find the glowing door to advance to the next labyrinth.</p>
-                <p>Your flashlight battery drains over time — find replacements hidden in the maze.</p>
+                <p>Your flashlight battery drains over time — pick up replacements and use them from the hotbar.</p>
+                <p>Toggle the flashlight off (slot 1, LMB) to conserve battery — movement slows in the dark.</p>
                 <p>Sprinting depletes stamina. Running out fully triggers a slow recovery penalty.</p>
             </div>
             <button id="controlsBackBtn" class="btn">&#8592; BACK</button>
@@ -68,8 +71,9 @@
                 <div class="modeCard" data-mode="level">
                     <div class="modeCardName">LEVEL</div>
                 </div>
-                <div class="modeCard modeCardLocked" data-mode="treasure">
-                    <div class="modeCardName">TREASURE</div>
+                <div class="modeCard modeCardLocked" data-mode="tomb-robber">
+                    <div class="modeCardName">TOMB ROBBER</div>
+                    <div class="modeCardSoon">COMING SOON</div>
                 </div>
             </div>
             <div id="diffButtons">
@@ -92,7 +96,14 @@
         <div id="hudTopCenter">
             <div id="timerDisplay">00:00.0</div>
         </div>
-        <div id="hudTopRight"></div>
+        <div id="hudTopRight">
+            <div class="hudBarGroup" id="healthBarGroup">
+                <div class="hudBarLabel">HEALTH</div>
+                <div class="hudBarOuter">
+                    <div class="hudBarFill" id="healthBar"></div>
+                </div>
+            </div>
+        </div>
         <div id="hudBottomLeft">
             <div class="hudBarGroup">
                 <div class="hudBarLabel">STAMINA</div>
@@ -109,8 +120,20 @@
                 </div>
             </div>
         </div>
-        <div id="batteryHint">Press E near battery to pick up</div>
+        <div id="batteryHint">E: pick up &nbsp;·&nbsp; LMB: use item</div>
     </div>
+
+    <!-- ── HOTBAR ───────────────────────────────────────────── -->
+    <div id="hotbar" class="hidden">
+        <div class="hotbarSlot" id="hslot0"><div class="slotNum">1</div><div class="slotBody" id="slotBody0"></div></div>
+        <div class="hotbarSlot" id="hslot1"><div class="slotNum">2</div><div class="slotBody" id="slotBody1"></div></div>
+        <div class="hotbarSlot" id="hslot2"><div class="slotNum">3</div><div class="slotBody" id="slotBody2"></div></div>
+        <div class="hotbarSlot" id="hslot3"><div class="slotNum">4</div><div class="slotBody" id="slotBody3"></div></div>
+        <div class="hotbarSlot" id="hslot4"><div class="slotNum">5</div><div class="slotBody" id="slotBody4"></div></div>
+    </div>
+
+    <!-- ── DEATH SCREEN ─────────────────────────────────────── -->
+    <div id="deathScreen" class="hidden"></div>
 
     <!-- ── SUMMARY SCREEN ───────────────────────────────────── -->
     <div id="summaryScreen" class="hidden">

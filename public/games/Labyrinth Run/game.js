@@ -21,7 +21,7 @@ const BOB_FREQ              = 8;   // bob cycles per world unit traveled
 const BOB_SMOOTH            = 10;  // amplitude lerp speed (attack/release)
 const BATTERY_MAX           = 150;
 const BATTERY_DRAIN         = 1.5;
-const BATTERY_PICKUP_AMOUNT = 40;
+const BATTERY_PICKUP_AMOUNT = 50;
 const FLASHLIGHT_RADIUS_FULL = 0.2;
 const FLASHLIGHT_REACH       = 5;    // world units before walls fade to black (at full battery)
 const SIDE_SHADE_MULT        = 0.85; // east/west faces are this much darker than north/south faces
@@ -42,6 +42,7 @@ const NUM_BATTERIES_PER_LAB = [1, 1, 2];
 const MAX_LABYRINTHS        = 3;
 
 const BATTERY_DEAD_DELAY = 10; // seconds of darkness after battery dies before ripple
+const HEALTH_MAX         = 100;
 
 // ── Mode / difficulty configs ───────────────────────────────────────────────
 const MODE_CONFIGS = {
@@ -55,6 +56,11 @@ const MODE_CONFIGS = {
         moderate: { startSize: 11, sizeInc: 4, batMax: 175, batDrain: 1.75, startBats: 1, batInc: 2, batIncEvery: 2 },
         hard:     { startSize: 10, sizeInc: 5, batMax: 150, batDrain: 1.75,  startBats: 2, batInc: 2, batIncEvery: 3 },
     },
+    'tomb-robber': {
+        easy:     { labSizes: [21, 51], batteries: [3, 7], batMax: 500, batDrain: 1.0, maxLabs: 2 },
+        moderate: { labSizes: [21, 51], batteries: [3, 7], batMax: 500, batDrain: 1.0, maxLabs: 2 },
+        hard:     { labSizes: [21, 51], batteries: [3, 7], batMax: 500, batDrain: 1.0, maxLabs: 2 },
+    },
 };
 
 let selectedMode = 'speed';
@@ -66,13 +72,13 @@ function applyRunConfig() {
 }
 
 function getLabSize(labIndex) {
-    if (selectedMode === 'speed') return runConfig.labSizes[labIndex];
+    if (selectedMode === 'speed' || selectedMode === 'tomb-robber') return runConfig.labSizes[labIndex];
     const s = runConfig.startSize + labIndex * runConfig.sizeInc;
     return s % 2 === 0 ? s + 1 : s;
 }
 
 function getLabBatteries(labIndex) {
-    if (selectedMode === 'speed') return runConfig.batteries[labIndex];
+    if (selectedMode === 'speed' || selectedMode === 'tomb-robber') return runConfig.batteries[labIndex];
     return runConfig.startBats + Math.floor(labIndex / runConfig.batIncEvery) * runConfig.batInc;
 }
 
@@ -93,7 +99,7 @@ const sndDrops = [new Audio('drop1.mp3'), new Audio('drop2.mp3'), new Audio('dro
 const sndSwoosh = new Audio('swoosh.mp3');
 sndSwoosh.volume = 1;   
 sndSwoosh.playbackRate = .85;
-const SWOOSH_LEAD_TIME   = .5;   // seconds before ripple that the swoosh plays
+const SWOOSH_LEAD_TIME   = .1;   // seconds before ripple that the swoosh plays
 
 const sndSpooks = ['Spook1.mp3','Spook2.mp3','Spook3.mp3','Spook4.mp3'].map(f => new Audio(f));
 const SPOOK_INTERVAL_MIN = 15;
@@ -110,9 +116,9 @@ const sndWhispers = new Audio('Whisphers.mp3');
 sndWhispers.loop   = true;
 sndWhispers.volume = 0;
 const WHISPERS_MAX_VOL     = 0.75;
-const WHISPERS_FADE_IN_DUR = 5.0; // seconds to fade Whispers in on battery death
+const WHISPERS_FADE_IN_DUR = 8.0; // seconds to fade Whispers in on battery death
 const WHISPERS_FADE_OUT_DUR = 2.4; // seconds to fade Whispers out (matches ripple duration)
-const DEATH_FADE_OUT_DUR   = 4; // seconds to fade gameplay audio out on battery death
+const DEATH_FADE_OUT_DUR   = 8; // seconds to fade gameplay audio out on battery death
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1.5 — Audio
@@ -121,6 +127,12 @@ let footstepTimer    = 0;
 let dropTimer        = 5 + Math.random() * 8;
 let spookTimer       = SPOOK_INTERVAL_MIN + Math.random() * (SPOOK_INTERVAL_MAX - SPOOK_INTERVAL_MIN);
 let spookSongStarted = false;
+
+// ── Hotbar & flashlight ───────────────────────────────────────
+let flashlightOn = true;
+let selectedSlot  = 0;
+const hotbar      = new Array(5).fill(null);
+let markers       = []; // placed wall markers: { wx, wy }
 
 /** Smoothly ramp an Audio element's volume to targetVol over duration seconds. */
 function fadeAudio(audio, targetVol, duration, onComplete) {
@@ -189,6 +201,124 @@ function stopAllAudio() {
     dropTimer        = 5 + Math.random() * 8;
     spookTimer       = SPOOK_INTERVAL_MIN + Math.random() * (SPOOK_INTERVAL_MAX - SPOOK_INTERVAL_MIN);
     spookSongStarted = false;
+}
+
+// ── Hotbar functions ──────────────────────────────────────────────────────
+
+function initHotbar() {
+    for (let i = 0; i < hotbar.length; i++) hotbar[i] = null;
+    hotbar[0] = { type: 'flashlight' };
+    if (selectedMode === 'tomb-robber') hotbar[1] = { type: 'marker', count: 5 };
+    selectedSlot = 0;
+    flashlightOn = true;
+    markers      = [];
+    updateHotbarUI();
+}
+
+function updateHotbarUI() {
+    for (let i = 0; i < 5; i++) {
+        const slotEl = document.getElementById('hslot' + i);
+        const bodyEl = document.getElementById('slotBody' + i);
+        const item   = hotbar[i];
+        slotEl.classList.toggle('hotbarActive', i === selectedSlot);
+        slotEl.classList.toggle('hotbarEmpty',  !item);
+        slotEl.classList.toggle('slotOff', item && item.type === 'flashlight' && !flashlightOn);
+        if (!item) { bodyEl.innerHTML = ''; continue; }
+        if (item.type === 'flashlight') {
+            bodyEl.innerHTML = `<span class="slotType">LIGHT</span><span class="slotStatus">${flashlightOn ? 'ON' : 'OFF'}</span>`;
+        } else if (item.type === 'battery') {
+            bodyEl.innerHTML = '<span class="slotType">BAT</span>';
+        } else if (item.type === 'marker') {
+            bodyEl.innerHTML = `<span class="slotType">FLAG</span><span class="slotStatus">${item.count}x</span>`;
+        }
+    }
+}
+
+function nextOpenSlot() {
+    for (let i = 1; i < 5; i++) { if (!hotbar[i]) return i; }
+    return -1;
+}
+
+function tryPickup(batteries) {
+    for (const bat of batteries) {
+        if (!bat.active) continue;
+        const bx = (bat.x + 0.5) * CELL_SCALE, by = (bat.y + 0.5) * CELL_SCALE;
+        if (Math.sqrt((bx - player.x) ** 2 + (by - player.y) ** 2) <= 1.2 * CELL_SCALE) {
+            const slot = nextOpenSlot();
+            if (slot < 0) return;
+            bat.active = false;
+            hotbar[slot] = { type: 'battery' };
+            updateHotbarUI();
+            return;
+        }
+    }
+    for (let i = markers.length - 1; i >= 0; i--) {
+        const m = markers[i];
+        if (Math.sqrt((m.wx - player.x) ** 2 + (m.wy - player.y) ** 2) <= 1.0 * CELL_SCALE) {
+            markers.splice(i, 1);
+            const ms = hotbar.findIndex(s => s && s.type === 'marker');
+            if (ms >= 0) { hotbar[ms].count++; }
+            else { const slot = nextOpenSlot(); if (slot >= 0) hotbar[slot] = { type: 'marker', count: 1 }; }
+            updateHotbarUI();
+            return;
+        }
+    }
+}
+
+function useSelectedSlot() {
+    const item = hotbar[selectedSlot];
+    if (!item) return;
+    if (item.type === 'flashlight') {
+        flashlightOn = !flashlightOn;
+        updateHotbarUI();
+    } else if (item.type === 'battery') {
+        player.battery = Math.min(runConfig.batMax, player.battery + BATTERY_PICKUP_AMOUNT);
+        hotbar[selectedSlot] = null;
+        updateHotbarUI();
+    } else if (item.type === 'marker') {
+        placeMarker(item);
+    }
+}
+
+function castRayForward() {
+    const gH = currentGrid.length, gW = currentGrid[0].length;
+    let mapX = Math.floor(player.x / CELL_SCALE);
+    let mapY = Math.floor(player.y / CELL_SCALE);
+    const rx = player.dirX, ry = player.dirY;
+    const ddx = Math.abs(rx) < 1e-10 ? 1e30 : Math.abs(CELL_SCALE / rx);
+    const ddy = Math.abs(ry) < 1e-10 ? 1e30 : Math.abs(CELL_SCALE / ry);
+    let sx, sy, sdx, sdy, side;
+    if (rx < 0) { sx = -1; sdx = (player.x - mapX * CELL_SCALE) * Math.abs(1 / rx); }
+    else        { sx =  1; sdx = ((mapX + 1) * CELL_SCALE - player.x) * Math.abs(1 / rx); }
+    if (ry < 0) { sy = -1; sdy = (player.y - mapY * CELL_SCALE) * Math.abs(1 / ry); }
+    else        { sy =  1; sdy = ((mapY + 1) * CELL_SCALE - player.y) * Math.abs(1 / ry); }
+    for (let i = 0; i < 32; i++) {
+        if (sdx < sdy) { sdx += ddx; mapX += sx; side = 0; }
+        else           { sdy += ddy; mapY += sy; side = 1; }
+        if (mapX < 0 || mapX >= gW || mapY < 0 || mapY >= gH) return null;
+        if (currentGrid[mapY][mapX] !== 0) {
+            const perp = side === 0 ? (sdx - ddx) : (sdy - ddy);
+            const INSET = 0.08 * CELL_SCALE;
+            const wx = side === 0
+                ? (sx > 0 ? mapX : mapX + 1) * CELL_SCALE - sx * INSET
+                : player.x + perp * rx;
+            const wy = side === 1
+                ? (sy > 0 ? mapY : mapY + 1) * CELL_SCALE - sy * INSET
+                : player.y + perp * ry;
+            return { wx, wy };
+        }
+    }
+    return null;
+}
+
+function placeMarker(item) {
+    if (item.count <= 0) return;
+    const hit = castRayForward();
+    if (!hit) return;
+    item.count--;
+    if (item.count <= 0) hotbar[selectedSlot] = null;
+    markers.push({ wx: hit.wx, wy: hit.wy });
+    updateHotbarUI();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -417,9 +547,53 @@ function generateDoorTexture() {
     return img;
 }
 
+/** Dark polished sandstone floor — subtle tile grid, warm dark tones */
+function generateFloorTexture() {
+    const size = TEXTURE_SIZE;
+    const img  = new ImageData(size, size);
+    const d    = img.data;
+    const BASE_R = 72, BASE_G = 54, BASE_B = 33;
+    const TILE   = 32;
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            const isTile = (x % TILE === 0 || y % TILE === 0);
+            const noise  = (Math.random() - 0.5) * 14;
+            const r = Math.min(255, Math.max(0, BASE_R + noise - (isTile ? 16 : 0)));
+            const g = Math.min(255, Math.max(0, BASE_G + noise * 0.75 - (isTile ? 12 : 0)));
+            const b = Math.min(255, Math.max(0, BASE_B + noise * 0.5  - (isTile ? 7  : 0)));
+            const idx = (y * size + x) * 4;
+            d[idx] = r; d[idx+1] = g; d[idx+2] = b; d[idx+3] = 255;
+        }
+    }
+    return img;
+}
+
+/** Near-black stone ceiling — very subtle texture */
+function generateCeilingTexture() {
+    const size = TEXTURE_SIZE;
+    const img  = new ImageData(size, size);
+    const d    = img.data;
+    const BASE_R = 28, BASE_G = 20, BASE_B = 12;
+    const TILE   = 48;
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            const isTile = (x % TILE === 0 || y % TILE === 0);
+            const noise  = (Math.random() - 0.5) * 8;
+            const r = Math.min(255, Math.max(0, BASE_R + noise - (isTile ? 8 : 0)));
+            const g = Math.min(255, Math.max(0, BASE_G + noise * 0.75 - (isTile ? 6 : 0)));
+            const b = Math.min(255, Math.max(0, BASE_B + noise * 0.5  - (isTile ? 4 : 0)));
+            const idx = (y * size + x) * 4;
+            d[idx] = r; d[idx+1] = g; d[idx+2] = b; d[idx+3] = 255;
+        }
+    }
+    return img;
+}
+
 // Generate textures once at startup
 const sandstoneImg = generateSandstoneTexture();
 const doorImg      = generateDoorTexture();
+const floorImg     = generateFloorTexture();
+const ceilingImg   = generateCeilingTexture();
 
 /** Sample a texture ImageData at (u, v) ∈ [0,1)×[0,1) → { r, g, b } */
 function sampleTexture(imgData, u, v) {
@@ -606,24 +780,38 @@ function renderScene(grid, player, batteries) {
     const halfH  = H >> 1;
     const horizon = Math.round(halfH + pitch + bobOffset); // shifted by vertical look + head bob
 
-    // ── Fill ceiling & floor (distance-based gradient) ───────
-    for (let y = 0; y < H; y++) {
-        const isCeiling      = y < horizon;
-        const distFromCenter = Math.abs(y - horizon);
-        const rowDist        = distFromCenter > 0 ? (0.5 * H / distFromCenter) : 99999;
-        const shade          = Math.max(0, 1 - rowDist / 3);
-        let r, g, b;
-        if (isCeiling) {
-            r = Math.floor(shade * 9);
-            g = Math.floor(shade * 6);
-            b = Math.floor(shade * 2);
-        } else {
-            r = Math.floor(shade * 22 + 3);
-            g = Math.floor(shade * 15 + 2);
-            b = Math.floor(shade * 6  + 1);
-        }
-        for (let x = 0; x < W; x++) {
-            setPixel(x, y, r, g, b);
+    // ── Fill ceiling & floor with texture ───────────────────
+    {
+        const rdx0 = player.dirX - player.planeX;
+        const rdy0 = player.dirY - player.planeY;
+        const rdx1 = player.dirX + player.planeX;
+        const rdy1 = player.dirY + player.planeY;
+        for (let y = 0; y < H; y++) {
+            const isFloor = y > horizon;
+            const p = isFloor ? (y - horizon) : (horizon - y);
+            if (p === 0) continue;
+            const rowDist = (0.5 * H) / p;
+            const shade = Math.max(0, 1 - rowDist / (effectiveReach * 1.8)) * flickerMult;
+            if (shade <= 0.005) {
+                for (let x = 0; x < W; x++) setPixel(x, y, 0, 0, 0);
+                continue;
+            }
+            const fsX = rowDist * (rdx1 - rdx0) / W;
+            const fsY = rowDist * (rdy1 - rdy0) / W;
+            let fx = player.x / CELL_SCALE + rowDist * rdx0;
+            let fy = player.y / CELL_SCALE + rowDist * rdy0;
+            const tex = isFloor ? floorImg : ceilingImg;
+            for (let x = 0; x < W; x++) {
+                const tx = Math.floor(TEXTURE_SIZE * (fx - Math.floor(fx))) & (TEXTURE_SIZE - 1);
+                const ty = Math.floor(TEXTURE_SIZE * (fy - Math.floor(fy))) & (TEXTURE_SIZE - 1);
+                fx += fsX; fy += fsY;
+                const ti = (ty * TEXTURE_SIZE + tx) * 4;
+                setPixel(x, y,
+                    Math.floor(tex.data[ti]     * shade),
+                    Math.floor(tex.data[ti + 1] * shade),
+                    Math.floor(tex.data[ti + 2] * shade)
+                );
+            }
         }
     }
 
@@ -839,6 +1027,47 @@ function renderScene(grid, player, batteries) {
 
         ctx.restore();
     }
+
+    // ── Marker sprites (red flags on walls) ──────────────────
+    for (const m of markers) {
+        const dx = m.wx - player.x;
+        const dy = m.wy - player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 7 * CELL_SCALE) continue;
+
+        const invDet = 1 / (player.planeX * player.dirY - player.dirX * player.planeY);
+        const transformX = invDet * (player.dirY * dx - player.dirX * dy);
+        const transformY = invDet * (-player.planeY * dx + player.planeX * dy);
+        if (transformY <= 0.1) continue;
+
+        const spriteScreenX = Math.floor((W / 2) * (1 + transformX / transformY));
+        const screenCol = Math.min(Math.max(0, spriteScreenX), W - 1);
+        if (zBuffer[screenCol] < transformY) continue;
+
+        const spriteH = Math.abs(Math.floor(H / transformY));
+        const cy2 = Math.floor(horizon - spriteH / 2) + spriteH / 2;
+        const flagH = Math.max(5, Math.min(36, 13 / dist));
+        const flagW = flagH * 0.6;
+        const alpha = Math.min(0.92, 1 / (dist * 0.35 + 0.4)) * (distFactor => distFactor)(Math.max(0, 1 - dist / (effectiveReach * 1.5)));
+
+        ctx.save();
+        ctx.strokeStyle = `rgba(200, 50, 50, ${alpha})`;
+        ctx.fillStyle   = `rgba(210, 45, 45, ${alpha * 0.9})`;
+        ctx.lineWidth   = Math.max(1, flagH * 0.07);
+        // Pole
+        ctx.beginPath();
+        ctx.moveTo(spriteScreenX, cy2 - flagH * 0.5);
+        ctx.lineTo(spriteScreenX, cy2 + flagH * 0.5);
+        ctx.stroke();
+        // Flag triangle
+        ctx.beginPath();
+        ctx.moveTo(spriteScreenX, cy2 - flagH * 0.5);
+        ctx.lineTo(spriteScreenX + flagW, cy2 - flagH * 0.18);
+        ctx.lineTo(spriteScreenX, cy2 + flagH * 0.1);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -919,7 +1148,8 @@ const player = {
     planeX: 0, planeY: PLANE_LEN,
     stamina: STAMINA_MAX,
     staminaPenalty: false,
-    battery: BATTERY_MAX
+    battery: BATTERY_MAX,
+    health: HEALTH_MAX,
 };
 
 /** Reset player position & state for a new run */
@@ -930,6 +1160,7 @@ function resetPlayer() {
     player.stamina = STAMINA_MAX;
     player.staminaPenalty = false;
     player.battery = runConfig.batMax;
+    player.health  = HEALTH_MAX;
     pitch = 0;
     bobPhase = 0; bobAmp = 0; bobOffset = 0;
 }
@@ -988,6 +1219,11 @@ document.addEventListener('keydown', e => {
         case 'Escape':
             if (gameState === 'playing') onEscapeQuit();
             break;
+        case 'Digit1': if (gameState === 'playing') { selectedSlot = 0; updateHotbarUI(); } break;
+        case 'Digit2': if (gameState === 'playing') { selectedSlot = 1; updateHotbarUI(); } break;
+        case 'Digit3': if (gameState === 'playing') { selectedSlot = 2; updateHotbarUI(); } break;
+        case 'Digit4': if (gameState === 'playing') { selectedSlot = 3; updateHotbarUI(); } break;
+        case 'Digit5': if (gameState === 'playing') { selectedSlot = 4; updateHotbarUI(); } break;
     }
 });
 
@@ -1024,6 +1260,12 @@ canvas.addEventListener('click', () => {
     }
 });
 
+canvas.addEventListener('mousedown', e => {
+    if (gameState === 'playing' && e.button === 0 && pointerLocked) {
+        useSelectedSlot();
+    }
+});
+
 /**
  * Update player movement for one frame.
  * @param {number} dt  Delta time in seconds
@@ -1043,8 +1285,11 @@ function updatePlayer(dt, grid, batteries) {
     }
 
     // ── Stamina logic ───────────────────────────────────────
-    const wantsRun = keys.shift && player.stamina > 0 && !player.staminaPenalty;
-    const speed = wantsRun ? RUN_SPEED : player.staminaPenalty ? PENALTY_SPEED : MOVE_SPEED;
+    const wantsRun = flashlightOn && keys.shift && player.stamina > 0 && !player.staminaPenalty;
+    const speed = !flashlightOn ? PENALTY_SPEED
+        : wantsRun ? RUN_SPEED
+        : player.staminaPenalty ? PENALTY_SPEED
+        : MOVE_SPEED;
 
     if (wantsRun) {
         player.stamina -= STAMINA_DRAIN * dt;
@@ -1066,7 +1311,7 @@ function updatePlayer(dt, grid, batteries) {
     // Strafe
     const moveSide = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
 
-    const MARGIN = 0.33 * CELL_SCALE;
+    const MARGIN = 0.25 * CELL_SCALE;
 
     if (moveFwd !== 0) {
         const moveSpeed = speed * dt * moveFwd;
@@ -1094,22 +1339,15 @@ function updatePlayer(dt, grid, batteries) {
 
     if (batteryDeadTimer < 0) updateAudio(dt, isMoving, speed);
 
-    // ── Battery drain ────────────────────────────────────────
-    player.battery = Math.max(0, player.battery - runConfig.batDrain * dt);
+    // ── Battery drain (only when flashlight on) ──────────────
+    if (flashlightOn) {
+        player.battery = Math.max(0, player.battery - runConfig.batDrain * dt);
+    }
 
-    // ── Battery pickup (E key) ───────────────────────────────
+    // ── Item pickup (E key) ──────────────────────────────────
     if (eJustPressed) {
         eJustPressed = false;
-        for (const bat of batteries) {
-            if (!bat.active) continue;
-            const bx = (bat.x + 0.5) * CELL_SCALE, by = (bat.y + 0.5) * CELL_SCALE;
-            const dist = Math.sqrt((bx - player.x) ** 2 + (by - player.y) ** 2);
-            if (dist <= 1.2 * CELL_SCALE) {
-                bat.active = false;
-                player.battery = Math.min(runConfig.batMax, player.battery + BATTERY_PICKUP_AMOUNT);
-                break;
-            }
-        }
+        tryPickup(batteries);
     }
 }
 
@@ -1149,6 +1387,11 @@ const timerDisplay   = document.getElementById('timerDisplay');
 const staminaBar     = document.getElementById('staminaBar');
 const batteryBar     = document.getElementById('batteryBar');
 const batteryHint    = document.getElementById('batteryHint');
+const healthBarGroup = document.getElementById('healthBarGroup');
+const healthBar      = document.getElementById('healthBar');
+const hotbarEl       = document.getElementById('hotbar');
+const deathScreenEl  = document.getElementById('deathScreen');
+let   healthDeadActive = false;
 
 function updateHUD(labNum, elapsedSec) {
     // Labyrinth label
@@ -1171,10 +1414,16 @@ function updateHUD(labNum, elapsedSec) {
     // Battery bar
     const batPct = player.battery / runConfig.batMax;
     batteryBar.style.width = (batPct * 100).toFixed(1) + '%';
-    if (batPct < 0.25) {
-        batteryBar.classList.add('low');
+    batteryBar.classList.toggle('low', batPct < 0.25);
+
+    // Health bar (tomb-robber only)
+    if (selectedMode === 'tomb-robber') {
+        healthBarGroup.style.display = '';
+        const hpPct = player.health / HEALTH_MAX;
+        healthBar.style.width = (hpPct * 100).toFixed(1) + '%';
+        healthBar.classList.toggle('low', hpPct < 0.3);
     } else {
-        batteryBar.classList.remove('low');
+        healthBarGroup.style.display = 'none';
     }
 }
 
@@ -1219,6 +1468,7 @@ function showMenu() {
     modesScreen.classList.add('hidden');
     canvas.classList.add('hidden');
     hudEl.classList.add('hidden');
+    hotbarEl.classList.add('hidden');
     summaryScreen.classList.add('hidden');
     if (document.pointerLockElement) document.exitPointerLock();
     loadStats();
@@ -1242,6 +1492,7 @@ function showGame() {
     controlsScreen.classList.add('hidden');
     canvas.classList.remove('hidden');
     hudEl.classList.remove('hidden');
+    hotbarEl.classList.remove('hidden');
     summaryScreen.classList.add('hidden');
     canvas.requestPointerLock();
 }
@@ -1250,6 +1501,7 @@ function showSummary(lapTimes, quit) {
     gameState = 'summary';
     canvas.classList.add('hidden');
     hudEl.classList.add('hidden');
+    hotbarEl.classList.add('hidden');
     summaryScreen.classList.remove('hidden');
     if (document.pointerLockElement) document.exitPointerLock();
 
@@ -1304,6 +1556,38 @@ diffBtns.forEach(btn => {
     });
 });
 
+// ── Health death ──────────────────────────────────────────────────────────
+
+function triggerHealthDeath() {
+    if (healthDeadActive) return;
+    healthDeadActive = true;
+    runActive = false;
+    cancelAnimationFrame(animFrameId);
+    stopAllAudio();
+    if (document.pointerLockElement) document.exitPointerLock();
+    hudEl.classList.add('hidden');
+    hotbarEl.classList.add('hidden');
+    deathScreenEl.classList.remove('hidden');
+    const t0 = performance.now();
+    const FADE_IN = 500, HOLD = 2500, FADE_OUT = 900;
+    const TOTAL   = FADE_IN + HOLD + FADE_OUT;
+    (function animDeath(now) {
+        const ms = now - t0;
+        let alpha;
+        if (ms < FADE_IN)             alpha = ms / FADE_IN;
+        else if (ms < FADE_IN + HOLD) alpha = 1;
+        else                          alpha = 1 - (ms - FADE_IN - HOLD) / FADE_OUT;
+        deathScreenEl.style.background = `rgba(155, 0, 0, ${Math.max(0, Math.min(1, alpha)) * 0.92})`;
+        if (ms < TOTAL) requestAnimationFrame(animDeath);
+        else {
+            deathScreenEl.classList.add('hidden');
+            deathScreenEl.style.background = '';
+            healthDeadActive = false;
+            showMenu();
+        }
+    })(performance.now());
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 10 — Run Logic
 // ══════════════════════════════════════════════════════════════════════════
@@ -1328,9 +1612,11 @@ function startRun() {
     runStart         = performance.now();
     lapStart         = runStart;
     batteryDeadTimer = -1;
+    healthDeadActive = false;
 
     resetPlayer();
     resetFlicker();
+    initHotbar();
     loadNextLab();
     showGame();
 
@@ -1346,6 +1632,7 @@ function loadNextLab() {
     currentBats = level.batteries;
     doorX = level.doorX;
     doorY = level.doorY;
+    markers = [];
 
     // Reset player to start position
     player.x = 1.5 * CELL_SCALE; player.y = 1.5 * CELL_SCALE;
@@ -1372,8 +1659,13 @@ function gameLoop(now) {
     if (batteryDeadTimer < 0) updateFlicker(dt, batPct);
 
     // Render
-    renderScene(currentGrid, player, currentBats);
-    drawFlashlight(batPct);
+    if (flashlightOn) {
+        renderScene(currentGrid, player, currentBats);
+        drawFlashlight(batPct);
+    } else {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
     // HUD
     updateHUD(currentLab + 1, elapsed);
@@ -1384,21 +1676,26 @@ function gameLoop(now) {
         return;
     }
 
-    // Battery death: 5-second darkness then ripple back to menu
+    // Health death (tomb-robber only)
+    if (selectedMode === 'tomb-robber' && player.health <= 0 && !healthDeadActive) {
+        triggerHealthDeath();
+        return;
+    }
+
+    // Battery death: darkness then ripple back to menu
     if (player.battery <= 0 && batteryDeadTimer < 0) {
         batteryDeadTimer = BATTERY_DEAD_DELAY;
-        // Fade out gameplay audio
         sndFootsteps.forEach(s => fadeAudio(s, 0, DEATH_FADE_OUT_DUR));
         sndDrops.forEach(s => fadeAudio(s, 0, DEATH_FADE_OUT_DUR));
         sndSpooks.forEach(s => fadeAudio(s, 0, DEATH_FADE_OUT_DUR));
         if (spookSongStarted) fadeAudio(sndSpookSong, 0, DEATH_FADE_OUT_DUR);
         sndFlicker.pause(); sndFlicker.currentTime = 0;
-        // Fade in Whispers
         sndWhispers.currentTime = 0;
         sndWhispers.play().catch(() => {});
         fadeAudio(sndWhispers, WHISPERS_MAX_VOL, WHISPERS_FADE_IN_DUR);
         if (document.pointerLockElement) document.exitPointerLock();
         hudEl.classList.add('hidden');
+        hotbarEl.classList.add('hidden');
     }
     if (batteryDeadTimer >= 0) {
         batteryDeadTimer -= dt;
@@ -1429,8 +1726,8 @@ function advanceLab(lapTime) {
     lapTimes[currentLab] = lapTime;
     currentLab++;
 
-    if (selectedMode === 'speed' && currentLab >= runConfig.maxLabs) {
-        // Speed mode complete
+    if ((selectedMode === 'speed' || selectedMode === 'tomb-robber') && currentLab >= runConfig.maxLabs) {
+        // Run complete
         runActive = false;
         cancelAnimationFrame(animFrameId);
         stopAllAudio();

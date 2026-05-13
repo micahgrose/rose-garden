@@ -678,8 +678,16 @@ html, body {
 }
 
 .modeCardLocked {
-    opacity: 0.22;
+    opacity: 0.5;
     cursor: not-allowed;
+}
+
+.modeCardSoon {
+    font-size: 0.52rem;
+    letter-spacing: 0.18em;
+    color: var(--gold-faint);
+    margin-top: 0.5rem;
+    font-weight: 600;
 }
 
 #diffButtons {
@@ -700,6 +708,105 @@ html, body {
     background: rgba(212, 168, 67, 0.12);
     border-color: var(--gold-bright);
     color: var(--gold-bright);
+}
+
+/* ── Health Bar ─────────────────────────────────────────────── */
+#healthBarGroup {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+#healthBar {
+    background: #cc4422;
+    transition: width 0.15s linear, background-color 0.3s;
+}
+
+#healthBar.low {
+    background: #8b0000;
+}
+
+/* ── Hotbar ─────────────────────────────────────────────────── */
+#hotbar {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    z-index: 52;
+    pointer-events: none;
+}
+
+.hotbarSlot {
+    width: 58px;
+    height: 66px;
+    border: 1px solid var(--gold-faint);
+    background: rgba(13, 10, 4, 0.75);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+    backdrop-filter: blur(4px);
+}
+
+.hotbarSlot.hotbarActive {
+    border-color: var(--gold-bright);
+    box-shadow: 0 0 14px rgba(212, 168, 67, 0.3), inset 0 0 8px rgba(212, 168, 67, 0.06);
+    background: rgba(212, 168, 67, 0.07);
+}
+
+.hotbarSlot.hotbarEmpty {
+    opacity: 0.22;
+}
+
+.hotbarSlot.slotOff .slotType {
+    color: var(--red-warn);
+}
+
+.slotNum {
+    font-size: 0.48rem;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.slotBody {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.slotType {
+    font-size: 0.5rem;
+    letter-spacing: 0.1em;
+    color: var(--gold-mid);
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.slotStatus {
+    font-size: 0.48rem;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    font-family: 'Cinzel', serif;
+    line-height: 1;
+}
+
+/* ── Death Screen ───────────────────────────────────────────── */
+#deathScreen {
+    position: fixed;
+    inset: 0;
+    background: rgba(160, 0, 0, 0);
+    z-index: 150;
+    pointer-events: none;
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────── */
