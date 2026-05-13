@@ -93,7 +93,7 @@ const sndDrops = [new Audio('drop1.mp3'), new Audio('drop2.mp3'), new Audio('dro
 const sndSwoosh = new Audio('swoosh.mp3');
 sndSwoosh.volume = 1;   
 sndSwoosh.playbackRate = .85;
-const SWOOSH_LEAD_TIME   = 0;   // seconds before ripple that the swoosh plays
+const SWOOSH_LEAD_TIME   = .5;   // seconds before ripple that the swoosh plays
 
 const sndSpooks = ['Spook1.mp3','Spook2.mp3','Spook3.mp3','Spook4.mp3'].map(f => new Audio(f));
 const SPOOK_INTERVAL_MIN = 15;
@@ -102,8 +102,8 @@ const SPOOK_INTERVAL_MAX = 30;
 const sndSpookSong = new Audio('SpookSong.mp3');
 sndSpookSong.loop   = true;
 sndSpookSong.volume = 0;
-const SPOOK_SONG_DELAY   = 45;  // seconds into run before song starts
-const SPOOK_SONG_FADE_IN = 5;   // seconds to fade in
+const SPOOK_SONG_DELAY   = 5;  // seconds into run before song starts
+const SPOOK_SONG_FADE_IN = 15;   // seconds to fade in
 const SPOOK_SONG_MAX_VOL = 0.6;
 
 const sndWhispers = new Audio('Whisphers.mp3');
