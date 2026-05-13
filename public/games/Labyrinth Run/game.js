@@ -876,14 +876,8 @@ function renderScene(grid, player, batteries) {
 
         // Wall height on screen
         const lineH  = Math.min(H, Math.floor(H / Math.max(0.001, perpWallDist)));
-        // Cheat: slide very-close strips downward so the phantom-branch at the top disappears
-        const CLOSE_SHIFT_DIST = 0.38;
-        const closeShift = perpWallDist < CLOSE_SHIFT_DIST
-            ? Math.floor((1.0 - perpWallDist / CLOSE_SHIFT_DIST) ** 1.5 * H * 0.28)
-            : 0;
-        const virtualCenter = horizon + closeShift;
-        const drawStart = Math.max(0, virtualCenter - (lineH >> 1));
-        const drawEnd   = Math.min(H - 1, virtualCenter + (lineH >> 1));
+        const drawStart = Math.max(0, horizon - (lineH >> 1));
+        const drawEnd   = Math.min(H - 1, horizon + (lineH >> 1));
 
         // Where on the wall the ray hits (normalize to [0,1) within cell)
         let wallX;
@@ -915,7 +909,7 @@ function renderScene(grid, player, batteries) {
 
         // Draw wall column pixel by pixel
         const step = TEXTURE_SIZE / lineH;
-        let texPos = (drawStart - virtualCenter + (lineH >> 1)) * step;
+        let texPos = (drawStart - horizon + (lineH >> 1)) * step;
 
         for (let y = drawStart; y <= drawEnd; y++) {
             const texY = Math.floor(texPos) & (TEXTURE_SIZE - 1);
@@ -965,6 +959,24 @@ function renderScene(grid, player, batteries) {
 
     // ── Write pixel buffer to canvas ─────────────────────────
     ctx.putImageData(imgBuffer, 0, 0);
+
+    // ── Near-wall vignette (suppress phantom-branch artifact) ─
+    {
+        const cx = Math.floor(player.x / CELL_SCALE);
+        const cy = Math.floor(player.y / CELL_SCALE);
+        const dxMin = Math.min(player.x - cx * CELL_SCALE, (cx + 1) * CELL_SCALE - player.x);
+        const dyMin = Math.min(player.y - cy * CELL_SCALE, (cy + 1) * CELL_SCALE - player.y);
+        const nearDist = Math.min(dxMin, dyMin);
+        const VIGNETTE_START = 0.31;
+        if (nearDist < VIGNETTE_START) {
+            const strength = ((1 - nearDist / VIGNETTE_START) ** 1.4) * 0.72;
+            const grd = ctx.createRadialGradient(W / 2, H / 2, H * 0.15, W / 2, H / 2, Math.max(W, H) * 0.72);
+            grd.addColorStop(0, 'rgba(0,0,0,0)');
+            grd.addColorStop(1, `rgba(0,0,0,${strength.toFixed(3)})`);
+            ctx.fillStyle = grd;
+            ctx.fillRect(0, 0, W, H);
+        }
+    }
 
     // ── Battery glow sprites ─────────────────────────────────
     for (const bat of batteries) {
