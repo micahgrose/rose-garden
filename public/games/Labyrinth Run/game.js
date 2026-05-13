@@ -1149,14 +1149,14 @@ function renderScene(grid, player, batteries) {
         ctx.restore();
     }
 
-    // ── Ladder glow (tomb-robber lab 0 exit) ─────────────────────
+    // ── Ladder texture (tomb-robber lab 0 exit) ──────────────────
     if (ladderX >= 0) {
         const lwx = (ladderX + 0.5) * CELL_SCALE;
         const lwy = (ladderY + 0.5) * CELL_SCALE;
         const ldx = lwx - player.x;
         const ldy = lwy - player.y;
         const ldist = Math.sqrt(ldx * ldx + ldy * ldy);
-        if (ldist <= effectiveReach * 2.0) {
+        if (ldist <= effectiveReach * 1.6) {
             const invDet = 1 / (player.planeX * player.dirY - player.dirX * player.planeY);
             const ltX = invDet * (player.dirY * ldx - player.dirX * ldy);
             const ltY = invDet * (-player.planeY * ldx + player.planeX * ldy);
@@ -1165,18 +1165,40 @@ function renderScene(grid, player, batteries) {
                 const lscol = Math.min(Math.max(0, lsx), W - 1);
                 if (zBuffer[lscol] >= ltY - 0.05) {
                     const lsprH = Math.abs(Math.floor(H / ltY));
-                    const pulse = 0.82 + 0.18 * Math.sin(performance.now() / 280);
-                    const lalpha = Math.min(0.88, (1 - ldist / (effectiveReach * 2.0)) * pulse);
-                    const beamW = Math.max(5, lsprH * 0.18);
-                    const beamTop = Math.max(0, horizon - lsprH);
-                    const grd = ctx.createLinearGradient(lsx, beamTop, lsx, horizon);
-                    grd.addColorStop(0,   `rgba(255, 230, 130, ${lalpha})`);
-                    grd.addColorStop(0.5, `rgba(255, 210, 80,  ${lalpha * 0.6})`);
-                    grd.addColorStop(1,   `rgba(255, 190, 40,  0)`);
-                    ctx.fillStyle = grd;
-                    ctx.fillRect(lsx - beamW / 2, beamTop, beamW, horizon - beamTop);
-                    ctx.fillStyle = `rgba(255, 245, 200, ${lalpha * 0.95})`;
-                    ctx.fillRect(lsx - beamW * 0.6, beamTop, beamW * 1.2, 5);
+                    const distAlpha = Math.max(0, 1 - ldist / (effectiveReach * 1.6));
+                    const lalpha = Math.min(0.95, distAlpha * flickerMult);
+                    if (lalpha >= 0.05) {
+                        const ladderW = Math.max(18, lsprH * 0.3);
+                        const railL   = lsx - ladderW * 0.38;
+                        const railR   = lsx + ladderW * 0.38;
+                        const topY    = Math.max(0, horizon - lsprH);
+                        const bottomY = Math.min(H - 1, horizon + lsprH * 0.06);
+                        const railW   = Math.max(1.5, ladderW * 0.09);
+                        const rungCount = Math.max(4, Math.floor((bottomY - topY) / 16));
+                        const rungSpacing = (bottomY - topY) / rungCount;
+                        ctx.save();
+                        // Black ceiling hole
+                        ctx.fillStyle = `rgba(0,0,0,${lalpha * 0.88})`;
+                        ctx.fillRect(railL - railW * 2, topY, (railR - railL) + railW * 4, Math.max(10, (bottomY - topY) * 0.55));
+                        // Rails
+                        ctx.strokeStyle = `rgba(75, 52, 28, ${lalpha})`;
+                        ctx.lineWidth = railW;
+                        ctx.lineCap = 'square';
+                        ctx.beginPath();
+                        ctx.moveTo(railL, topY); ctx.lineTo(railL, bottomY);
+                        ctx.moveTo(railR, topY); ctx.lineTo(railR, bottomY);
+                        ctx.stroke();
+                        // Rungs
+                        ctx.strokeStyle = `rgba(90, 63, 33, ${lalpha})`;
+                        ctx.lineWidth = Math.max(1, railW * 0.65);
+                        for (let i = 0; i <= rungCount; i++) {
+                            const ry = topY + i * rungSpacing;
+                            ctx.beginPath();
+                            ctx.moveTo(railL, ry); ctx.lineTo(railR, ry);
+                            ctx.stroke();
+                        }
+                        ctx.restore();
+                    }
                 }
             }
         }
@@ -1941,12 +1963,14 @@ function gameLoop(now) {
         return;
     }
 
-    // Check ladder (tomb-robber lab 0 exit)
-    if (ladderX >= 0 &&
-        Math.floor(player.x / CELL_SCALE) === ladderX &&
-        Math.floor(player.y / CELL_SCALE) === ladderY) {
-        triggerLadderCutscene(elapsed);
-        return;
+    // Check ladder (tomb-robber lab 0 exit) — trigger from adjacent cell
+    if (ladderX >= 0) {
+        const px = Math.floor(player.x / CELL_SCALE);
+        const py = Math.floor(player.y / CELL_SCALE);
+        if (Math.abs(px - ladderX) + Math.abs(py - ladderY) === 1) {
+            triggerLadderCutscene(elapsed);
+            return;
+        }
     }
 
     // Health death (tomb-robber only)
