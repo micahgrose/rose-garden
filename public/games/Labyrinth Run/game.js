@@ -1066,7 +1066,31 @@ function renderScene(grid, player, batteries) {
         let hit = 0, side = 0, cellVal = 0;
         let squeezeHit = false, squeezePerpDist = 0;
         const gridH = grid.length, gridW = grid[0].length;
-        for (let i = 0; i < 64; i++) {
+
+        // Pre-check: if player is already inside a squeeze cell, test inward faces now
+        // (the DDA loop starts by stepping *away* from the current cell, so it misses it)
+        {
+            const startSq = squeezeGrid[mapX + ',' + mapY];
+            if (startSq) {
+                const depth = startSq.progress * 0.5 * CELL_SCALE;
+                const cx = mapX * CELL_SCALE, cy = mapY * CELL_SCALE;
+                let sqD = -1, sqS = -1;
+                if (startSq.axis === 'y' && Math.abs(rayDirX) > 1e-10) {
+                    const d1 = (cx + depth - player.x) / rayDirX;
+                    const d2 = (cx + CELL_SCALE - depth - player.x) / rayDirX;
+                    if (d1 > 1e-4) { const hy = player.y + d1 * rayDirY; if (hy >= cy && hy < cy + CELL_SCALE) { sqD = d1; sqS = 0; } }
+                    if (d2 > 1e-4) { const hy = player.y + d2 * rayDirY; if (hy >= cy && hy < cy + CELL_SCALE && (sqD < 0 || d2 < sqD)) { sqD = d2; sqS = 0; } }
+                } else if (startSq.axis === 'x' && Math.abs(rayDirY) > 1e-10) {
+                    const d1 = (cy + depth - player.y) / rayDirY;
+                    const d2 = (cy + CELL_SCALE - depth - player.y) / rayDirY;
+                    if (d1 > 1e-4) { const hx = player.x + d1 * rayDirX; if (hx >= cx && hx < cx + CELL_SCALE) { sqD = d1; sqS = 1; } }
+                    if (d2 > 1e-4) { const hx = player.x + d2 * rayDirX; if (hx >= cx && hx < cx + CELL_SCALE && (sqD < 0 || d2 < sqD)) { sqD = d2; sqS = 1; } }
+                }
+                if (sqD > 1e-4) { squeezeHit = true; squeezePerpDist = sqD; side = sqS; hit = 1; cellVal = 1; }
+            }
+        }
+
+        for (let i = 0; i < 64 && !hit; i++) {
             if (sideDistX < sideDistY) {
                 sideDistX += deltaDistX;
                 mapX      += stepX;
@@ -1078,27 +1102,46 @@ function renderScene(grid, player, batteries) {
             }
             if (mapX < 0 || mapX >= gridW || mapY < 0 || mapY >= gridH) { hit = 1; cellVal = 1; break; }
 
-            // Squeeze: inject virtual wall planes inside open corridor cells
+            // Squeeze: virtual slab walls inside open corridor cells
             const sq = squeezeGrid[mapX + ',' + mapY];
             if (sq) {
-                const depth = sq.progress * 0.45 * CELL_SCALE;
-                let sqD = -1, sqS = -1;
-                if (sq.axis === 'y' && Math.abs(rayDirX) > 1e-10) {
-                    // Vertical corridor — squeeze walls are vertical planes moving in x
-                    const d1 = (mapX * CELL_SCALE + depth - player.x) / rayDirX;
-                    const d2 = (mapX * CELL_SCALE + CELL_SCALE - depth - player.x) / rayDirX;
-                    if (d1 > 1e-4) { sqD = d1; sqS = 0; }
-                    if (d2 > 1e-4 && (sqD < 0 || d2 < sqD)) { sqD = d2; sqS = 0; }
-                } else if (sq.axis === 'x' && Math.abs(rayDirY) > 1e-10) {
-                    // Horizontal corridor — squeeze walls are horizontal planes moving in y
-                    const d1 = (mapY * CELL_SCALE + depth - player.y) / rayDirY;
-                    const d2 = (mapY * CELL_SCALE + CELL_SCALE - depth - player.y) / rayDirY;
-                    if (d1 > 1e-4) { sqD = d1; sqS = 1; }
-                    if (d2 > 1e-4 && (sqD < 0 || d2 < sqD)) { sqD = d2; sqS = 1; }
-                }
-                if (sqD > 1e-4) {
-                    hit = 1; cellVal = 1; squeezeHit = true; squeezePerpDist = sqD; side = sqS;
-                    break;
+                const depth = sq.progress * 0.5 * CELL_SCALE;
+                const cx = mapX * CELL_SCALE, cy = mapY * CELL_SCALE;
+
+                if (sq.axis === 'y') {
+                    // Thickness: ray entered via y-boundary — check if entry x is inside a slab
+                    if (side === 1) {
+                        const ePerp = sideDistY - deltaDistY;
+                        const eX = player.x + ePerp * rayDirX;
+                        if ((eX >= cx && eX < cx + depth) || (eX >= cx + CELL_SCALE - depth && eX < cx + CELL_SCALE)) {
+                            hit = 1; cellVal = 1; squeezeHit = true; squeezePerpDist = ePerp; break; // side stays 1
+                        }
+                    }
+                    // Inward x-faces, with cell-bounds guard to stop the plane extending infinitely
+                    if (Math.abs(rayDirX) > 1e-10) {
+                        let sqD = -1, sqS = -1;
+                        const d1 = (cx + depth - player.x) / rayDirX;
+                        const d2 = (cx + CELL_SCALE - depth - player.x) / rayDirX;
+                        if (d1 > 1e-4) { const hy = player.y + d1 * rayDirY; if (hy >= cy && hy < cy + CELL_SCALE) { sqD = d1; sqS = 0; } }
+                        if (d2 > 1e-4) { const hy = player.y + d2 * rayDirY; if (hy >= cy && hy < cy + CELL_SCALE && (sqD < 0 || d2 < sqD)) { sqD = d2; sqS = 0; } }
+                        if (sqD > 1e-4) { hit = 1; cellVal = 1; squeezeHit = true; squeezePerpDist = sqD; side = sqS; break; }
+                    }
+                } else { // axis === 'x'
+                    if (side === 0) {
+                        const ePerp = sideDistX - deltaDistX;
+                        const eY = player.y + ePerp * rayDirY;
+                        if ((eY >= cy && eY < cy + depth) || (eY >= cy + CELL_SCALE - depth && eY < cy + CELL_SCALE)) {
+                            hit = 1; cellVal = 1; squeezeHit = true; squeezePerpDist = ePerp; break; // side stays 0
+                        }
+                    }
+                    if (Math.abs(rayDirY) > 1e-10) {
+                        let sqD = -1, sqS = -1;
+                        const d1 = (cy + depth - player.y) / rayDirY;
+                        const d2 = (cy + CELL_SCALE - depth - player.y) / rayDirY;
+                        if (d1 > 1e-4) { const hx = player.x + d1 * rayDirX; if (hx >= cx && hx < cx + CELL_SCALE) { sqD = d1; sqS = 1; } }
+                        if (d2 > 1e-4) { const hx = player.x + d2 * rayDirX; if (hx >= cx && hx < cx + CELL_SCALE && (sqD < 0 || d2 < sqD)) { sqD = d2; sqS = 1; } }
+                        if (sqD > 1e-4) { hit = 1; cellVal = 1; squeezeHit = true; squeezePerpDist = sqD; side = sqS; break; }
+                    }
                 }
             }
 
