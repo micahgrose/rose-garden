@@ -44,6 +44,8 @@ const MAX_LABYRINTHS        = 3;
 const BATTERY_DEAD_DELAY = 10; // seconds of darkness after battery dies before ripple
 const HEALTH_MAX         = 100;
 const TOMB_HALL_LEN      = 5;  // open hallway rows before the maze in tomb-robber lab 0
+const SQUEEZE_CLOSE_DUR  = 4.0;  // seconds from trigger to fully closed
+const SQUEEZE_MAX_PANEL  = 0.46; // max fraction of W covered by one closing panel
 
 // ── Mode / difficulty configs ───────────────────────────────────────────────
 const MODE_CONFIGS = {
@@ -687,8 +689,14 @@ function bfsFurthest(grid, startX, startY) {
  * @returns {{ grid, batteries, doorX, doorY }}
  */
 function buildLevel(labIndex) {
+    if (selectedMode === 'tomb-robber' && isDemoUser && labIndex === 0) {
+        return buildDemoRoom();
+    }
     if (selectedMode === 'tomb-robber' && labIndex === 0) {
         return buildTombRobberEntry(getLabSize(0));
+    }
+    if (selectedMode === 'tomb-robber' && labIndex === 1) {
+        return buildTombRobberLab1();
     }
 
     const size = getLabSize(labIndex);
@@ -802,6 +810,160 @@ function buildTombRobberEntry(mazeSize) {
     }
 
     return { grid: fullGrid, batteries, doorX: -1, doorY: -1, ladderX, ladderY };
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 3.5 — Squeeze Trap System
+// ══════════════════════════════════════════════════════════════════════════
+
+function initSqueezeTraps(arr) {
+    squeezeTraps = (arr || []).map(cells => ({ cells, state: 'idle', timer: 0 }));
+}
+
+// Returns candidate 3-cell groups from straight, 1-wide corridors in the maze
+function findSqueezeCandidates(grid) {
+    const rows = grid.length, cols = grid[0].length;
+    const candidates = [];
+    // Horizontal corridors
+    for (let y = 1; y < rows - 1; y++) {
+        let runStart = -1;
+        for (let x = 1; x <= cols - 1; x++) {
+            const ok = x < cols - 1 && grid[y][x] === 0 && grid[y-1][x] === 1 && grid[y+1][x] === 1;
+            if (ok) { if (runStart < 0) runStart = x; }
+            else {
+                if (runStart >= 0 && x - runStart >= 3) {
+                    const mid = Math.floor((runStart + x - 1) / 2);
+                    candidates.push([{ x: mid - 1, y }, { x: mid, y }, { x: mid + 1, y }]);
+                }
+                runStart = -1;
+            }
+        }
+    }
+    // Vertical corridors
+    for (let x = 1; x < cols - 1; x++) {
+        let runStart = -1;
+        for (let y = 1; y <= rows - 1; y++) {
+            const ok = y < rows - 1 && grid[y][x] === 0 && grid[y][x-1] === 1 && grid[y][x+1] === 1;
+            if (ok) { if (runStart < 0) runStart = y; }
+            else {
+                if (runStart >= 0 && y - runStart >= 3) {
+                    const mid = Math.floor((runStart + y - 1) / 2);
+                    candidates.push([{ x, y: mid - 1 }, { x, y: mid }, { x, y: mid + 1 }]);
+                }
+                runStart = -1;
+            }
+        }
+    }
+    return candidates;
+}
+
+function updateSqueezeTraps(dt) {
+    const px = Math.floor(player.x / CELL_SCALE);
+    const py = Math.floor(player.y / CELL_SCALE);
+    for (const trap of squeezeTraps) {
+        if (trap.state === 'idle') {
+            if (trap.cells.some(c => c.x === px && c.y === py)) {
+                trap.state = 'closing';
+                trap.timer = 0;
+            }
+        } else if (trap.state === 'closing') {
+            trap.timer = Math.min(trap.timer + dt, SQUEEZE_CLOSE_DUR);
+            if (trap.timer >= SQUEEZE_CLOSE_DUR) {
+                trap.state = 'closed';
+                if (trap.cells.some(c => c.x === px && c.y === py)) {
+                    player.health = 0; // caught by health-death check in gameLoop
+                }
+            }
+        }
+    }
+}
+
+function drawSqueezeOverlay() {
+    let anyActive = false;
+    for (const trap of squeezeTraps) {
+        if (trap.state !== 'idle') { anyActive = true; break; }
+    }
+    if (!anyActive) return;
+    const W = canvas.width, H = canvas.height;
+    for (const trap of squeezeTraps) {
+        if (trap.state === 'idle') continue;
+        const progress = trap.state === 'closed' ? 1 : trap.timer / SQUEEZE_CLOSE_DUR;
+        const ease = progress * progress;
+        const panelW = ease * SQUEEZE_MAX_PANEL * W;
+        if (panelW < 1) continue;
+        ctx.save();
+        ctx.fillStyle = `rgba(52, 46, 38, ${Math.min(1, ease * 1.3)})`;
+        ctx.fillRect(0, 0, panelW, H);
+        ctx.fillRect(W - panelW, 0, panelW, H);
+        // Stone crack lines for texture
+        ctx.strokeStyle = `rgba(25, 20, 15, ${ease * 0.55})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let ly = 24; ly < H; ly += 36) {
+            ctx.moveTo(0, ly); ctx.lineTo(panelW, ly);
+            ctx.moveTo(W, ly); ctx.lineTo(W - panelW, ly);
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+// Hardcoded demo room: narrow corridor with one squeeze trap, door at top
+// Only loaded for micahgrose@gmail.com (isDemoUser)
+function buildDemoRoom() {
+    const GW = 5, GH = 11;
+    const grid = [];
+    for (let y = 0; y < GH; y++) {
+        const row = new Array(GW).fill(1);
+        if (y > 0 && y < GH - 1) row[2] = 0;
+        grid.push(row);
+    }
+    grid[1][2] = 2; // door
+    return {
+        grid,
+        batteries: [],
+        doorX: 2, doorY: 1,
+        ladderX: -1, ladderY: -1,
+        squeezeTraps: [[{ x: 2, y: 4 }, { x: 2, y: 5 }, { x: 2, y: 6 }]]
+    };
+}
+
+// Tomb Robber lab 1: large 51-cell maze with squeeze traps seeded in corridors
+function buildTombRobberLab1() {
+    const size = getLabSize(1);
+    const grid = generateMaze(size, size);
+    const door = bfsFurthest(grid, 1, 1);
+    grid[door.y][door.x] = 2;
+
+    const numBat = getLabBatteries(1);
+    const batteries = [];
+    const openCells = [];
+    for (let y = 0; y < size; y++)
+        for (let x = 0; x < size; x++)
+            if (grid[y][x] === 0 && !(x === 1 && y === 1))
+                openCells.push({ x, y });
+    openCells.sort(() => Math.random() - 0.5);
+    let placed = 0;
+    for (const cell of openCells) {
+        if (Math.abs(cell.x - 1) + Math.abs(cell.y - 1) >= 4 && placed < numBat)
+            batteries.push({ x: cell.x, y: cell.y, active: true }), placed++;
+    }
+    for (const cell of openCells) {
+        if (placed >= numBat) break;
+        if (!batteries.find(b => b.x === cell.x && b.y === cell.y))
+            batteries.push({ x: cell.x, y: cell.y, active: true }), placed++;
+    }
+
+    // Seed squeeze traps away from spawn and door
+    const candidates = findSqueezeCandidates(grid);
+    candidates.sort(() => Math.random() - 0.5);
+    const filtered = candidates.filter(cells => cells.every(c =>
+        Math.abs(c.x - 1) + Math.abs(c.y - 1) > 5 &&
+        Math.abs(c.x - door.x) + Math.abs(c.y - door.y) > 5
+    ));
+    const traps = filtered.slice(0, 3);
+
+    return { grid, batteries, doorX: door.x, doorY: door.y, ladderX: -1, ladderY: -1, squeezeTraps: traps };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1615,6 +1777,7 @@ function showControls() {
     controlsScreen.classList.remove('hidden');
 }
 
+let isDemoUser = false;
 const tombRobberCard = document.querySelector('.modeCard[data-mode="tomb-robber"]');
 
 async function checkTombRobberAccess() {
@@ -1625,6 +1788,7 @@ async function checkTombRobberAccess() {
         if (!res.ok) return;
         const data = await res.json();
         if (data.email === 'micahgrose@gmail.com') {
+            isDemoUser = true;
             tombRobberCard.classList.remove('modeCardLocked');
             const soon = tombRobberCard.querySelector('.modeCardSoon');
             if (soon) soon.remove();
@@ -1877,6 +2041,7 @@ let currentBats  = [];
 let doorX = 0, doorY = 0;
 let ladderX = -1, ladderY = -1;
 let ladderCutsceneActive = false;
+let squeezeTraps = []; // [{ cells:[{x,y}], state:'idle'|'closing'|'closed', timer:0 }]
 let lastFrameTime = 0;
 let animFrameId   = 0;
 let runActive        = false;
@@ -1912,10 +2077,17 @@ function loadNextLab() {
     doorY  = level.doorY  ?? -1;
     ladderX = level.ladderX ?? -1;
     ladderY = level.ladderY ?? -1;
+    initSqueezeTraps(level.squeezeTraps);
     markers = [];
     player.battery = runConfig.batMax;
 
-    if (selectedMode === 'tomb-robber' && currentLab === 0) {
+    if (selectedMode === 'tomb-robber' && isDemoUser && currentLab === 0) {
+        // Demo trap room: narrow corridor, spawn at south end facing north
+        player.x = 2.5 * CELL_SCALE;
+        player.y = 9.5 * CELL_SCALE;
+        player.dirX = 0; player.dirY = -1;
+        player.planeX = PLANE_LEN; player.planeY = 0;
+    } else if (selectedMode === 'tomb-robber' && currentLab === 0) {
         // Spawn in the hallway, facing south toward the maze; entrance wall is at the back (north)
         player.x = 2.5 * CELL_SCALE;
         player.y = (TOMB_HALL_LEN - 0.5) * CELL_SCALE;
@@ -1936,6 +2108,7 @@ function gameLoop(now) {
 
     // Update player
     updatePlayer(dt, currentGrid, currentBats);
+    if (selectedMode === 'tomb-robber') updateSqueezeTraps(dt);
 
     const batPct = player.battery / runConfig.batMax;
 
@@ -1953,6 +2126,7 @@ function gameLoop(now) {
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
+    drawSqueezeOverlay();
 
     // HUD
     updateHUD(currentLab + 1, elapsed);
