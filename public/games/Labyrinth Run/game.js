@@ -43,6 +43,7 @@ const MAX_LABYRINTHS        = 3;
 
 const BATTERY_DEAD_DELAY = 10; // seconds of darkness after battery dies before ripple
 const HEALTH_MAX         = 100;
+const TOMB_HALL_LEN      = 5;  // open hallway rows before the maze in tomb-robber lab 0
 
 // ── Mode / difficulty configs ───────────────────────────────────────────────
 const MODE_CONFIGS = {
@@ -686,6 +687,10 @@ function bfsFurthest(grid, startX, startY) {
  * @returns {{ grid, batteries, doorX, doorY }}
  */
 function buildLevel(labIndex) {
+    if (selectedMode === 'tomb-robber' && labIndex === 0) {
+        return buildTombRobberEntry(getLabSize(0));
+    }
+
     const size = getLabSize(labIndex);
     const grid = generateMaze(size, size);
 
@@ -693,7 +698,6 @@ function buildLevel(labIndex) {
     const door = bfsFurthest(grid, 1, 1);
     // Make sure door isn't right at start
     if (door.x === 1 && door.y === 1) {
-        // Fallback: pick a corner cell that is open
         const fallbacks = [
             { x: size - 2, y: size - 2 },
             { x: size - 2, y: 1 },
@@ -716,7 +720,6 @@ function buildLevel(labIndex) {
             }
         }
     }
-    // Shuffle and pick cells that are reasonably far from start
     openCells.sort(() => Math.random() - 0.5);
     let placed = 0;
     for (const cell of openCells) {
@@ -726,7 +729,6 @@ function buildLevel(labIndex) {
             placed++;
         }
     }
-    // If not enough far cells, just take whatever is open
     if (placed < numBat) {
         for (const cell of openCells) {
             if (placed >= numBat) break;
@@ -737,7 +739,69 @@ function buildLevel(labIndex) {
         }
     }
 
-    return { grid, batteries, doorX: door.x, doorY: door.y };
+    return { grid, batteries, doorX: door.x, doorY: door.y, ladderX: -1, ladderY: -1 };
+}
+
+// Tomb Robber lab 0: hallway entrance + maze with ladder exit
+function buildTombRobberEntry(mazeSize) {
+    const maze = generateMaze(mazeSize, mazeSize);
+
+    // Carve a 3-wide opening through the maze's north border so the hallway connects in
+    maze[0][1] = 0; maze[0][2] = 0; maze[0][3] = 0;
+    // Widen the junction just inside the border
+    maze[1][2] = 0; maze[1][3] = 0;
+
+    // Build full grid: [entrance row] + [TOMB_HALL_LEN hallway rows] + [maze rows]
+    const fullGrid = [];
+
+    // Row 0 — entrance wall (cell type 4 = warm sunlight)
+    const entRow = new Array(mazeSize).fill(1);
+    entRow[1] = 4; entRow[2] = 4; entRow[3] = 4;
+    fullGrid.push(entRow);
+
+    // Rows 1–TOMB_HALL_LEN — open hallway (3 cells wide)
+    for (let r = 0; r < TOMB_HALL_LEN; r++) {
+        const row = new Array(mazeSize).fill(1);
+        row[1] = 0; row[2] = 0; row[3] = 0;
+        fullGrid.push(row);
+    }
+
+    // Append maze
+    for (const mazeRow of maze) fullGrid.push([...mazeRow]);
+
+    // Ladder at cell furthest from player spawn (col 2, row 1 in fullGrid)
+    const ladder = bfsFurthest(fullGrid, 2, 1);
+    const ladderX = ladder.x, ladderY = ladder.y;
+
+    // Scatter batteries across the full grid (hallway + maze)
+    const numBat = getLabBatteries(0);
+    const batteries = [];
+    const openCells = [];
+    for (let y = 0; y < fullGrid.length; y++) {
+        for (let x = 0; x < fullGrid[y].length; x++) {
+            if (fullGrid[y][x] === 0 && !(x === 2 && y <= 2) && !(x === ladderX && y === ladderY)) {
+                openCells.push({ x, y });
+            }
+        }
+    }
+    openCells.sort(() => Math.random() - 0.5);
+    let placed = 0;
+    for (const cell of openCells) {
+        const dist = Math.abs(cell.x - 2) + Math.abs(cell.y - 1);
+        if (dist >= 6 && placed < numBat) {
+            batteries.push({ x: cell.x, y: cell.y, active: true });
+            placed++;
+        }
+    }
+    if (placed < numBat) {
+        for (const cell of openCells) {
+            if (placed >= numBat) break;
+            if (!batteries.find(b => b.x === cell.x && b.y === cell.y))
+                batteries.push({ x: cell.x, y: cell.y, active: true }), placed++;
+        }
+    }
+
+    return { grid: fullGrid, batteries, doorX: -1, doorY: -1, ladderX, ladderY };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -933,24 +997,29 @@ function renderScene(grid, player, batteries) {
                 b = useTexImg.data[i + 2];
             }
 
-            // Global darkness + distance + side darkening
-            // Fringe uses wall darkMult so it matches adjacent sandstone
-            const pixDark = (isDoor && !isFringe) ? darkMult : 0.25;
-            const bright = distFactor * sideMult * pixDark;
-            r = Math.floor(r * bright);
-            g = Math.floor(g * bright);
-            b = Math.floor(b * bright);
-
-            // Orange-amber tint on all surfaces
-            g = Math.floor(g * 0.85);
-            b = Math.floor(b * 0.65);
-
-            // Door glow only on the wood portion, not the stone frame
-            if (isDoor && !isFringe) {
-                const glowStrength = 0.18 * distFactor;
-                r = Math.min(255, r + Math.floor(200 * glowStrength));
-                g = Math.min(255, g + Math.floor(110 * glowStrength));
-                b = Math.min(255, b + Math.floor(30  * glowStrength));
+            if (cellVal === 4) {
+                // Entrance wall — blinding warm sunlight flooding from outside
+                const eb = Math.min(1.0, distFactor * 5.5 + 0.45) * sideMult;
+                r = Math.min(255, Math.floor(255 * eb));
+                g = Math.min(255, Math.floor(195 * eb));
+                b = Math.min(255, Math.floor(70  * eb));
+            } else {
+                // Global darkness + distance + side darkening
+                const pixDark = (isDoor && !isFringe) ? darkMult : 0.25;
+                const bright = distFactor * sideMult * pixDark;
+                r = Math.floor(r * bright);
+                g = Math.floor(g * bright);
+                b = Math.floor(b * bright);
+                // Orange-amber tint on all surfaces
+                g = Math.floor(g * 0.85);
+                b = Math.floor(b * 0.65);
+                // Door glow only on the wood portion, not the stone frame
+                if (isDoor && !isFringe) {
+                    const glowStrength = 0.18 * distFactor;
+                    r = Math.min(255, r + Math.floor(200 * glowStrength));
+                    g = Math.min(255, g + Math.floor(110 * glowStrength));
+                    b = Math.min(255, b + Math.floor(30  * glowStrength));
+                }
             }
 
             setPixel(screenX, y, r, g, b);
@@ -1078,6 +1147,39 @@ function renderScene(grid, player, batteries) {
         ctx.closePath();
         ctx.fill();
         ctx.restore();
+    }
+
+    // ── Ladder glow (tomb-robber lab 0 exit) ─────────────────────
+    if (ladderX >= 0) {
+        const lwx = (ladderX + 0.5) * CELL_SCALE;
+        const lwy = (ladderY + 0.5) * CELL_SCALE;
+        const ldx = lwx - player.x;
+        const ldy = lwy - player.y;
+        const ldist = Math.sqrt(ldx * ldx + ldy * ldy);
+        if (ldist <= effectiveReach * 2.0) {
+            const invDet = 1 / (player.planeX * player.dirY - player.dirX * player.planeY);
+            const ltX = invDet * (player.dirY * ldx - player.dirX * ldy);
+            const ltY = invDet * (-player.planeY * ldx + player.planeX * ldy);
+            if (ltY > 0.1) {
+                const lsx = Math.floor((W / 2) * (1 + ltX / ltY));
+                const lscol = Math.min(Math.max(0, lsx), W - 1);
+                if (zBuffer[lscol] >= ltY - 0.05) {
+                    const lsprH = Math.abs(Math.floor(H / ltY));
+                    const pulse = 0.82 + 0.18 * Math.sin(performance.now() / 280);
+                    const lalpha = Math.min(0.88, (1 - ldist / (effectiveReach * 2.0)) * pulse);
+                    const beamW = Math.max(5, lsprH * 0.18);
+                    const beamTop = Math.max(0, horizon - lsprH);
+                    const grd = ctx.createLinearGradient(lsx, beamTop, lsx, horizon);
+                    grd.addColorStop(0,   `rgba(255, 230, 130, ${lalpha})`);
+                    grd.addColorStop(0.5, `rgba(255, 210, 80,  ${lalpha * 0.6})`);
+                    grd.addColorStop(1,   `rgba(255, 190, 40,  0)`);
+                    ctx.fillStyle = grd;
+                    ctx.fillRect(lsx - beamW / 2, beamTop, beamW, horizon - beamTop);
+                    ctx.fillStyle = `rgba(255, 245, 200, ${lalpha * 0.95})`;
+                    ctx.fillRect(lsx - beamW * 0.6, beamTop, beamW * 1.2, 5);
+                }
+            }
+        }
     }
 }
 
@@ -1322,7 +1424,7 @@ function updatePlayer(dt, grid, batteries) {
     // Strafe
     const moveSide = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
 
-    const MARGIN = 0.25 * CELL_SCALE;
+    const MARGIN = 0.27 * CELL_SCALE;
 
     if (moveFwd !== 0) {
         const moveSpeed = speed * dt * moveFwd;
@@ -1662,6 +1764,84 @@ function triggerHealthDeath() {
     })(performance.now());
 }
 
+function triggerLadderCutscene(lapTime) {
+    if (ladderCutsceneActive) return;
+    ladderCutsceneActive = true;
+    runActive = false;
+    cancelAnimationFrame(animFrameId);
+    Object.keys(keys).forEach(k => { keys[k] = false; });
+
+    const W = canvas.width, H = canvas.height;
+    const LOOK_UP_DUR  = 1300; // ms — tilt pitch upward
+    const FADE_OUT_DUR = 650;  // ms — fade to black
+    const BLACK_DUR    = 400;  // ms — held black while swapping labs
+    const FADE_IN_DUR  = 950;  // ms — fade back in rising into new lab
+    const TOTAL = LOOK_UP_DUR + FADE_OUT_DUR + BLACK_DUR + FADE_IN_DUR;
+    const targetPitch  = H * 0.7; // look nearly straight up
+    const risePitch    = -H * 0.35; // start next lab looking slightly down
+    const t0 = performance.now();
+    let transitioned = false;
+
+    function frame(now) {
+        const ms = now - t0;
+        const batPct = player.battery / runConfig.batMax;
+
+        if (ms < LOOK_UP_DUR) {
+            const t = ms / LOOK_UP_DUR;
+            pitch = (1 - (1 - t) ** 3) * targetPitch;
+            renderScene(currentGrid, player, currentBats);
+            drawFlashlight(batPct);
+            updateHUD(currentLab + 1, lapTime + ms / 1000);
+        } else if (ms < LOOK_UP_DUR + FADE_OUT_DUR) {
+            const t = (ms - LOOK_UP_DUR) / FADE_OUT_DUR;
+            pitch = targetPitch;
+            renderScene(currentGrid, player, currentBats);
+            drawFlashlight(batPct);
+            ctx.fillStyle = `rgba(0,0,0,${t.toFixed(3)})`;
+            ctx.fillRect(0, 0, W, H);
+            updateHUD(currentLab + 1, lapTime + ms / 1000);
+        } else if (ms < LOOK_UP_DUR + FADE_OUT_DUR + BLACK_DUR) {
+            if (!transitioned) {
+                transitioned = true;
+                lapTimes[currentLab] = lapTime;
+                currentLab++;
+                const level = buildLevel(currentLab);
+                currentGrid = level.grid;
+                currentBats = level.batteries;
+                doorX  = level.doorX  ?? -1;
+                doorY  = level.doorY  ?? -1;
+                ladderX = level.ladderX ?? -1;
+                ladderY = level.ladderY ?? -1;
+                markers = [];
+                player.x = 1.5 * CELL_SCALE; player.y = 1.5 * CELL_SCALE;
+                player.battery = runConfig.batMax;
+                setSpawnDirection(currentGrid);
+                pitch = risePitch;
+                lapStart = performance.now();
+            }
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, W, H);
+        } else if (ms < TOTAL) {
+            const t = (ms - LOOK_UP_DUR - FADE_OUT_DUR - BLACK_DUR) / FADE_IN_DUR;
+            pitch = risePitch * (1 - t);
+            renderScene(currentGrid, player, currentBats);
+            drawFlashlight(player.battery / runConfig.batMax);
+            ctx.fillStyle = `rgba(0,0,0,${(1 - t).toFixed(3)})`;
+            ctx.fillRect(0, 0, W, H);
+            updateHUD(currentLab + 1, 0);
+        } else {
+            pitch = 0;
+            ladderCutsceneActive = false;
+            runActive = true;
+            lastFrameTime = performance.now();
+            animFrameId = requestAnimationFrame(gameLoop);
+            return;
+        }
+        requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 10 — Run Logic
 // ══════════════════════════════════════════════════════════════════════════
@@ -1673,6 +1853,8 @@ let runStart     = 0;  // performance.now() at start of run
 let currentGrid  = null;
 let currentBats  = [];
 let doorX = 0, doorY = 0;
+let ladderX = -1, ladderY = -1;
+let ladderCutsceneActive = false;
 let lastFrameTime = 0;
 let animFrameId   = 0;
 let runActive        = false;
@@ -1704,14 +1886,23 @@ function loadNextLab() {
     const level = buildLevel(currentLab);
     currentGrid = level.grid;
     currentBats = level.batteries;
-    doorX = level.doorX;
-    doorY = level.doorY;
+    doorX  = level.doorX  ?? -1;
+    doorY  = level.doorY  ?? -1;
+    ladderX = level.ladderX ?? -1;
+    ladderY = level.ladderY ?? -1;
     markers = [];
-
-    // Reset player to start position
-    player.x = 1.5 * CELL_SCALE; player.y = 1.5 * CELL_SCALE;
     player.battery = runConfig.batMax;
-    setSpawnDirection(currentGrid);
+
+    if (selectedMode === 'tomb-robber' && currentLab === 0) {
+        // Spawn in the hallway, facing south toward the maze; entrance wall is at the back (north)
+        player.x = 2.5 * CELL_SCALE;
+        player.y = (TOMB_HALL_LEN - 0.5) * CELL_SCALE;
+        player.dirX = 0; player.dirY = 1;
+        player.planeX = -PLANE_LEN; player.planeY = 0;
+    } else {
+        player.x = 1.5 * CELL_SCALE; player.y = 1.5 * CELL_SCALE;
+        setSpawnDirection(currentGrid);
+    }
 }
 
 function gameLoop(now) {
@@ -1747,6 +1938,14 @@ function gameLoop(now) {
     // Check door
     if (isOnDoor(doorX, doorY)) {
         advanceLab(elapsed);
+        return;
+    }
+
+    // Check ladder (tomb-robber lab 0 exit)
+    if (ladderX >= 0 &&
+        Math.floor(player.x / CELL_SCALE) === ladderX &&
+        Math.floor(player.y / CELL_SCALE) === ladderY) {
+        triggerLadderCutscene(elapsed);
         return;
     }
 
