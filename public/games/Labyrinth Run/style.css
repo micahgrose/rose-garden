@@ -574,6 +574,37 @@ html, body {
     font-style: italic;
 }
 
+#summaryTable th.statusTh {
+    text-align: right;
+}
+
+#summaryTable td.statusCell {
+    text-align: right;
+    color: inherit;
+    font-weight: normal;
+}
+
+.statusBadge {
+    display: inline-block;
+    padding: 0.15em 0.5em;
+    border-radius: 3px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+}
+
+.statusCompleted {
+    background: rgba(40, 120, 40, 0.25);
+    color: #5ecf5e;
+    border: 1px solid rgba(80, 180, 80, 0.35);
+}
+
+.statusFailed {
+    background: rgba(140, 20, 20, 0.25);
+    color: #d94040;
+    border: 1px solid rgba(200, 40, 40, 0.35);
+}
+
 #summaryTotal {
     border-top: 1px solid var(--gold-faint) !important;
 }

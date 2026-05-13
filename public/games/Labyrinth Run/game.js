@@ -1458,7 +1458,7 @@ const controlsBackBtn = document.getElementById('controlsBackBtn');
 const modesBackBtn    = document.getElementById('modesBackBtn');
 const playAgainBtn    = document.getElementById('summaryPlayAgain');
 const menuBtn         = document.getElementById('summaryMenu');
-const modeCards       = document.querySelectorAll('.modeCard:not(.modeCardLocked)');
+const modeCards       = document.querySelectorAll('.modeCard');
 const diffBtns        = document.querySelectorAll('.diffBtn');
 
 function showMenu() {
@@ -1480,10 +1480,28 @@ function showControls() {
     controlsScreen.classList.remove('hidden');
 }
 
+const tombRobberCard = document.querySelector('.modeCard[data-mode="tomb-robber"]');
+
+async function checkTombRobberAccess() {
+    const token = getToken();
+    if (!token) return;
+    try {
+        const res = await fetch('/api/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.email === 'micahgrose@gmail.com') {
+            tombRobberCard.classList.remove('modeCardLocked');
+            const soon = tombRobberCard.querySelector('.modeCardSoon');
+            if (soon) soon.remove();
+        }
+    } catch {}
+}
+
 function showModes() {
     gameState = 'modes';
     menuEl.classList.add('hidden');
     modesScreen.classList.remove('hidden');
+    checkTombRobberAccess();
 }
 
 function showGame() {
@@ -1497,7 +1515,7 @@ function showGame() {
     canvas.requestPointerLock();
 }
 
-function showSummary(lapTimes, quit) {
+function showSummary(lapTimes, quit, failedTime = null) {
     gameState = 'summary';
     canvas.classList.add('hidden');
     hudEl.classList.add('hidden');
@@ -1508,27 +1526,64 @@ function showSummary(lapTimes, quit) {
     summaryTitle.textContent  = quit ? 'RUN ABANDONED' : 'RUN COMPLETE';
     summaryTitle.className    = quit ? 'quit' : '';
 
-    // Build table rows
+    const isLevel = selectedMode === 'level';
+
+    // Update thead for level mode (3 columns) vs others (2 columns)
+    const theadRow = summaryScreen.querySelector('thead tr');
+    theadRow.innerHTML = isLevel
+        ? '<th>Labyrinth</th><th>Time</th><th class="statusTh">Status</th>'
+        : '<th>Labyrinth</th><th>Time</th>';
+
+    // Update tfoot for level mode
+    const summaryTotalRow = document.getElementById('summaryTotal');
+    summaryTotalRow.innerHTML = isLevel
+        ? '<td colspan="2">TOTAL</td><td id="summaryTotalTime">—</td>'
+        : '<td>TOTAL</td><td id="summaryTotalTime">—</td>';
+
     summaryBody.innerHTML = '';
     let totalTime = 0;
-    const rowCount = selectedMode === 'speed' ? runConfig.maxLabs : lapTimes.length;
-    for (let i = 0; i < rowCount; i++) {
-        const tr = document.createElement('tr');
-        const td1 = document.createElement('td');
-        const td2 = document.createElement('td');
-        td1.textContent = `Labyrinth ${i + 1}`;
-        if (lapTimes[i] != null) {
-            td2.textContent = formatTime(lapTimes[i]);
+
+    if (isLevel) {
+        for (let i = 0; i < lapTimes.length; i++) {
+            const tr = document.createElement('tr');
+            const td1 = document.createElement('td'); td1.textContent = `Labyrinth ${i + 1}`;
+            const td2 = document.createElement('td'); td2.textContent = formatTime(lapTimes[i]);
+            const td3 = document.createElement('td'); td3.className = 'statusCell';
+            td3.innerHTML = '<span class="statusBadge statusCompleted">COMPLETED</span>';
             totalTime += lapTimes[i];
-        } else {
-            td2.textContent = 'Abandoned';
-            td2.className = 'abandoned';
+            tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+            summaryBody.appendChild(tr);
         }
-        tr.appendChild(td1); tr.appendChild(td2);
-        summaryBody.appendChild(tr);
+        if (quit && failedTime != null) {
+            const tr = document.createElement('tr');
+            const td1 = document.createElement('td'); td1.textContent = `Labyrinth ${lapTimes.length + 1}`;
+            const td2 = document.createElement('td'); td2.textContent = formatTime(failedTime);
+            const td3 = document.createElement('td'); td3.className = 'statusCell';
+            td3.innerHTML = '<span class="statusBadge statusFailed">FAILED</span>';
+            totalTime += failedTime;
+            tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+            summaryBody.appendChild(tr);
+        }
+    } else {
+        const rowCount = runConfig.maxLabs;
+        for (let i = 0; i < rowCount; i++) {
+            const tr = document.createElement('tr');
+            const td1 = document.createElement('td'); td1.textContent = `Labyrinth ${i + 1}`;
+            const td2 = document.createElement('td');
+            if (lapTimes[i] != null) {
+                td2.textContent = formatTime(lapTimes[i]);
+                totalTime += lapTimes[i];
+            } else {
+                td2.textContent = 'Abandoned';
+                td2.className = 'abandoned';
+            }
+            tr.appendChild(td1); tr.appendChild(td2);
+            summaryBody.appendChild(tr);
+        }
     }
 
-    summaryTotalEl.textContent = (quit && selectedMode === 'speed') ? '—' : formatTime(totalTime);
+    document.getElementById('summaryTotalTime').textContent =
+        (quit && selectedMode === 'speed') ? '—' : formatTime(totalTime);
 }
 
 // ── Button wiring ────────────────────────────────────────────
@@ -1542,6 +1597,7 @@ menuBtn.addEventListener('click', showMenu);
 
 modeCards.forEach(card => {
     card.addEventListener('click', () => {
+        if (card.classList.contains('modeCardLocked')) return;
         selectedMode = card.dataset.mode;
         modeCards.forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
@@ -1824,7 +1880,7 @@ function onEscapeQuit() {
     if (selectedMode === 'level') {
         saveStats({ completed: false, total_time: total, labs_cleared: lapTimes.length });
     }
-    showSummary(partialTimes, true);
+    showSummary(partialTimes, true, elapsed);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1870,9 +1926,8 @@ function renderStats(stats) {
         ];
     } else {
         rows = [
-            ['Runs',         stats.total_runs      ?? 0],
-            ['Best Cleared', stats.best_labs_cleared ?? 0],
-            ['Best Time',    stats.best_total_time != null ? formatTime(stats.best_total_time) : '—'],
+            ['Runs',      stats.total_runs      ?? 0],
+            ['Best Time', stats.best_total_time != null ? formatTime(stats.best_total_time) : '—'],
         ];
     }
     statsContent.innerHTML =
@@ -1905,4 +1960,15 @@ async function saveStats(runData) {
 // ══════════════════════════════════════════════════════════════════════════
 
 resizeCanvas();
+
+// Randomise mode and difficulty on each page load
+(function randomiseDefaults() {
+    const modes = ['speed', 'level'];
+    const diffs = ['easy', 'moderate', 'hard'];
+    selectedMode = modes[Math.floor(Math.random() * modes.length)];
+    selectedDiff = diffs[Math.floor(Math.random() * diffs.length)];
+    modeCards.forEach(c => c.classList.toggle('selected', c.dataset.mode === selectedMode));
+    diffBtns.forEach(b => b.classList.toggle('selected', b.dataset.diff === selectedDiff));
+})();
+
 showMenu();
