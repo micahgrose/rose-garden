@@ -936,7 +936,9 @@ function renderScene(grid, player, batteries) {
             // Global darkness + distance + side darkening
             // Fringe uses wall darkMult so it matches adjacent sandstone
             const pixDark = (isDoor && !isFringe) ? darkMult : 0.25;
-            const bright = distFactor * sideMult * pixDark;
+            // Near-fog: fade strips to black when pressed against a wall to suppress phantom-branch artifact
+            const nearFog = perpWallDist < 0.45 ? (perpWallDist / 0.45) ** 2 : 1.0;
+            const bright = distFactor * sideMult * pixDark * nearFog;
             r = Math.floor(r * bright);
             g = Math.floor(g * bright);
             b = Math.floor(b * bright);
@@ -1044,26 +1046,19 @@ function renderScene(grid, player, batteries) {
         const screenCol = Math.min(Math.max(0, spriteScreenX), W - 1);
         if (zBuffer[screenCol] < transformY) continue;
 
-        const spriteH = Math.abs(Math.floor(H / transformY));
-        const cy2 = Math.floor(horizon - spriteH / 2) + spriteH / 2;
-        const flagH = Math.max(5, Math.min(36, 13 / dist));
-        const flagW = flagH * 0.6;
-        const alpha = Math.min(0.92, 1 / (dist * 0.35 + 0.4)) * (distFactor => distFactor)(Math.max(0, 1 - dist / (effectiveReach * 1.5)));
+        const flagH = Math.max(3, Math.min(14, 6 / transformY));
+        const flagW = flagH * 1.6;
+        const distAlpha = Math.max(0, 1 - dist / (effectiveReach * 1.4));
+        const alpha = Math.min(0.55, distAlpha * 0.7);
+        if (alpha < 0.04) continue;
 
+        // Flat dull-red triangle only — no pole, looks taped to the wall
         ctx.save();
-        ctx.strokeStyle = `rgba(200, 50, 50, ${alpha})`;
-        ctx.fillStyle   = `rgba(210, 45, 45, ${alpha * 0.9})`;
-        ctx.lineWidth   = Math.max(1, flagH * 0.07);
-        // Pole
+        ctx.fillStyle = `rgba(148, 55, 42, ${alpha})`;
         ctx.beginPath();
-        ctx.moveTo(spriteScreenX, cy2 - flagH * 0.5);
-        ctx.lineTo(spriteScreenX, cy2 + flagH * 0.5);
-        ctx.stroke();
-        // Flag triangle
-        ctx.beginPath();
-        ctx.moveTo(spriteScreenX, cy2 - flagH * 0.5);
-        ctx.lineTo(spriteScreenX + flagW, cy2 - flagH * 0.18);
-        ctx.lineTo(spriteScreenX, cy2 + flagH * 0.1);
+        ctx.moveTo(spriteScreenX - flagW * 0.45, horizon - flagH * 0.55);
+        ctx.lineTo(spriteScreenX + flagW * 0.55, horizon);
+        ctx.lineTo(spriteScreenX - flagW * 0.45, horizon + flagH * 0.55);
         ctx.closePath();
         ctx.fill();
         ctx.restore();

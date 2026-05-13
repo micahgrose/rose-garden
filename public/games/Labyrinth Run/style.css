@@ -798,7 +798,7 @@ html, body {
 }
 
 .slotNum {
-    font-size: 0.48rem;
+    font-size: 0.58rem;
     letter-spacing: 0.1em;
     color: var(--text-faint);
     font-family: 'Cinzel', serif;
@@ -814,7 +814,7 @@ html, body {
 }
 
 .slotType {
-    font-size: 0.5rem;
+    font-size: 0.62rem;
     letter-spacing: 0.1em;
     color: var(--gold-mid);
     font-family: 'Cinzel', serif;
@@ -824,7 +824,7 @@ html, body {
 }
 
 .slotStatus {
-    font-size: 0.48rem;
+    font-size: 0.58rem;
     letter-spacing: 0.06em;
     color: var(--text-dim);
     font-family: 'Cinzel', serif;
