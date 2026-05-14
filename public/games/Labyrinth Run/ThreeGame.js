@@ -26,7 +26,7 @@ const BATTERY_PICKUP_AMOUNT  = 50;
 const BATTERY_DEAD_DELAY     = 10;
 
 // — Flashlight
-const FLASHLIGHT_RADIUS_FULL = 1.9;
+const FLASHLIGHT_RADIUS_FULL = 0.19;
 const FLASHLIGHT_REACH       = 4.15;
 const FLICKER_CHANCE_BASE    = 0.02;
 const FLICKER_CHANCE_SCALE   = 0.48;
@@ -47,6 +47,13 @@ const CELL_SCALE             = 1;
 const HEALTH_MAX             = 100;
 const TOMB_HALL_LEN          = 5;
 const SWOOSH_LEAD_TIME       = 0.1;
+
+// — Colors  (rgb, each channel 0.0–1.0)
+const COLOR_WALL    = [0.03, 0.024, 0.015];
+const COLOR_FLOOR   = [0.35, 0.28,  0.18 ];
+const COLOR_CEILING = [0.18, 0.13,  0.08 ];
+const COLOR_DOOR    = [0.65, 0.55,  0.42 ];
+const COLOR_SUN     = [1.0,  0.77,  0.27 ];
 
 const MODE_CONFIGS = {
     speed: {
@@ -641,12 +648,12 @@ const doorTex      = imageDataToTexture(generateDoorTexture());
 const floorTex     = imageDataToTexture(generateFloorTexture(), true);
 const ceilingTex   = imageDataToTexture(generateCeilingTexture(), true);
 
-// Materials — MeshBasicMaterial with cave-dark tint (0.25 brightness) + amber tone
-const wallColor    = new THREE.Color(0.08, 0.065, 0.04);
-const doorColor    = new THREE.Color(0.65, 0.55, 0.42);
-const sunColor     = new THREE.Color(1.0, 0.77, 0.27);
-const floorColor   = new THREE.Color(0.35, 0.28, 0.18);
-const ceilingColor = new THREE.Color(0.18, 0.13, 0.08);
+// Materials
+const wallColor    = new THREE.Color(...COLOR_WALL);
+const doorColor    = new THREE.Color(...COLOR_DOOR);
+const sunColor     = new THREE.Color(...COLOR_SUN);
+const floorColor   = new THREE.Color(...COLOR_FLOOR);
+const ceilingColor = new THREE.Color(...COLOR_CEILING);
 
 const wallMat    = new THREE.MeshBasicMaterial({ map: sandstoneTex, color: wallColor });
 const doorMat    = new THREE.MeshBasicMaterial({ map: doorTex,      color: doorColor });
