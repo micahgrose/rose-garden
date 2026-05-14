@@ -26,8 +26,8 @@ const BATTERY_PICKUP_AMOUNT  = 50;
 const BATTERY_DEAD_DELAY     = 10;
 
 // — Flashlight
-const FLASHLIGHT_RADIUS_FULL = 0.2;
-const FLASHLIGHT_REACH       = 5;
+const FLASHLIGHT_RADIUS_FULL = 0.15;
+const FLASHLIGHT_REACH       = 3.75;
 const FLICKER_CHANCE_BASE    = 0.02;
 const FLICKER_CHANCE_SCALE   = 0.48;
 const RADIUS_DRAIN_CURVE     = 0.55;
@@ -642,7 +642,7 @@ const floorTex     = imageDataToTexture(generateFloorTexture(), true);
 const ceilingTex   = imageDataToTexture(generateCeilingTexture(), true);
 
 // Materials — MeshBasicMaterial with cave-dark tint (0.25 brightness) + amber tone
-const wallColor    = new THREE.Color(0.35, 0.28, 0.18);
+const wallColor    = new THREE.Color(0.08, 0.065, 0.04);
 const doorColor    = new THREE.Color(0.65, 0.55, 0.42);
 const sunColor     = new THREE.Color(1.0, 0.77, 0.27);
 const floorColor   = new THREE.Color(0.35, 0.28, 0.18);
@@ -665,9 +665,9 @@ let batMeshes    = [];   // { group, bat } per battery
 let effectiveReach = FLASHLIGHT_REACH;
 
 // Battery 3D materials (shared)
-const batTopMat = new THREE.MeshBasicMaterial({ color: 0xB87333 }); // copper brown
-const batBotMat = new THREE.MeshBasicMaterial({ color: 0x1c1c1c }); // near black
-const batCapMat = new THREE.MeshBasicMaterial({ color: 0xE8C84A }); // gold nub
+const batTopMat = new THREE.MeshBasicMaterial({ color: 0x4A2C10 }); // dull dark brown
+const batBotMat = new THREE.MeshBasicMaterial({ color: 0x141414 }); // near black
+const batCapMat = new THREE.MeshBasicMaterial({ color: 0x5A4A18 }); // tarnished gold
 
 // Marker sprite material
 const mrkCanvas = document.createElement('canvas');
@@ -761,7 +761,7 @@ function buildSceneFromGrid(grid) {
 
 function buildBatteryMesh(bat, grid) {
     const group = new THREE.Group();
-    const R = 0.022, H = 0.09, segs = 8;
+    const R = 0.015, H = 0.065, segs = 8;
     const botH = H * 0.45, topH = H * 0.55;
 
     const botMesh = new THREE.Mesh(new THREE.CylinderGeometry(R, R, botH, segs), batBotMat);
@@ -770,20 +770,20 @@ function buildBatteryMesh(bat, grid) {
     const topMesh = new THREE.Mesh(new THREE.CylinderGeometry(R, R, topH, segs), batTopMat);
     topMesh.position.y = botH + topH / 2;
 
-    const capMesh = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.45, R * 0.45, 0.018, segs), batCapMat);
-    capMesh.position.y = H + 0.009;
+    const capMesh = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.45, R * 0.45, 0.01, segs), batCapMat);
+    capMesh.position.y = H + 0.005;
 
     group.add(botMesh, topMesh, capMesh);
 
-    // Offset toward nearest adjacent wall so battery sits against it
+    // Lie on side against nearest wall, cap facing away from wall
     let ox = 0, oz = 0;
     const { x, y } = bat;
-    if      (grid[y]     && grid[y][x - 1])     ox = -0.3;
-    else if (grid[y]     && grid[y][x + 1])     ox =  0.3;
-    else if (grid[y - 1] && grid[y - 1][x])     oz = -0.3;
-    else if (grid[y + 1] && grid[y + 1][x])     oz =  0.3;
+    if      (grid[y]     && grid[y][x - 1])     { ox = -0.43; group.rotation.z =  Math.PI / 2; }
+    else if (grid[y]     && grid[y][x + 1])     { ox =  0.43; group.rotation.z = -Math.PI / 2; }
+    else if (grid[y - 1] && grid[y - 1][x])     { oz = -0.43; group.rotation.x = -Math.PI / 2; }
+    else if (grid[y + 1] && grid[y + 1][x])     { oz =  0.43; group.rotation.x =  Math.PI / 2; }
 
-    group.position.set((bat.x + 0.5 + ox) * CELL_SCALE, 0, (bat.y + 0.5 + oz) * CELL_SCALE);
+    group.position.set((bat.x + 0.5 + ox) * CELL_SCALE, R, (bat.y + 0.5 + oz) * CELL_SCALE);
     group.visible = bat.active;
     return group;
 }
@@ -847,7 +847,7 @@ function updateFlicker(dt, batteryPct) {
     } else {
         const chance = (FLICKER_CHANCE_BASE + FLICKER_CHANCE_SCALE * (1 - batteryPct)) * dt;
         if (Math.random() < chance) {
-            flickerMult  = Math.random() < 0.25 ? 0 : Math.random() * 0.2;
+            flickerMult  = 0;
             flickerTimer = 0.04 + Math.random() * 0.13;
             sndFlicker.currentTime = 0;
             sndFlicker.play().catch(() => {});
