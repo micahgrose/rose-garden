@@ -26,8 +26,8 @@ const BATTERY_PICKUP_AMOUNT  = 50;
 const BATTERY_DEAD_DELAY     = 10;
 
 // — Flashlight
-const FLASHLIGHT_RADIUS_FULL = 0.2;
-const FLASHLIGHT_REACH       = 4.75;
+const FLASHLIGHT_RADIUS_FULL = 0.25;
+const FLASHLIGHT_REACH       = 5;
 const FLICKER_CHANCE_BASE    = 0.02;
 const FLICKER_CHANCE_SCALE   = 0.48;
 const RADIUS_DRAIN_CURVE     = 0.55;
