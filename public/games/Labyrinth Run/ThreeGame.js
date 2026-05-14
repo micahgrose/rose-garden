@@ -680,6 +680,8 @@ function updateSqueezeTraps(dt) {
     rebuildSqueezeGrid();
 }
 
+const SQUEEZE_PUSH_MARGIN = 0.27; // matches MARGIN in updatePlayer
+
 function pushPlayerFromSqueezeWalls() {
     const pcx = Math.floor(player.x / CELL_SCALE);
     const pcy = Math.floor(player.y / CELL_SCALE);
@@ -690,15 +692,23 @@ function pushPlayerFromSqueezeWalls() {
         if (!trap.cells.some(c => c.x === pcx && c.y === pcy)) continue;
         const depth = progress * 0.5 * CELL_SCALE;
         if (trap.axis === 'y') {
-            const leftWall  = pcx * CELL_SCALE + depth;
-            const rightWall = (pcx + 1) * CELL_SCALE - depth;
-            if (player.x < leftWall)  player.x = leftWall;
-            if (player.x > rightWall) player.x = rightWall;
+            const leftWall  = pcx * CELL_SCALE + depth + SQUEEZE_PUSH_MARGIN;
+            const rightWall = (pcx + 1) * CELL_SCALE - depth - SQUEEZE_PUSH_MARGIN;
+            if (leftWall <= rightWall) {
+                if (player.x < leftWall)  player.x = leftWall;
+                if (player.x > rightWall) player.x = rightWall;
+            } else {
+                player.x = (pcx + 0.5) * CELL_SCALE;
+            }
         } else {
-            const topWall    = pcy * CELL_SCALE + depth;
-            const bottomWall = (pcy + 1) * CELL_SCALE - depth;
-            if (player.y < topWall)    player.y = topWall;
-            if (player.y > bottomWall) player.y = bottomWall;
+            const topWall    = pcy * CELL_SCALE + depth + SQUEEZE_PUSH_MARGIN;
+            const bottomWall = (pcy + 1) * CELL_SCALE - depth - SQUEEZE_PUSH_MARGIN;
+            if (topWall <= bottomWall) {
+                if (player.y < topWall)    player.y = topWall;
+                if (player.y > bottomWall) player.y = bottomWall;
+            } else {
+                player.y = (pcy + 0.5) * CELL_SCALE;
+            }
         }
     }
 }
@@ -710,14 +720,14 @@ function buildSqueezePanels() {
         for (const cell of trap.cells) {
             let meshA, meshB;
             if (trap.axis === 'y') {
-                meshA = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.0), wallMat);
-                meshB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.0), wallMat);
+                meshA = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.0), squeezeMat);
+                meshB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.0), squeezeMat);
                 meshA.position.set(cell.x * CELL_SCALE, 0.5, (cell.y + 0.5) * CELL_SCALE);
                 meshB.position.set((cell.x + 1) * CELL_SCALE, 0.5, (cell.y + 0.5) * CELL_SCALE);
                 meshA.scale.x = 0; meshB.scale.x = 0;
             } else {
-                meshA = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.02, 0.5), wallMat);
-                meshB = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.02, 0.5), wallMat);
+                meshA = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.02, 0.5), squeezeMat);
+                meshB = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.02, 0.5), squeezeMat);
                 meshA.position.set((cell.x + 0.5) * CELL_SCALE, 0.5, cell.y * CELL_SCALE);
                 meshB.position.set((cell.x + 0.5) * CELL_SCALE, 0.5, (cell.y + 1) * CELL_SCALE);
                 meshA.scale.z = 0; meshB.scale.z = 0;
@@ -822,6 +832,9 @@ let squeezePanels = [];   // { meshA, meshB, trap, cell }
 let squeezeTraps  = [];   // [{ cells, state, timer, axis }]
 let squeezeGrid   = {};   // 'gx,gy' → { progress, axis }
 let effectiveReach = FLASHLIGHT_REACH;
+
+// Squeeze panel material — plain color, no texture
+const squeezeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...COLOR_WALL) });
 
 // Battery 3D materials (shared)
 const batTopMat = new THREE.MeshBasicMaterial({ color: 0x4A2C10 }); // dull dark brown
@@ -1694,8 +1707,8 @@ function gameLoop(now) {
     const elapsed = (now - lapStart) / 1000;
 
     updateSqueezeTraps(dt);
-    updatePlayer(dt, currentGrid, currentBats);
     pushPlayerFromSqueezeWalls();
+    updatePlayer(dt, currentGrid, currentBats);
     updateSqueezePanelMeshes();
 
     const batPct = player.battery / runConfig.batMax;
@@ -1830,7 +1843,12 @@ function renderStats(stats) {
             ['Fastest Lab 3', fpl[2] != null ? formatTime(fpl[2]) : '—'],
         ];
     } else {
-        rows = [['Runs', stats.total_runs ?? 0], ['Best Time', stats.best_total_time != null ? formatTime(stats.best_total_time) : '—']];
+        const depth = stats.best_labs_cleared;
+        rows = [
+            ['Runs',        stats.total_runs ?? 0],
+            ['Best Depth',  depth != null ? `Lab ${depth}` : '—'],
+            ['Best Time',   stats.best_total_time != null ? formatTime(stats.best_total_time) : '—'],
+        ];
     }
     statsContent.innerHTML =
         `<div class="statsRow"><span class="statsLabel" style="color:var(--gold-dim);font-size:0.68rem;letter-spacing:0.12em;">${modeLabel}</span></div>` +
