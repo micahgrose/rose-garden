@@ -26,8 +26,8 @@ const BATTERY_PICKUP_AMOUNT  = 50;
 const BATTERY_DEAD_DELAY     = 10;
 
 // — Flashlight
-const FLASHLIGHT_RADIUS_FULL = 0.19;
-const FLASHLIGHT_REACH       = 4.15;
+const FLASHLIGHT_RADIUS_FULL = 0.2;
+const FLASHLIGHT_REACH       = 4.75;
 const FLICKER_CHANCE_BASE    = 0.02;
 const FLICKER_CHANCE_SCALE   = 0.48;
 const RADIUS_DRAIN_CURVE     = 0.55;
@@ -47,11 +47,12 @@ const CELL_SCALE             = 1;
 const HEALTH_MAX             = 100;
 const TOMB_HALL_LEN          = 5;
 const SWOOSH_LEAD_TIME       = 0.1;
+const SQUEEZE_CLOSE_DUR      = 4.0;
 
 // — Colors  (rgb, each channel 0.0–1.0)
 const COLOR_WALL    = [0.03, 0.024, 0.015];
-const COLOR_FLOOR   = [0.35, 0.28,  0.18 ];
-const COLOR_CEILING = [0.18, 0.13,  0.08 ];
+const COLOR_FLOOR   = [0.25, 0.18, 0.08 ];
+const COLOR_CEILING = COLOR_FLOOR;
 const COLOR_DOOR    = [0.65, 0.55,  0.42 ];
 const COLOR_SUN     = [1.0,  0.77,  0.27 ];
 
@@ -64,7 +65,7 @@ const MODE_CONFIGS = {
     level: {
         easy:     { startSize: 9,  sizeInc: 3, batMax: 200, batDrain: 1.5,  startBats: 1, batInc: 1, batIncEvery: 1 },
         moderate: { startSize: 11, sizeInc: 4, batMax: 175, batDrain: 1.75, startBats: 1, batInc: 2, batIncEvery: 2 },
-        hard:     { startSize: 10, sizeInc: 5, batMax: 150, batDrain: 1.75, startBats: 2, batInc: 2, batIncEvery: 3 },
+        hard:     { startSize: 10, sizeInc: 5, batMax: 100, batDrain: 1.95, startBats: 2, batInc: 2, batIncEvery: 3 },
     },
     'tomb-robber': {
         easy:     { labSizes: [21,51], batteries: [1,5], batMax: 500, batDrain: 1.0, maxLabs: 2 },
@@ -594,7 +595,154 @@ function buildTombRobberLab1Generic() {
         if (!batteries.find(b => b.x === cell.x && b.y === cell.y))
             batteries.push({ x: cell.x, y: cell.y, active: true }), placed++;
     }
-    return { grid, batteries, doorX: door.x, doorY: door.y, ladderX: -1, ladderY: -1 };
+    const sqCandidates = findSqueezeCandidates(grid);
+    sqCandidates.sort(() => Math.random() - 0.5);
+    const sqTraps = sqCandidates.filter(cells => cells.every(c =>
+        Math.abs(c.x - 1) + Math.abs(c.y - 1) > 5 &&
+        Math.abs(c.x - door.x) + Math.abs(c.y - door.y) > 5
+    )).slice(0, 3);
+    return { grid, batteries, doorX: door.x, doorY: door.y, ladderX: -1, ladderY: -1, squeezeTraps: sqTraps };
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 3.5 — Squeeze Trap System
+// ══════════════════════════════════════════════════════════════════════════
+
+function initSqueezeTraps(arr) {
+    squeezeTraps = (arr || []).map(cells => {
+        const axis = cells.every(c => c.x === cells[0].x) ? 'y' : 'x';
+        return { cells, state: 'idle', timer: 0, axis };
+    });
+    squeezeGrid = {};
+}
+
+function rebuildSqueezeGrid() {
+    squeezeGrid = {};
+    for (const trap of squeezeTraps) {
+        if (trap.state === 'idle') continue;
+        const progress = trap.state === 'closed' ? 1 : Math.min(1, trap.timer / SQUEEZE_CLOSE_DUR);
+        if (progress <= 0) continue;
+        for (const c of trap.cells) squeezeGrid[c.x + ',' + c.y] = { progress, axis: trap.axis };
+    }
+}
+
+function findSqueezeCandidates(grid) {
+    const rows = grid.length, cols = grid[0].length;
+    const candidates = [];
+    for (let y = 1; y < rows - 1; y++) {
+        let runStart = -1;
+        for (let x = 1; x <= cols - 1; x++) {
+            const ok = x < cols - 1 && grid[y][x] === 0 && grid[y-1][x] === 1 && grid[y+1][x] === 1;
+            if (ok) { if (runStart < 0) runStart = x; }
+            else {
+                if (runStart >= 0 && x - runStart >= 3) {
+                    const mid = Math.floor((runStart + x - 1) / 2);
+                    candidates.push([{ x: mid-1, y }, { x: mid, y }, { x: mid+1, y }]);
+                }
+                runStart = -1;
+            }
+        }
+    }
+    for (let x = 1; x < cols - 1; x++) {
+        let runStart = -1;
+        for (let y = 1; y <= rows - 1; y++) {
+            const ok = y < rows - 1 && grid[y][x] === 0 && grid[y][x-1] === 1 && grid[y][x+1] === 1;
+            if (ok) { if (runStart < 0) runStart = y; }
+            else {
+                if (runStart >= 0 && y - runStart >= 3) {
+                    const mid = Math.floor((runStart + y - 1) / 2);
+                    candidates.push([{ x, y: mid-1 }, { x, y: mid }, { x, y: mid+1 }]);
+                }
+                runStart = -1;
+            }
+        }
+    }
+    return candidates;
+}
+
+function updateSqueezeTraps(dt) {
+    const px = Math.floor(player.x / CELL_SCALE);
+    const py = Math.floor(player.y / CELL_SCALE);
+    for (const trap of squeezeTraps) {
+        if (trap.state === 'idle') {
+            if (trap.cells.some(c => c.x === px && c.y === py)) {
+                trap.state = 'closing';
+                trap.timer = 0;
+            }
+        } else if (trap.state === 'closing') {
+            trap.timer = Math.min(trap.timer + dt, SQUEEZE_CLOSE_DUR);
+            if (trap.timer >= SQUEEZE_CLOSE_DUR) {
+                trap.state = 'closed';
+                if (trap.cells.some(c => c.x === px && c.y === py)) player.health = 0;
+            }
+        }
+    }
+    rebuildSqueezeGrid();
+}
+
+function pushPlayerFromSqueezeWalls() {
+    const pcx = Math.floor(player.x / CELL_SCALE);
+    const pcy = Math.floor(player.y / CELL_SCALE);
+    for (const trap of squeezeTraps) {
+        if (trap.state === 'idle') continue;
+        const progress = trap.state === 'closed' ? 1 : Math.min(1, trap.timer / SQUEEZE_CLOSE_DUR);
+        if (progress <= 0) continue;
+        if (!trap.cells.some(c => c.x === pcx && c.y === pcy)) continue;
+        const depth = progress * 0.5 * CELL_SCALE;
+        if (trap.axis === 'y') {
+            const leftWall  = pcx * CELL_SCALE + depth;
+            const rightWall = (pcx + 1) * CELL_SCALE - depth;
+            if (player.x < leftWall)  player.x = leftWall;
+            if (player.x > rightWall) player.x = rightWall;
+        } else {
+            const topWall    = pcy * CELL_SCALE + depth;
+            const bottomWall = (pcy + 1) * CELL_SCALE - depth;
+            if (player.y < topWall)    player.y = topWall;
+            if (player.y > bottomWall) player.y = bottomWall;
+        }
+    }
+}
+
+function buildSqueezePanels() {
+    squeezePanels.forEach(({ meshA, meshB }) => { scene.remove(meshA); scene.remove(meshB); });
+    squeezePanels = [];
+    for (const trap of squeezeTraps) {
+        for (const cell of trap.cells) {
+            let meshA, meshB;
+            if (trap.axis === 'y') {
+                meshA = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.0), wallMat);
+                meshB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.0), wallMat);
+                meshA.position.set(cell.x * CELL_SCALE, 0.5, (cell.y + 0.5) * CELL_SCALE);
+                meshB.position.set((cell.x + 1) * CELL_SCALE, 0.5, (cell.y + 0.5) * CELL_SCALE);
+                meshA.scale.x = 0; meshB.scale.x = 0;
+            } else {
+                meshA = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.02, 0.5), wallMat);
+                meshB = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.02, 0.5), wallMat);
+                meshA.position.set((cell.x + 0.5) * CELL_SCALE, 0.5, cell.y * CELL_SCALE);
+                meshB.position.set((cell.x + 0.5) * CELL_SCALE, 0.5, (cell.y + 1) * CELL_SCALE);
+                meshA.scale.z = 0; meshB.scale.z = 0;
+            }
+            scene.add(meshA); scene.add(meshB);
+            squeezePanels.push({ meshA, meshB, trap, cell });
+        }
+    }
+}
+
+function updateSqueezePanelMeshes() {
+    for (const { meshA, meshB, trap, cell } of squeezePanels) {
+        const p = trap.state === 'closed' ? 1 : (trap.state === 'idle' ? 0 : Math.min(1, trap.timer / SQUEEZE_CLOSE_DUR));
+        if (trap.axis === 'y') {
+            meshA.scale.x = p;
+            meshA.position.x = cell.x * CELL_SCALE + 0.25 * CELL_SCALE * p;
+            meshB.scale.x = p;
+            meshB.position.x = (cell.x + 1) * CELL_SCALE - 0.25 * CELL_SCALE * p;
+        } else {
+            meshA.scale.z = p;
+            meshA.position.z = cell.y * CELL_SCALE + 0.25 * CELL_SCALE * p;
+            meshB.scale.z = p;
+            meshB.position.z = (cell.y + 1) * CELL_SCALE - 0.25 * CELL_SCALE * p;
+        }
+    }
 }
 
 function buildDemoRoom() {
@@ -606,7 +754,8 @@ function buildDemoRoom() {
         grid.push(row);
     }
     grid[1][2] = 2;
-    return { grid, batteries: [], doorX: 2, doorY: 1, ladderX: -1, ladderY: -1 };
+    return { grid, batteries: [], doorX: 2, doorY: 1, ladderX: -1, ladderY: -1,
+        squeezeTraps: [[{ x: 2, y: 4 }, { x: 2, y: 5 }, { x: 2, y: 6 }]] };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -668,7 +817,10 @@ let sceneSun     = null;
 let sceneFloor   = null;
 let sceneCeiling = null;
 let sceneLadder  = null;
-let batMeshes    = [];   // { group, bat } per battery
+let batMeshes     = [];   // { group, bat } per battery
+let squeezePanels = [];   // { meshA, meshB, trap, cell }
+let squeezeTraps  = [];   // [{ cells, state, timer, axis }]
+let squeezeGrid   = {};   // 'gx,gy' → { progress, axis }
 let effectiveReach = FLASHLIGHT_REACH;
 
 // Battery 3D materials (shared)
@@ -713,6 +865,8 @@ function clearSceneObjects() {
     if (sceneLadder)  { scene.remove(sceneLadder);  sceneLadder = null; }
     batMeshes.forEach(({ group }) => scene.remove(group));
     batMeshes = [];
+    squeezePanels.forEach(({ meshA, meshB }) => { scene.remove(meshA); scene.remove(meshB); });
+    squeezePanels = [];
     markers.forEach(m => scene.remove(m.sprite));
     markers = [];
 }
@@ -953,6 +1107,15 @@ function isWall(grid, px, py, margin) {
         const mx = Math.floor(cx / CELL_SCALE), my = Math.floor(cy / CELL_SCALE);
         if (mx < 0 || mx >= w || my < 0 || my >= h) return true;
         if (grid[my][mx] === 1) return true;
+        const sq = squeezeGrid[mx + ',' + my];
+        if (sq) {
+            const depth = sq.progress * 0.5 * CELL_SCALE;
+            if (sq.axis === 'y') {
+                if (cx < mx * CELL_SCALE + depth || cx > (mx + 1) * CELL_SCALE - depth) return true;
+            } else {
+                if (cy < my * CELL_SCALE + depth || cy > (my + 1) * CELL_SCALE - depth) return true;
+            }
+        }
     }
     return false;
 }
@@ -986,6 +1149,11 @@ document.addEventListener('keydown', e => {
         case 'Digit5': if (gameState==='playing'){selectedSlot=4;updateHotbarUI();} break;
     }
 });
+document.addEventListener('wheel', e => {
+    if (gameState !== 'playing') return;
+    selectedSlot = e.deltaY > 0 ? (selectedSlot + 1) % 5 : (selectedSlot + 4) % 5;
+    updateHotbarUI();
+}, { passive: true });
 document.addEventListener('keyup', e => {
     switch (e.code) {
         case 'KeyW': keys.w = false; break;
@@ -1345,6 +1513,8 @@ function triggerLadderCutscene(lapTime) {
                 ladderY = level.ladderY ?? -1;
                 buildSceneFromGrid(currentGrid);
                 setupBatteryMeshes(currentBats, currentGrid);
+                initSqueezeTraps(level.squeezeTraps);
+                buildSqueezePanels();
                 if (ladderX >= 0) {
                     sceneLadder = buildLadderGeometry(ladderX, ladderY);
                     scene.add(sceneLadder);
@@ -1490,6 +1660,8 @@ function loadNextLab() {
 
     buildSceneFromGrid(currentGrid);
     setupBatteryMeshes(currentBats, currentGrid);
+    initSqueezeTraps(level.squeezeTraps);
+    buildSqueezePanels();
 
     if (ladderX >= 0) {
         sceneLadder = buildLadderGeometry(ladderX, ladderY);
@@ -1521,7 +1693,10 @@ function gameLoop(now) {
     lastFrameTime = now;
     const elapsed = (now - lapStart) / 1000;
 
+    updateSqueezeTraps(dt);
     updatePlayer(dt, currentGrid, currentBats);
+    pushPlayerFromSqueezeWalls();
+    updateSqueezePanelMeshes();
 
     const batPct = player.battery / runConfig.batMax;
     effectiveReach = FLASHLIGHT_REACH * (REACH_FLOOR + (1 - REACH_FLOOR) * Math.pow(batPct, REACH_DRAIN_CURVE));
