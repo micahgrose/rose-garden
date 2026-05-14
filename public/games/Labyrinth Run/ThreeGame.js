@@ -26,8 +26,8 @@ const BATTERY_PICKUP_AMOUNT  = 50;
 const BATTERY_DEAD_DELAY     = 10;
 
 // — Flashlight
-const FLASHLIGHT_RADIUS_FULL = 0.15;
-const FLASHLIGHT_REACH       = 3.75;
+const FLASHLIGHT_RADIUS_FULL = 1.9;
+const FLASHLIGHT_REACH       = 4.15;
 const FLICKER_CHANCE_BASE    = 0.02;
 const FLICKER_CHANCE_SCALE   = 0.48;
 const RADIUS_DRAIN_CURVE     = 0.55;
@@ -51,8 +51,8 @@ const SWOOSH_LEAD_TIME       = 0.1;
 const MODE_CONFIGS = {
     speed: {
         easy:     { labSizes: [11,15,19], batteries: [1,1,2], batMax: 150, batDrain: 1.5,  maxLabs: 3 },
-        moderate: { labSizes: [15,19,23], batteries: [1,2,3], batMax: 150, batDrain: 1.75, maxLabs: 3 },
-        hard:     { labSizes: [19,23,27], batteries: [2,2,2], batMax: 125, batDrain: 1.75, maxLabs: 3 },
+        moderate: { labSizes: [15,19,23], batteries: [1,2,3], batMax: 150, batDrain: 2, maxLabs: 3 },
+        hard:     { labSizes: [19,23,27], batteries: [1,2,2], batMax: 125, batDrain: 2.75, maxLabs: 3 },
     },
     level: {
         easy:     { startSize: 9,  sizeInc: 3, batMax: 200, batDrain: 1.5,  startBats: 1, batInc: 1, batIncEvery: 1 },
@@ -760,28 +760,32 @@ function buildSceneFromGrid(grid) {
 }
 
 function buildBatteryMesh(bat, grid) {
-    const group = new THREE.Group();
-    const R = 0.015, H = 0.065, segs = 8;
+    const group = new THREE.Group(); // outer: random Y rotation
+    const R = 0.010, H = 0.048, segs = 8;
     const botH = H * 0.45, topH = H * 0.55;
 
+    // Inner group: cylinder upright then tipped flat along X
+    const inner = new THREE.Group();
     const botMesh = new THREE.Mesh(new THREE.CylinderGeometry(R, R, botH, segs), batBotMat);
     botMesh.position.y = botH / 2;
-
     const topMesh = new THREE.Mesh(new THREE.CylinderGeometry(R, R, topH, segs), batTopMat);
     topMesh.position.y = botH + topH / 2;
+    const capMesh = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.45, R * 0.45, 0.008, segs), batCapMat);
+    capMesh.position.y = H + 0.004;
+    inner.add(botMesh, topMesh, capMesh);
+    inner.rotation.z = Math.PI / 2;
+    group.add(inner);
 
-    const capMesh = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.45, R * 0.45, 0.01, segs), batCapMat);
-    capMesh.position.y = H + 0.005;
+    // Random Y rotation so each battery faces a different direction
+    group.rotation.y = Math.random() * Math.PI * 2;
 
-    group.add(botMesh, topMesh, capMesh);
-
-    // Lie on side against nearest wall, cap facing away from wall
+    // Nudge toward nearest wall
     let ox = 0, oz = 0;
     const { x, y } = bat;
-    if      (grid[y]     && grid[y][x - 1])     { ox = -0.43; group.rotation.z =  Math.PI / 2; }
-    else if (grid[y]     && grid[y][x + 1])     { ox =  0.43; group.rotation.z = -Math.PI / 2; }
-    else if (grid[y - 1] && grid[y - 1][x])     { oz = -0.43; group.rotation.x = -Math.PI / 2; }
-    else if (grid[y + 1] && grid[y + 1][x])     { oz =  0.43; group.rotation.x =  Math.PI / 2; }
+    if      (grid[y]     && grid[y][x - 1])     ox = -0.4;
+    else if (grid[y]     && grid[y][x + 1])     ox =  0.4;
+    else if (grid[y - 1] && grid[y - 1][x])     oz = -0.4;
+    else if (grid[y + 1] && grid[y + 1][x])     oz =  0.4;
 
     group.position.set((bat.x + 0.5 + ox) * CELL_SCALE, R, (bat.y + 0.5 + oz) * CELL_SCALE);
     group.visible = bat.active;
