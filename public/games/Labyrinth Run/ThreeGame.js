@@ -5,6 +5,7 @@ import * as THREE from 'three';
 // SECTION 1 — Constants & Config
 // ══════════════════════════════════════════════════════════════════════════
 
+// — Player movement
 const MOVE_SPEED             = 1;
 const RUN_SPEED              = 1.8;
 const PENALTY_SPEED          = 0.7;
@@ -12,12 +13,19 @@ const STAMINA_MAX            = 100;
 const STAMINA_DRAIN          = 30;
 const STAMINA_REGEN_NORMAL   = 30;
 const STAMINA_REGEN_PENALTY  = 10;
+
+// — Head bob
 const BOB_AMP                = 0.025;
 const BOB_FREQ               = 8;
 const BOB_SMOOTH             = 10;
+
+// — Battery
 const BATTERY_MAX            = 150;
 const BATTERY_DRAIN          = 1.5;
 const BATTERY_PICKUP_AMOUNT  = 50;
+const BATTERY_DEAD_DELAY     = 10;
+
+// — Flashlight
 const FLASHLIGHT_RADIUS_FULL = 0.2;
 const FLASHLIGHT_REACH       = 5;
 const FLICKER_CHANCE_BASE    = 0.02;
@@ -26,15 +34,18 @@ const RADIUS_DRAIN_CURVE     = 0.55;
 const REACH_DRAIN_CURVE      = 0.45;
 const REACH_FLOOR            = 0.70;
 const BRIGHTNESS_DRAIN       = 0.01;
+
+// — Camera & controls
 const MOUSE_SENSITIVITY      = 0.00075;
-const TEXTURE_SIZE           = 128;
-const CELL_SCALE             = 1;
-const BATTERY_DEAD_DELAY     = 10;
-const HEALTH_MAX             = 100;
-const TOMB_HALL_LEN          = 5;
-const PLANE_LEN              = Math.tan(Math.PI / 4); // 90° horizontal FOV
 const MAX_PITCH_RAD          = 0.42;
 const PITCH_SENS             = 0.0012;
+const PLANE_LEN              = Math.tan(Math.PI / 4); // 90° horizontal FOV
+
+// — World
+const TEXTURE_SIZE           = 128;
+const CELL_SCALE             = 1;
+const HEALTH_MAX             = 100;
+const TOMB_HALL_LEN          = 5;
 const SWOOSH_LEAD_TIME       = 0.1;
 
 const MODE_CONFIGS = {
@@ -230,7 +241,7 @@ function tryPickup(batteries) {
             bat.active = false;
             hotbar[slot] = { type: 'battery' };
             updateHotbarUI();
-            syncBatterySprites();
+            syncBatteryMeshes();
             return;
         }
     }
@@ -631,7 +642,7 @@ const floorTex     = imageDataToTexture(generateFloorTexture(), true);
 const ceilingTex   = imageDataToTexture(generateCeilingTexture(), true);
 
 // Materials — MeshBasicMaterial with cave-dark tint (0.25 brightness) + amber tone
-const wallColor    = new THREE.Color(0.25, 0.21, 0.16);
+const wallColor    = new THREE.Color(0.35, 0.28, 0.18);
 const doorColor    = new THREE.Color(0.65, 0.55, 0.42);
 const sunColor     = new THREE.Color(1.0, 0.77, 0.27);
 const floorColor   = new THREE.Color(0.35, 0.28, 0.18);
@@ -650,23 +661,13 @@ let sceneSun     = null;
 let sceneFloor   = null;
 let sceneCeiling = null;
 let sceneLadder  = null;
-let batSprites   = [];   // { sprite, bat } per battery
+let batMeshes    = [];   // { group, bat } per battery
 let effectiveReach = FLASHLIGHT_REACH;
 
-// Battery sprite material (shared)
-const batSpriteCanvas = document.createElement('canvas');
-batSpriteCanvas.width = batSpriteCanvas.height = 64;
-{
-    const bc = batSpriteCanvas.getContext('2d');
-    const g = bc.createRadialGradient(32,32,0,32,32,32);
-    g.addColorStop(0,'rgba(80,160,255,1)'); g.addColorStop(0.5,'rgba(40,100,220,0.4)'); g.addColorStop(1,'rgba(0,0,0,0)');
-    bc.fillStyle = g; bc.fillRect(0,0,64,64);
-    bc.strokeStyle = 'rgba(140,210,255,0.95)'; bc.lineWidth = 2;
-    bc.strokeRect(22,20,20,28);
-    bc.fillStyle = 'rgba(80,160,255,0.85)'; bc.fillRect(24,28,16,18);
-    bc.fillStyle = 'rgba(140,210,255,0.95)'; bc.fillRect(28,17,8,5);
-}
-const batSpriteMat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(batSpriteCanvas), fog: false, transparent: true, depthTest: false });
+// Battery 3D materials (shared)
+const batTopMat = new THREE.MeshBasicMaterial({ color: 0xB87333 }); // copper brown
+const batBotMat = new THREE.MeshBasicMaterial({ color: 0x1c1c1c }); // near black
+const batCapMat = new THREE.MeshBasicMaterial({ color: 0xE8C84A }); // gold nub
 
 // Marker sprite material
 const mrkCanvas = document.createElement('canvas');
@@ -703,8 +704,8 @@ function clearSceneObjects() {
     if (sceneFloor)   { scene.remove(sceneFloor);   sceneFloor = null; }
     if (sceneCeiling) { scene.remove(sceneCeiling); sceneCeiling = null; }
     if (sceneLadder)  { scene.remove(sceneLadder);  sceneLadder = null; }
-    batSprites.forEach(({ sprite }) => scene.remove(sprite));
-    batSprites = [];
+    batMeshes.forEach(({ group }) => scene.remove(group));
+    batMeshes = [];
     markers.forEach(m => scene.remove(m.sprite));
     markers = [];
 }
@@ -758,19 +759,45 @@ function buildSceneFromGrid(grid) {
     scene.add(sceneCeiling);
 }
 
-function setupBatterySprites(batteries) {
-    batSprites = batteries.map(bat => {
-        const sprite = new THREE.Sprite(batSpriteMat.clone());
-        sprite.scale.set(0.28, 0.28, 1);
-        sprite.position.set((bat.x + 0.5) * CELL_SCALE, 0.5, (bat.y + 0.5) * CELL_SCALE);
-        sprite.visible = bat.active;
-        scene.add(sprite);
-        return { sprite, bat };
+function buildBatteryMesh(bat, grid) {
+    const group = new THREE.Group();
+    const R = 0.022, H = 0.09, segs = 8;
+    const botH = H * 0.45, topH = H * 0.55;
+
+    const botMesh = new THREE.Mesh(new THREE.CylinderGeometry(R, R, botH, segs), batBotMat);
+    botMesh.position.y = botH / 2;
+
+    const topMesh = new THREE.Mesh(new THREE.CylinderGeometry(R, R, topH, segs), batTopMat);
+    topMesh.position.y = botH + topH / 2;
+
+    const capMesh = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.45, R * 0.45, 0.018, segs), batCapMat);
+    capMesh.position.y = H + 0.009;
+
+    group.add(botMesh, topMesh, capMesh);
+
+    // Offset toward nearest adjacent wall so battery sits against it
+    let ox = 0, oz = 0;
+    const { x, y } = bat;
+    if      (grid[y]     && grid[y][x - 1])     ox = -0.3;
+    else if (grid[y]     && grid[y][x + 1])     ox =  0.3;
+    else if (grid[y - 1] && grid[y - 1][x])     oz = -0.3;
+    else if (grid[y + 1] && grid[y + 1][x])     oz =  0.3;
+
+    group.position.set((bat.x + 0.5 + ox) * CELL_SCALE, 0, (bat.y + 0.5 + oz) * CELL_SCALE);
+    group.visible = bat.active;
+    return group;
+}
+
+function setupBatteryMeshes(batteries, grid) {
+    batMeshes = batteries.map(bat => {
+        const group = buildBatteryMesh(bat, grid);
+        scene.add(group);
+        return { group, bat };
     });
 }
 
-function syncBatterySprites() {
-    for (const { sprite, bat } of batSprites) sprite.visible = bat.active;
+function syncBatteryMeshes() {
+    for (const { group, bat } of batMeshes) group.visible = bat.active;
 }
 
 function buildLadderGeometry(lx, ly) {
@@ -839,7 +866,7 @@ function updateFlashlightOverlay(batteryPct) {
     const f0 = Math.min(99, beamR * 100).toFixed(1);
     const f1 = Math.min(99.5, beamR * 100 + 12).toFixed(1);
     flashlightOverlay.style.background =
-        `radial-gradient(ellipse at 50% 50%, transparent 0%, transparent ${f0}%, rgba(0,0,0,0.88) ${f1}%, rgba(0,0,0,${edgeDark.toFixed(3)}) 100%)`;
+        `radial-gradient(circle at 50% 50%, transparent 0%, transparent ${f0}%, rgba(0,0,0,0.88) ${f1}%, rgba(0,0,0,${edgeDark.toFixed(3)}) 100%)`;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1306,7 +1333,7 @@ function triggerLadderCutscene(lapTime) {
                 ladderX = level.ladderX ?? -1;
                 ladderY = level.ladderY ?? -1;
                 buildSceneFromGrid(currentGrid);
-                setupBatterySprites(currentBats);
+                setupBatteryMeshes(currentBats, currentGrid);
                 if (ladderX >= 0) {
                     sceneLadder = buildLadderGeometry(ladderX, ladderY);
                     scene.add(sceneLadder);
@@ -1451,7 +1478,7 @@ function loadNextLab() {
     markers = [];
 
     buildSceneFromGrid(currentGrid);
-    setupBatterySprites(currentBats);
+    setupBatteryMeshes(currentBats, currentGrid);
 
     if (ladderX >= 0) {
         sceneLadder = buildLadderGeometry(ladderX, ladderY);
