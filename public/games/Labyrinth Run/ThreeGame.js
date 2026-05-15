@@ -833,8 +833,6 @@ let squeezeTraps  = [];   // [{ cells, state, timer, axis }]
 let squeezeGrid   = {};   // 'gx,gy' → { progress, axis }
 let effectiveReach = FLASHLIGHT_REACH;
 
-// Squeeze panel material — plain color, no texture
-const wallMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...COLOR_WALL) });
 
 // Battery 3D materials (shared)
 const batTopMat = new THREE.MeshBasicMaterial({ color: 0x4A2C10 }); // dull dark brown
