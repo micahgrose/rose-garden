@@ -720,14 +720,14 @@ function buildSqueezePanels() {
         for (const cell of trap.cells) {
             let meshA, meshB;
             if (trap.axis === 'y') {
-                meshA = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.04), squeezeMat);
-                meshB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.04), squeezeMat);
+                meshA = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.04), wallMat);
+                meshB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.04), wallMat);
                 meshA.position.set(cell.x * CELL_SCALE, 0.5, (cell.y + 0.5) * CELL_SCALE);
                 meshB.position.set((cell.x + 1) * CELL_SCALE, 0.5, (cell.y + 0.5) * CELL_SCALE);
                 meshA.scale.x = 0; meshB.scale.x = 0;
             } else {
-                meshA = new THREE.Mesh(new THREE.BoxGeometry(1.04, 1.02, 0.5), squeezeMat);
-                meshB = new THREE.Mesh(new THREE.BoxGeometry(1.04, 1.02, 0.5), squeezeMat);
+                meshA = new THREE.Mesh(new THREE.BoxGeometry(1.04, 1.02, 0.5), wallMat);
+                meshB = new THREE.Mesh(new THREE.BoxGeometry(1.04, 1.02, 0.5), wallMat);
                 meshA.position.set((cell.x + 0.5) * CELL_SCALE, 0.5, cell.y * CELL_SCALE);
                 meshB.position.set((cell.x + 0.5) * CELL_SCALE, 0.5, (cell.y + 1) * CELL_SCALE);
                 meshA.scale.z = 0; meshB.scale.z = 0;
@@ -834,7 +834,7 @@ let squeezeGrid   = {};   // 'gx,gy' → { progress, axis }
 let effectiveReach = FLASHLIGHT_REACH;
 
 // Squeeze panel material — plain color, no texture
-const squeezeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...COLOR_WALL) });
+const wallMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...COLOR_WALL) });
 
 // Battery 3D materials (shared)
 const batTopMat = new THREE.MeshBasicMaterial({ color: 0x4A2C10 }); // dull dark brown
@@ -1121,7 +1121,16 @@ function isWall(grid, px, py, margin) {
         if (mx < 0 || mx >= w || my < 0 || my >= h) return true;
         if (grid[my][mx] === 1) return true;
         const sq = squeezeGrid[mx + ',' + my];
-        // squeeze walls handled by pushPlayerFromSqueezeWalls; don't block movement here
+        if (sq) {
+            // Use player center (px/py) not corner (cx/cy) so slabs block perpendicular
+            // entry but don't trap the player when moving along the corridor direction.
+            const depth = sq.progress * 0.5 * CELL_SCALE;
+            if (sq.axis === 'y') {
+                if (px < mx * CELL_SCALE + depth || px > (mx + 1) * CELL_SCALE - depth) return true;
+            } else {
+                if (py < my * CELL_SCALE + depth || py > (my + 1) * CELL_SCALE - depth) return true;
+            }
+        }
     }
     return false;
 }
