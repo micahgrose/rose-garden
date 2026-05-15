@@ -720,14 +720,14 @@ function buildSqueezePanels() {
         for (const cell of trap.cells) {
             let meshA, meshB;
             if (trap.axis === 'y') {
-                meshA = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.0), squeezeMat);
-                meshB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.0), squeezeMat);
+                meshA = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.04), squeezeMat);
+                meshB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.02, 1.04), squeezeMat);
                 meshA.position.set(cell.x * CELL_SCALE, 0.5, (cell.y + 0.5) * CELL_SCALE);
                 meshB.position.set((cell.x + 1) * CELL_SCALE, 0.5, (cell.y + 0.5) * CELL_SCALE);
                 meshA.scale.x = 0; meshB.scale.x = 0;
             } else {
-                meshA = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.02, 0.5), squeezeMat);
-                meshB = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.02, 0.5), squeezeMat);
+                meshA = new THREE.Mesh(new THREE.BoxGeometry(1.04, 1.02, 0.5), squeezeMat);
+                meshB = new THREE.Mesh(new THREE.BoxGeometry(1.04, 1.02, 0.5), squeezeMat);
                 meshA.position.set((cell.x + 0.5) * CELL_SCALE, 0.5, cell.y * CELL_SCALE);
                 meshB.position.set((cell.x + 0.5) * CELL_SCALE, 0.5, (cell.y + 1) * CELL_SCALE);
                 meshA.scale.z = 0; meshB.scale.z = 0;
@@ -1121,14 +1121,7 @@ function isWall(grid, px, py, margin) {
         if (mx < 0 || mx >= w || my < 0 || my >= h) return true;
         if (grid[my][mx] === 1) return true;
         const sq = squeezeGrid[mx + ',' + my];
-        if (sq) {
-            const depth = sq.progress * 0.5 * CELL_SCALE;
-            if (sq.axis === 'y') {
-                if (cx < mx * CELL_SCALE + depth || cx > (mx + 1) * CELL_SCALE - depth) return true;
-            } else {
-                if (cy < my * CELL_SCALE + depth || cy > (my + 1) * CELL_SCALE - depth) return true;
-            }
-        }
+        // squeeze walls handled by pushPlayerFromSqueezeWalls; don't block movement here
     }
     return false;
 }
