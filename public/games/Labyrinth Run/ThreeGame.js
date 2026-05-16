@@ -837,11 +837,12 @@ function buildSpikeMeshes() {
     spikeMeshes = [];
     plateMeshes.forEach(({ mesh }) => scene.remove(mesh));
     plateMeshes = [];
-    const plateGeom = new THREE.BoxGeometry(SPIKE_PLATE_SIZE, 0.03, SPIKE_PLATE_SIZE);
+    const plateGeom = new THREE.PlaneGeometry(SPIKE_PLATE_SIZE * CELL_SCALE, SPIKE_PLATE_SIZE * CELL_SCALE);
     for (const trap of spikeTraps) {
         for (const c of trap.cells) {
-            // Pressure-plate tile (slightly raised stone slab in cell centre)
+            // Pressure-plate tile — floor texture, barely raised so the edge is visible
             const plate = new THREE.Mesh(plateGeom, plateMat);
+            plate.rotation.x = -Math.PI / 2;
             plate.position.set((c.x + 0.5) * CELL_SCALE, 0.015, (c.y + 0.5) * CELL_SCALE);
             scene.add(plate);
             plateMeshes.push({ mesh: plate });
@@ -979,7 +980,11 @@ const ceilingColor = new THREE.Color(...COLOR_CEILING);
 
 const wallMat    = new THREE.MeshBasicMaterial({ map: sandstoneTex, color: wallColor });
 const spikeMat   = new THREE.MeshBasicMaterial({ color: 0x504840 });
-const plateMat   = new THREE.MeshBasicMaterial({ map: sandstoneTex, color: new THREE.Color(0.18, 0.12, 0.06) });
+// Pressure plate: clone of floor texture at the same tile density, looks like a floor tile
+const plateTex   = floorTex.clone();
+plateTex.needsUpdate = true;
+plateTex.repeat.set(SPIKE_PLATE_SIZE, SPIKE_PLATE_SIZE);
+const plateMat   = new THREE.MeshBasicMaterial({ map: plateTex, color: floorColor });
 const doorMat    = new THREE.MeshBasicMaterial({ map: doorTex,      color: doorColor });
 const sunMat     = new THREE.MeshBasicMaterial({ color: sunColor });
 const floorMat   = new THREE.MeshBasicMaterial({ map: floorTex,    color: floorColor,   side: THREE.DoubleSide });
