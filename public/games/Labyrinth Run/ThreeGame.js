@@ -58,6 +58,19 @@ const SPIKE_DAMAGE            = 20;   // HP dealt once per cell entry while acti
 const SPIKE_PLATE_SIZE        = 0.25; // pressure-plate = one floor tile (4×4 per cell)
 const SPIKE_MIN_DIST          = 4;    // min Manhattan distance between spike traps
 
+// — Boulder trap
+const BOULDER_SPEED       = 3.5;   // world units/s
+const BOULDER_DAMAGE      = 50;    // HP on direct hit
+const BOULDER_RADIUS      = 0.38;  // visual & collision radius
+const BOULDER_RESET_DELAY = 2.0;   // seconds before boulder resets to start
+const BOULDER_MIN_LEN     = 3;     // minimum corridor length to be eligible
+
+// — Arrow trap
+const ARROW_SPEED         = 5.0;   // world units/s crossing the corridor
+const ARROW_DAMAGE        = 15;    // HP per arrow hit
+const ARROW_INTERVAL_MIN  = 2.5;   // minimum seconds between volleys
+const ARROW_INTERVAL_MAX  = 5.0;   // maximum seconds between volleys
+
 // — Colors  (rgb, each channel 0.0–1.0)
 const COLOR_WALL    = [0.03, 0.024, 0.015];
 const COLOR_FLOOR   = [0.25, 0.18, 0.08 ];
@@ -634,6 +647,54 @@ function findSpikeLocations(grid, door) {
     return candidates;
 }
 
+function findBoulderCandidates(grid) {
+    const rows = grid.length, cols = grid[0].length;
+    const candidates = [];
+    const tryRun = (run, axis) => {
+        if (run.length < BOULDER_MIN_LEN) return;
+        const hasBranch = axis === 'x'
+            ? run.some(c => grid[c.y - 1][c.x] === 0 || grid[c.y + 1][c.x] === 0)
+            : run.some(c => grid[c.y][c.x - 1] === 0 || grid[c.y][c.x + 1] === 0);
+        if (hasBranch) candidates.push({ cells: [...run], axis });
+    };
+    for (let gy = 1; gy < rows - 1; gy++) {
+        let run = [];
+        for (let gx = 1; gx < cols - 1; gx++) {
+            if (grid[gy][gx] === 0) { run.push({ x: gx, y: gy }); } else { tryRun(run, 'x'); run = []; }
+        }
+        tryRun(run, 'x');
+    }
+    for (let gx = 1; gx < cols - 1; gx++) {
+        let run = [];
+        for (let gy = 1; gy < rows - 1; gy++) {
+            if (grid[gy][gx] === 0) { run.push({ x: gx, y: gy }); } else { tryRun(run, 'y'); run = []; }
+        }
+        tryRun(run, 'y');
+    }
+    return candidates;
+}
+
+function findArrowCandidates(grid, door) {
+    const rows = grid.length, cols = grid[0].length;
+    const candidates = [];
+    for (let gy = 2; gy < rows - 2; gy++) {
+        for (let gx = 2; gx < cols - 2; gx++) {
+            if (grid[gy][gx] !== 0) continue;
+            if (Math.abs(gx - 1) + Math.abs(gy - 1) <= 6) continue;
+            if (Math.abs(gx - door.x) + Math.abs(gy - door.y) <= 6) continue;
+            const wallN = grid[gy-1][gx] === 1, wallS = grid[gy+1][gx] === 1;
+            const wallE = grid[gy][gx+1] === 1, wallW = grid[gy][gx-1] === 1;
+            // Horizontal corridor (player walks E-W): arrow fires across from N or S wall
+            if (wallN && wallS && !wallE && !wallW)
+                candidates.push({ cellX: gx, cellY: gy, axis: 'y' });
+            // Vertical corridor (player walks N-S): arrow fires across from E or W wall
+            if (wallE && wallW && !wallN && !wallS)
+                candidates.push({ cellX: gx, cellY: gy, axis: 'x' });
+        }
+    }
+    return candidates;
+}
+
 function buildTombRobberLab1Generic() {
     const size = getLabSize(1);
     const grid = generateMaze(size, size);
@@ -672,8 +733,18 @@ function buildTombRobberLab1Generic() {
         if (clearOfSqueeze && clearOfOthers) spTraps.push(loc);
         if (spTraps.length >= 2) break;
     }
+    const boulderCandidates = findBoulderCandidates(grid);
+    boulderCandidates.sort(() => Math.random() - 0.5);
+    const blTraps = boulderCandidates.filter(b => b.cells.every(c =>
+        Math.abs(c.x - 1) + Math.abs(c.y - 1) > 5 &&
+        Math.abs(c.x - door.x) + Math.abs(c.y - door.y) > 5
+    )).slice(0, 1);
+    const arrowCandidates = findArrowCandidates(grid, door);
+    arrowCandidates.sort(() => Math.random() - 0.5);
+    const arTraps = arrowCandidates.slice(0, 4);
     return { grid, batteries, doorX: door.x, doorY: door.y, ladderX: -1, ladderY: -1,
-        squeezeTraps: sqTraps, spikeTraps: spTraps };
+        squeezeTraps: sqTraps, spikeTraps: spTraps,
+        boulderTraps: blTraps, arrowTraps: arTraps };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -965,6 +1036,175 @@ function updateSpikeMeshVisuals() {
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 3.7 — Boulder Trap System
+// ══════════════════════════════════════════════════════════════════════════
+
+const boulderMat = new THREE.MeshBasicMaterial({ color: 0x362820 });
+const boulderGeom = new THREE.SphereGeometry(BOULDER_RADIUS, 8, 6);
+
+function initBoulderTraps(arr) {
+    boulderTraps = (arr || []).map(b => {
+        const cells = b.cells, axis = b.axis;
+        const perpCoord = (axis === 'x')
+            ? (cells[0].y + 0.5) * CELL_SCALE
+            : (cells[0].x + 0.5) * CELL_SCALE;
+        return { cells, axis, perpCoord, state: 'idle', pos: 0, startPos: 0, endPos: 0, dir: 1, timer: 0, playerHit: false, mesh: null };
+    });
+}
+
+function buildBoulderMeshes() {
+    boulderTraps.forEach(t => { if (t.mesh) scene.remove(t.mesh); });
+    for (const trap of boulderTraps) {
+        const mesh = new THREE.Mesh(boulderGeom, boulderMat);
+        mesh.visible = false;
+        scene.add(mesh);
+        trap.mesh = mesh;
+    }
+}
+
+function updateBoulderTraps(dt) {
+    const px = Math.floor(player.x / CELL_SCALE);
+    const py = Math.floor(player.y / CELL_SCALE);
+    for (const trap of boulderTraps) {
+        if (trap.state === 'idle') {
+            // Trigger when player enters first or last cell; boulder comes from the other end
+            const first = trap.cells[0], last = trap.cells[trap.cells.length - 1];
+            const atFirst = px === first.x && py === first.y;
+            const atLast  = px === last.x  && py === last.y;
+            if (atFirst || atLast) {
+                trap.state = 'rolling';
+                trap.timer = 0;
+                trap.playerHit = false;
+                if (atFirst) {
+                    // Boulder comes from last end toward first
+                    trap.pos     = (trap.axis === 'x') ? (last.x  + 0.5) * CELL_SCALE : (last.y  + 0.5) * CELL_SCALE;
+                    trap.endPos  = (trap.axis === 'x') ? (first.x + 0.5) * CELL_SCALE : (first.y + 0.5) * CELL_SCALE;
+                    trap.dir = -1;
+                } else {
+                    // Boulder comes from first end toward last
+                    trap.pos     = (trap.axis === 'x') ? (first.x + 0.5) * CELL_SCALE : (first.y + 0.5) * CELL_SCALE;
+                    trap.endPos  = (trap.axis === 'x') ? (last.x  + 0.5) * CELL_SCALE : (last.y  + 0.5) * CELL_SCALE;
+                    trap.dir = 1;
+                }
+                if (trap.mesh) trap.mesh.visible = true;
+            }
+        } else if (trap.state === 'rolling') {
+            trap.pos += trap.dir * BOULDER_SPEED * dt;
+            // Rolling animation
+            if (trap.mesh) {
+                if (trap.axis === 'x') trap.mesh.rotation.z -= trap.dir * BOULDER_SPEED * dt / BOULDER_RADIUS;
+                else                   trap.mesh.rotation.x += trap.dir * BOULDER_SPEED * dt / BOULDER_RADIUS;
+                const bx = (trap.axis === 'x') ? trap.pos : trap.perpCoord;
+                const bz = (trap.axis === 'y') ? trap.pos : trap.perpCoord;
+                trap.mesh.position.set(bx, BOULDER_RADIUS, bz);
+            }
+            // Damage check
+            const bPlayerX = (trap.axis === 'x') ? trap.pos : trap.perpCoord;
+            const bPlayerY = (trap.axis === 'y') ? trap.pos : trap.perpCoord;
+            const dx = player.x - bPlayerX, dy = player.y - bPlayerY;
+            if (!trap.playerHit && dx*dx + dy*dy < (BOULDER_RADIUS + 0.15) * (BOULDER_RADIUS + 0.15)) {
+                player.health = Math.max(0, player.health - BOULDER_DAMAGE);
+                trap.playerHit = true;
+            }
+            // Reached end
+            const done = trap.dir > 0 ? trap.pos >= trap.endPos : trap.pos <= trap.endPos;
+            if (done) { trap.state = 'resetting'; trap.timer = BOULDER_RESET_DELAY; }
+        } else if (trap.state === 'resetting') {
+            trap.timer -= dt;
+            if (trap.timer <= 0) {
+                trap.state = 'idle';
+                if (trap.mesh) trap.mesh.visible = false;
+            }
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 3.8 — Arrow Trap System
+// ══════════════════════════════════════════════════════════════════════════
+
+const arrowShaftMat = new THREE.MeshBasicMaterial({ color: 0x4A3020 });
+const arrowHeadMat  = new THREE.MeshBasicMaterial({ color: 0x706050 });
+const arrowShaftGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.28, 4);
+const arrowHeadGeom  = new THREE.ConeGeometry(0.04, 0.09, 4);
+
+function makeArrowMesh(axis) {
+    const group = new THREE.Group();
+    const shaft = new THREE.Mesh(arrowShaftGeom, arrowShaftMat);
+    const head  = new THREE.Mesh(arrowHeadGeom,  arrowHeadMat);
+    head.position.y = 0.185;  // tip at front of shaft
+    group.add(shaft, head);
+    // Rotate cylinder (default Y-up) to face travel direction
+    if (axis === 'x') group.rotation.z = -Math.PI / 2;  // travel along world X
+    else              group.rotation.x =  Math.PI / 2;  // travel along world Z (player.y)
+    return group;
+}
+
+function initArrowTraps(arr) {
+    arrowTraps = (arr || []).map(a => ({
+        cellX: a.cellX, cellY: a.cellY, axis: a.axis,
+        interval: ARROW_INTERVAL_MIN + Math.random() * (ARROW_INTERVAL_MAX - ARROW_INTERVAL_MIN),
+        timer: Math.random() * 3.0,  // stagger initial fires
+        arrows: [],
+    }));
+}
+
+function buildArrowMeshes() {
+    // Clean up any old arrows still in scene
+    arrowTraps.forEach(t => { t.arrows.forEach(a => scene.remove(a.mesh)); t.arrows = []; });
+}
+
+function updateArrowTraps(dt) {
+    const CELL = CELL_SCALE;
+    for (const trap of arrowTraps) {
+        // Advance active arrows
+        for (let i = trap.arrows.length - 1; i >= 0; i--) {
+            const a = trap.arrows[i];
+            if (trap.axis === 'x') a.wx += a.dir * ARROW_SPEED * dt;
+            else                   a.wy += a.dir * ARROW_SPEED * dt;
+            // Update mesh position (px = world X, py = world Z)
+            a.mesh.position.set(a.wx, 0.5, a.wy);
+            // Hit check
+            const dx = player.x - a.wx, dy = player.y - a.wy;
+            if (!a.hit && dx*dx + dy*dy < 0.18*0.18) {
+                player.health = Math.max(0, player.health - ARROW_DAMAGE);
+                a.hit = true;
+            }
+            // Remove if it has exited the corridor cell
+            const outX = a.wx < trap.cellX * CELL - 0.1 || a.wx > (trap.cellX + 1) * CELL + 0.1;
+            const outY = a.wy < trap.cellY * CELL - 0.1 || a.wy > (trap.cellY + 1) * CELL + 0.1;
+            if (outX || outY) { scene.remove(a.mesh); trap.arrows.splice(i, 1); }
+        }
+        // Fire new arrow on interval
+        trap.timer -= dt;
+        if (trap.timer <= 0) {
+            trap.timer = trap.interval;
+            // Arrow fires from one side wall to the other
+            const dir = Math.random() < 0.5 ? 1 : -1;
+            let wx, wy;
+            if (trap.axis === 'x') {
+                // Fires along world X; fixed Z = center of cell
+                wx  = dir > 0 ? trap.cellX * CELL : (trap.cellX + 1) * CELL;
+                wy  = (trap.cellY + 0.5) * CELL;
+            } else {
+                // Fires along world Z (player.y); fixed X = center of cell
+                wx  = (trap.cellX + 0.5) * CELL;
+                wy  = dir > 0 ? trap.cellY * CELL : (trap.cellY + 1) * CELL;
+            }
+            const mesh = makeArrowMesh(trap.axis);
+            // Flip mesh if firing in negative direction
+            if (dir < 0) {
+                if (trap.axis === 'x') mesh.rotation.z = Math.PI / 2;
+                else                   mesh.rotation.x = -Math.PI / 2;
+            }
+            mesh.position.set(wx, 0.5, wy);
+            scene.add(mesh);
+            trap.arrows.push({ wx, wy, dir, mesh, hit: false });
+        }
+    }
+}
+
 function buildDemoRoom() {
     const GW = 5, GH = 13;
     const grid = [];
@@ -975,8 +1215,8 @@ function buildDemoRoom() {
     }
     grid[1][2] = 2;
     return { grid, batteries: [], doorX: 2, doorY: 1, ladderX: -1, ladderY: -1,
-        squeezeTraps: [],
-        spikeTraps:   [[{ x:2, y:6 }]] };
+        squeezeTraps: [], spikeTraps: [[{ x:2, y:6 }]],
+        boulderTraps: [], arrowTraps: [] };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1048,6 +1288,8 @@ let squeezeGrid   = {};   // 'gx,gy' → { progress, axis }
 let spikeTraps    = [];   // [{ cells, state, timer, playerWasInCell }]
 let spikeMeshes   = [];   // [{ mesh, trap }]
 let plateMeshes   = [];   // [{ mesh }] — pressure plate tiles
+let boulderTraps  = [];   // [{ cells, axis, state, pos, perpCoord, startPos, endPos, dir, timer, playerHit, mesh }]
+let arrowTraps    = [];   // [{ cellX, cellY, axis, interval, timer, arrows }]
 let effectiveReach = FLASHLIGHT_REACH;
 
 
@@ -1099,6 +1341,10 @@ function clearSceneObjects() {
     spikeMeshes = [];
     plateMeshes.forEach(({ mesh }) => scene.remove(mesh));
     plateMeshes = [];
+    boulderTraps.forEach(t => { if (t.mesh) scene.remove(t.mesh); });
+    boulderTraps = [];
+    arrowTraps.forEach(t => { t.arrows.forEach(a => scene.remove(a.mesh)); });
+    arrowTraps = [];
     markers.forEach(m => scene.remove(m.sprite));
     markers = [];
 }
@@ -1751,6 +1997,10 @@ function triggerLadderCutscene(lapTime) {
                 buildSqueezePanels();
                 initSpikeTraps(level.spikeTraps);
                 buildSpikeMeshes();
+                initBoulderTraps(level.boulderTraps);
+                buildBoulderMeshes();
+                initArrowTraps(level.arrowTraps);
+                buildArrowMeshes();
                 if (ladderX >= 0) {
                     sceneLadder = buildLadderGeometry(ladderX, ladderY);
                     scene.add(sceneLadder);
@@ -1900,6 +2150,10 @@ function loadNextLab() {
     buildSqueezePanels();
     initSpikeTraps(level.spikeTraps);
     buildSpikeMeshes();
+    initBoulderTraps(level.boulderTraps);
+    buildBoulderMeshes();
+    initArrowTraps(level.arrowTraps);
+    buildArrowMeshes();
 
     if (ladderX >= 0) {
         sceneLadder = buildLadderGeometry(ladderX, ladderY);
@@ -1934,6 +2188,8 @@ function gameLoop(now) {
     updateSqueezeTraps(dt);
     pushPlayerFromSqueezeWalls();
     updateSpikeTraps(dt);
+    updateBoulderTraps(dt);
+    updateArrowTraps(dt);
     updatePlayer(dt, currentGrid, currentBats);
     updateSqueezePanelMeshes();
     updateSpikeMeshVisuals();
