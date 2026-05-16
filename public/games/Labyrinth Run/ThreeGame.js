@@ -434,6 +434,41 @@ function generateFloorTexture() {
     return img;
 }
 
+function generatePlateTileTexture(glyphIdx) {
+    const size = TEXTURE_SIZE;
+    const img  = new ImageData(size, size);
+    const d    = img.data;
+    const BASE_R = 72, BASE_G = 54, BASE_B = 33;
+    const HIEROGLYPHS = [
+        [[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,1,0,0,0,0,0,0,0,0,1,0,0,0],[1,0,0,0,1,1,1,1,0,0,0,1,0,0],[1,0,0,1,0,0,0,0,1,0,0,1,0,0],[1,0,0,1,0,0,0,0,1,0,0,1,0,0],[1,0,0,0,1,1,1,1,0,0,0,1,0,0],[0,1,0,0,0,0,0,0,0,0,1,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,1,1,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+        [[0,0,0,1,1,1,1,0,0,0,0,0,0,0],[0,0,1,0,0,0,0,1,0,0,0,0,0,0],[0,1,0,0,0,0,0,0,1,0,0,0,0,0],[0,1,0,0,0,0,0,0,1,0,0,0,0,0],[0,0,1,0,0,0,0,1,0,0,0,0,0,0],[0,0,0,1,1,1,1,0,0,0,0,0,0,0],[1,1,1,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,0,1,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,1,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+        [[0,0,0,0,0,0,0,1,1,1,0,0,0,0],[0,0,0,0,0,0,1,0,0,0,1,1,1,0],[0,0,0,0,0,0,1,0,0,0,1,1,0,0],[0,0,0,0,0,0,0,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,0,0,0,0,0,0,1,0,0,0,0],[1,1,0,0,0,0,0,0,0,1,0,0,0,0],[1,0,0,0,0,0,0,0,1,0,0,0,0,0],[0,1,1,0,0,0,0,0,1,0,0,0,0,0],[0,0,0,1,1,1,1,1,0,0,0,0,0,0],[0,0,0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,0,1,1,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+        [[0,0,1,0,0,0,0,0,0,0,1,0,0,0],[0,0,1,1,0,1,1,1,0,1,1,0,0,0],[1,0,1,0,1,0,0,0,1,0,1,0,1,0],[1,0,0,1,1,0,0,0,1,1,0,0,1,0],[1,0,1,0,0,0,0,0,0,0,1,0,1,0],[0,1,1,0,0,0,0,0,0,0,1,1,0,0],[0,0,1,0,0,0,0,0,0,0,1,0,0,0],[0,1,1,0,0,0,0,0,0,0,1,1,0,0],[1,0,1,0,0,0,0,0,0,0,1,0,1,0],[1,0,1,0,0,0,0,0,0,0,1,0,1,0],[0,0,0,1,0,0,0,0,0,1,0,0,0,0],[0,1,1,0,1,1,1,1,1,0,1,1,0,0],[1,0,0,0,0,0,0,0,0,0,0,0,1,0],[1,0,0,0,0,0,0,0,0,0,0,0,1,0]],
+        [[0,0,0,0,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,1,1,1,0,0,0,0,1,1,1,0,0],[0,1,1,1,0,1,1,1,1,0,1,1,1,0],[0,1,1,0,1,1,1,1,1,1,0,1,1,0],[1,1,1,0,1,0,1,1,0,1,0,1,1,1],[1,1,1,0,1,1,1,1,1,1,0,1,1,1],[1,1,1,0,0,1,1,1,1,0,0,1,1,1],[0,1,1,1,0,0,1,1,0,0,1,1,1,0],[0,1,1,1,1,0,0,0,0,1,1,1,1,0],[0,0,1,1,1,1,1,1,1,1,1,1,0,0],[0,0,0,1,1,0,0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0,0,1,1,0,0,0],[0,0,1,1,1,0,0,0,0,1,1,1,0,0]],
+    ];
+    const glyph = HIEROGLYPHS[glyphIdx % HIEROGLYPHS.length];
+    const scale  = 4;                                   // each glyph pixel = 4×4 texture pixels
+    const glyphPx = 14 * scale;                         // 56px
+    const offX = Math.floor((size - glyphPx) / 2);     // center in texture
+    const offY = Math.floor((size - glyphPx) / 2);
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            const idx = (y * size + x) * 4;
+            const noise = (Math.random() - 0.5) * 14;
+            let r = Math.min(255, Math.max(0, BASE_R + noise));
+            let g = Math.min(255, Math.max(0, BASE_G + noise * 0.75));
+            let b = Math.min(255, Math.max(0, BASE_B + noise * 0.5));
+            const gx = Math.floor((x - offX) / scale);
+            const gy = Math.floor((y - offY) / scale);
+            if (gx >= 0 && gx < 14 && gy >= 0 && gy < 14 && glyph[gy][gx]) {
+                r = Math.floor(r * 0.22); g = Math.floor(g * 0.22); b = Math.floor(b * 0.22);
+            }
+            d[idx] = r; d[idx+1] = g; d[idx+2] = b; d[idx+3] = 255;
+        }
+    }
+    return img;
+}
+
 function generateCeilingTexture() {
     const size = TEXTURE_SIZE;
     const img  = new ImageData(size, size);
@@ -849,11 +884,9 @@ function buildSpikeMeshes() {
             const wz = (c.y + (ty + 0.5) / 4) * CELL_SCALE;
             c.plateWx = wx;
             c.plateWz = wz;
-            // Per-plate material: clone floor texture, UV-offset to show just this one tile
-            const tex = floorTex.clone();
-            tex.needsUpdate = true;
-            tex.repeat.set(0.25, 0.25);
-            tex.offset.set(tx / 4, ty / 4);
+            // Per-plate material: floor tile background + random hieroglyph centered on it
+            const glyphIdx = Math.floor(Math.random() * 5);
+            const tex = imageDataToTexture(generatePlateTileTexture(glyphIdx));
             const mat = new THREE.MeshBasicMaterial({ map: tex, color: floorColor });
             const plate = new THREE.Mesh(plateGeom, mat);
             plate.rotation.x = -Math.PI / 2;
