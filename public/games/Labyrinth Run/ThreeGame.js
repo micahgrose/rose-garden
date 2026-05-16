@@ -898,7 +898,7 @@ function updateSpikeMeshVisuals() {
 }
 
 function buildDemoRoom() {
-    const GW = 5, GH = 16;
+    const GW = 5, GH = 13;
     const grid = [];
     for (let y = 0; y < GH; y++) {
         const row = new Array(GW).fill(1);
@@ -907,8 +907,8 @@ function buildDemoRoom() {
     }
     grid[1][2] = 2;
     return { grid, batteries: [], doorX: 2, doorY: 1, ladderX: -1, ladderY: -1,
-        squeezeTraps: [[{ x:2, y:4 }, { x:2, y:5 }, { x:2, y:6 }, { x:2, y:7 }]],
-        spikeTraps:   [[{ x:2, y:10 }, { x:2, y:11 }]] };
+        squeezeTraps: [],
+        spikeTraps:   [[{ x:2, y:6 }, { x:2, y:7 }]] };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
