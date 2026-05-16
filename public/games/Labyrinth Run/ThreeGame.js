@@ -51,10 +51,12 @@ const SQUEEZE_CLOSE_DUR      = 4.0;
 const SQUEEZE_HOLD_DUR       = 10.0;
 
 // — Spike trap
-const SPIKE_RISE_DUR         = 1.5;
-const SPIKE_ACTIVE_DUR       = 8.0;
-const SPIKE_RETRACT_DUR      = 1.5;
-const SPIKE_DAMAGE_PS        = 20;
+const SPIKE_RISE_DUR         = 0.08;  // seconds to fully extend after plate stepped on
+const SPIKE_ACTIVE_DUR       = 8.0;   // seconds spikes stay up
+const SPIKE_RETRACT_DUR      = 1.5;   // seconds to retract
+const SPIKE_DAMAGE            = 20;   // HP dealt once per cell entry while active
+const SPIKE_PLATE_SIZE        = 0.5;  // pressure-plate footprint (centred in cell)
+const SPIKE_MIN_DIST          = 4;    // min Manhattan distance between spike traps
 
 // — Colors  (rgb, each channel 0.0–1.0)
 const COLOR_WALL    = [0.03, 0.024, 0.015];
@@ -582,43 +584,19 @@ function buildTombRobberEntry(mazeSize) {
 
 function findSpikeLocations(grid, door) {
     const rows = grid.length, cols = grid[0].length;
-    const locs = [];
-    // Horizontal corridors (walled above and below)
+    const candidates = [];
     for (let y = 1; y < rows - 1; y++) {
-        let run = [];
         for (let x = 1; x < cols - 1; x++) {
-            if (grid[y][x] === 0 && grid[y-1][x] === 1 && grid[y+1][x] === 1) {
-                run.push({ x, y });
-            } else {
-                if (run.length >= 2) {
-                    const mid = Math.floor(run.length / 2);
-                    locs.push(run.slice(mid - 1, mid + 1));
-                }
-                run = [];
-            }
+            if (grid[y][x] !== 0) continue;
+            if (Math.abs(x - 1) + Math.abs(y - 1) <= 4) continue;
+            if (Math.abs(x - door.x) + Math.abs(y - door.y) <= 4) continue;
+            // Prefer corridor cells (walled on at least one pair of opposite sides)
+            const wallH = grid[y-1][x] === 1 && grid[y+1][x] === 1;
+            const wallV = grid[y][x-1] === 1 && grid[y][x+1] === 1;
+            if (wallH || wallV) candidates.push([{ x, y }]);
         }
-        if (run.length >= 2) { const mid = Math.floor(run.length / 2); locs.push(run.slice(mid - 1, mid + 1)); }
     }
-    // Vertical corridors (walled left and right)
-    for (let x = 1; x < cols - 1; x++) {
-        let run = [];
-        for (let y = 1; y < rows - 1; y++) {
-            if (grid[y][x] === 0 && grid[y][x-1] === 1 && grid[y][x+1] === 1) {
-                run.push({ x, y });
-            } else {
-                if (run.length >= 2) {
-                    const mid = Math.floor(run.length / 2);
-                    locs.push(run.slice(mid - 1, mid + 1));
-                }
-                run = [];
-            }
-        }
-        if (run.length >= 2) { const mid = Math.floor(run.length / 2); locs.push(run.slice(mid - 1, mid + 1)); }
-    }
-    return locs.filter(cells => cells.every(c =>
-        Math.abs(c.x - 1) + Math.abs(c.y - 1) > 4 &&
-        Math.abs(c.x - door.x) + Math.abs(c.y - door.y) > 4
-    ));
+    return candidates;
 }
 
 function buildTombRobberLab1Generic() {
@@ -651,9 +629,14 @@ function buildTombRobberLab1Generic() {
     )).slice(0, 3);
     const spikeCandidates = findSpikeLocations(grid, door);
     spikeCandidates.sort(() => Math.random() - 0.5);
-    const spTraps = spikeCandidates.filter(cells =>
-        !sqTraps.some(sq => sq.some(s => cells.some(c => c.x === s.x && c.y === s.y)))
-    ).slice(0, 2);
+    const spTraps = [];
+    for (const loc of spikeCandidates) {
+        const c = loc[0];
+        const clearOfSqueeze = !sqTraps.some(sq => sq.some(s => Math.abs(s.x - c.x) + Math.abs(s.y - c.y) < SPIKE_MIN_DIST));
+        const clearOfOthers  = spTraps.every(s => Math.abs(s[0].x - c.x) + Math.abs(s[0].y - c.y) >= SPIKE_MIN_DIST);
+        if (clearOfSqueeze && clearOfOthers) spTraps.push(loc);
+        if (spTraps.length >= 2) break;
+    }
     return { grid, batteries, doorX: door.x, doorY: door.y, ladderX: -1, ladderY: -1,
         squeezeTraps: sqTraps, spikeTraps: spTraps };
 }
@@ -840,22 +823,33 @@ const SPIKE_OFFSETS = [
     [0.20, 0.80], [0.50, 0.82], [0.80, 0.80],
 ];
 
+// Half-size of pressure plate in world units
+const SPIKE_HALF = (SPIKE_PLATE_SIZE / 2) * CELL_SCALE;
+
 function initSpikeTraps(arr) {
-    spikeTraps = (arr || []).map(cells => ({ cells, state: 'idle', timer: 0 }));
+    spikeTraps = (arr || []).map(cells => ({
+        cells, state: 'idle', timer: 0, playerWasInCell: false
+    }));
 }
 
 function buildSpikeMeshes() {
     spikeMeshes.forEach(({ mesh }) => scene.remove(mesh));
     spikeMeshes = [];
+    plateMeshes.forEach(({ mesh }) => scene.remove(mesh));
+    plateMeshes = [];
+    const plateGeom = new THREE.BoxGeometry(SPIKE_PLATE_SIZE, 0.03, SPIKE_PLATE_SIZE);
     for (const trap of spikeTraps) {
         for (const c of trap.cells) {
+            // Pressure-plate tile (slightly raised stone slab in cell centre)
+            const plate = new THREE.Mesh(plateGeom, plateMat);
+            plate.position.set((c.x + 0.5) * CELL_SCALE, 0.015, (c.y + 0.5) * CELL_SCALE);
+            scene.add(plate);
+            plateMeshes.push({ mesh: plate });
+
+            // Spike cones (hidden below floor at idle)
             SPIKE_OFFSETS.forEach(([ox, oz], i) => {
                 const mesh = new THREE.Mesh(spikeGeom, spikeMat);
-                mesh.position.set(
-                    (c.x + ox) * CELL_SCALE,
-                    -0.2,
-                    (c.y + oz) * CELL_SCALE
-                );
+                mesh.position.set((c.x + ox) * CELL_SCALE, -0.2, (c.y + oz) * CELL_SCALE);
                 mesh.rotation.y = ((c.x * 7 + c.y * 13 + i * 5) % 6) * (Math.PI / 3);
                 scene.add(mesh);
                 spikeMeshes.push({ mesh, trap });
@@ -869,20 +863,45 @@ function updateSpikeTraps(dt) {
     const py = Math.floor(player.y / CELL_SCALE);
     for (const trap of spikeTraps) {
         if (trap.state === 'idle') {
-            if (trap.cells.some(c => c.x === px && c.y === py)) {
-                trap.state = 'rising'; trap.timer = 0;
+            // Trigger only when player steps onto the pressure plate
+            const onPlate = trap.cells.some(c =>
+                player.x > (c.x + 0.5) * CELL_SCALE - SPIKE_HALF &&
+                player.x < (c.x + 0.5) * CELL_SCALE + SPIKE_HALF &&
+                player.y > (c.y + 0.5) * CELL_SCALE - SPIKE_HALF &&
+                player.y < (c.y + 0.5) * CELL_SCALE + SPIKE_HALF
+            );
+            if (onPlate) {
+                trap.state = 'rising';
+                trap.timer = 0;
+                trap.playerWasInCell = true;
             }
         } else if (trap.state === 'rising') {
             trap.timer += dt;
-            if (trap.timer >= SPIKE_RISE_DUR) { trap.state = 'active'; trap.timer = 0; }
+            if (trap.timer >= SPIKE_RISE_DUR) {
+                trap.state = 'active';
+                trap.timer = 0;
+                // Deal damage immediately if player is still in the cell
+                if (trap.playerWasInCell && trap.cells.some(c => c.x === px && c.y === py))
+                    player.health = Math.max(0, player.health - SPIKE_DAMAGE);
+            }
         } else if (trap.state === 'active') {
             trap.timer += dt;
-            if (trap.cells.some(c => c.x === px && c.y === py))
-                player.health = Math.max(0, player.health - SPIKE_DAMAGE_PS * dt);
+            const inCell = trap.cells.some(c => c.x === px && c.y === py);
+            if (inCell && !trap.playerWasInCell) {
+                // Player re-entered — deal damage once per entry
+                player.health = Math.max(0, player.health - SPIKE_DAMAGE);
+                trap.playerWasInCell = true;
+            } else if (!inCell) {
+                trap.playerWasInCell = false;
+            }
             if (trap.timer >= SPIKE_ACTIVE_DUR) { trap.state = 'retracting'; trap.timer = 0; }
         } else if (trap.state === 'retracting') {
             trap.timer += dt;
-            if (trap.timer >= SPIKE_RETRACT_DUR) { trap.state = 'idle'; trap.timer = 0; }
+            if (trap.timer >= SPIKE_RETRACT_DUR) {
+                trap.state = 'idle';
+                trap.timer = 0;
+                trap.playerWasInCell = false;
+            }
         }
     }
 }
@@ -890,8 +909,8 @@ function updateSpikeTraps(dt) {
 function updateSpikeMeshVisuals() {
     for (const { mesh, trap } of spikeMeshes) {
         let p = 0;
-        if (trap.state === 'rising')      p = Math.min(1, trap.timer / SPIKE_RISE_DUR);
-        else if (trap.state === 'active') p = 1;
+        if (trap.state === 'rising')          p = Math.min(1, trap.timer / SPIKE_RISE_DUR);
+        else if (trap.state === 'active')     p = 1;
         else if (trap.state === 'retracting') p = Math.max(0, 1 - trap.timer / SPIKE_RETRACT_DUR);
         mesh.position.y = -0.2 + 0.4 * p;
     }
@@ -908,7 +927,7 @@ function buildDemoRoom() {
     grid[1][2] = 2;
     return { grid, batteries: [], doorX: 2, doorY: 1, ladderX: -1, ladderY: -1,
         squeezeTraps: [],
-        spikeTraps:   [[{ x:2, y:6 }, { x:2, y:7 }]] };
+        spikeTraps:   [[{ x:2, y:6 }]] };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -960,6 +979,7 @@ const ceilingColor = new THREE.Color(...COLOR_CEILING);
 
 const wallMat    = new THREE.MeshBasicMaterial({ map: sandstoneTex, color: wallColor });
 const spikeMat   = new THREE.MeshBasicMaterial({ color: 0x504840 });
+const plateMat   = new THREE.MeshBasicMaterial({ map: sandstoneTex, color: new THREE.Color(0.18, 0.12, 0.06) });
 const doorMat    = new THREE.MeshBasicMaterial({ map: doorTex,      color: doorColor });
 const sunMat     = new THREE.MeshBasicMaterial({ color: sunColor });
 const floorMat   = new THREE.MeshBasicMaterial({ map: floorTex,    color: floorColor,   side: THREE.DoubleSide });
@@ -976,8 +996,9 @@ let batMeshes     = [];   // { group, bat } per battery
 let squeezePanels = [];   // { meshA, meshB, trap, cell }
 let squeezeTraps  = [];   // [{ cells, state, timer, holdTimer, axis }]
 let squeezeGrid   = {};   // 'gx,gy' → { progress, axis }
-let spikeTraps    = [];   // [{ cells, state, timer }]
+let spikeTraps    = [];   // [{ cells, state, timer, playerWasInCell }]
 let spikeMeshes   = [];   // [{ mesh, trap }]
+let plateMeshes   = [];   // [{ mesh }] — pressure plate tiles
 let effectiveReach = FLASHLIGHT_REACH;
 
 
@@ -1027,6 +1048,8 @@ function clearSceneObjects() {
     squeezePanels = [];
     spikeMeshes.forEach(({ mesh }) => scene.remove(mesh));
     spikeMeshes = [];
+    plateMeshes.forEach(({ mesh }) => scene.remove(mesh));
+    plateMeshes = [];
     markers.forEach(m => scene.remove(m.sprite));
     markers = [];
 }
