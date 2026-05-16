@@ -55,7 +55,7 @@ const SPIKE_RISE_DUR         = 0.08;  // seconds to fully extend after plate ste
 const SPIKE_ACTIVE_DUR       = 8.0;   // seconds spikes stay up
 const SPIKE_RETRACT_DUR      = 1.5;   // seconds to retract
 const SPIKE_DAMAGE            = 20;   // HP dealt once per cell entry while active
-const SPIKE_PLATE_SIZE        = 0.5;  // pressure-plate footprint (centred in cell)
+const SPIKE_PLATE_SIZE        = 0.25; // pressure-plate = one floor tile (4×4 per cell)
 const SPIKE_MIN_DIST          = 4;    // min Manhattan distance between spike traps
 
 // — Colors  (rgb, each channel 0.0–1.0)
@@ -837,13 +837,27 @@ function buildSpikeMeshes() {
     spikeMeshes = [];
     plateMeshes.forEach(({ mesh }) => scene.remove(mesh));
     plateMeshes = [];
-    const plateGeom = new THREE.PlaneGeometry(SPIKE_PLATE_SIZE * CELL_SCALE, SPIKE_PLATE_SIZE * CELL_SCALE);
+    const tileSize = CELL_SCALE / 4; // each cell has a 4×4 grid of floor tiles
+    const plateGeom = new THREE.PlaneGeometry(tileSize, tileSize);
     for (const trap of spikeTraps) {
         for (const c of trap.cells) {
-            // Pressure-plate tile — floor texture, barely raised so the edge is visible
-            const plate = new THREE.Mesh(plateGeom, plateMat);
+            // Pick a random tile from the 4×4 grid within this cell
+            const tx = Math.floor(Math.random() * 4);
+            const ty = Math.floor(Math.random() * 4);
+            // World-space center of that tile
+            const wx = (c.x + (tx + 0.5) / 4) * CELL_SCALE;
+            const wz = (c.y + (ty + 0.5) / 4) * CELL_SCALE;
+            c.plateWx = wx;
+            c.plateWz = wz;
+            // Per-plate material: clone floor texture, UV-offset to show just this one tile
+            const tex = floorTex.clone();
+            tex.needsUpdate = true;
+            tex.repeat.set(0.25, 0.25);
+            tex.offset.set(tx / 4, ty / 4);
+            const mat = new THREE.MeshBasicMaterial({ map: tex, color: floorColor });
+            const plate = new THREE.Mesh(plateGeom, mat);
             plate.rotation.x = -Math.PI / 2;
-            plate.position.set((c.x + 0.5) * CELL_SCALE, 0.015, (c.y + 0.5) * CELL_SCALE);
+            plate.position.set(wx, 0.015, wz);
             scene.add(plate);
             plateMeshes.push({ mesh: plate });
 
@@ -864,12 +878,13 @@ function updateSpikeTraps(dt) {
     const py = Math.floor(player.y / CELL_SCALE);
     for (const trap of spikeTraps) {
         if (trap.state === 'idle') {
-            // Trigger only when player steps onto the pressure plate
+            // Trigger only when player steps onto the specific pressure-plate tile
             const onPlate = trap.cells.some(c =>
-                player.x > (c.x + 0.5) * CELL_SCALE - SPIKE_HALF &&
-                player.x < (c.x + 0.5) * CELL_SCALE + SPIKE_HALF &&
-                player.y > (c.y + 0.5) * CELL_SCALE - SPIKE_HALF &&
-                player.y < (c.y + 0.5) * CELL_SCALE + SPIKE_HALF
+                c.plateWx !== undefined &&
+                player.x > c.plateWx - SPIKE_HALF &&
+                player.x < c.plateWx + SPIKE_HALF &&
+                player.y > c.plateWz - SPIKE_HALF &&
+                player.y < c.plateWz + SPIKE_HALF
             );
             if (onPlate) {
                 trap.state = 'rising';
@@ -980,11 +995,7 @@ const ceilingColor = new THREE.Color(...COLOR_CEILING);
 
 const wallMat    = new THREE.MeshBasicMaterial({ map: sandstoneTex, color: wallColor });
 const spikeMat   = new THREE.MeshBasicMaterial({ color: 0x504840 });
-// Pressure plate: clone of floor texture at the same tile density, looks like a floor tile
-const plateTex   = floorTex.clone();
-plateTex.needsUpdate = true;
-plateTex.repeat.set(SPIKE_PLATE_SIZE, SPIKE_PLATE_SIZE);
-const plateMat   = new THREE.MeshBasicMaterial({ map: plateTex, color: floorColor });
+// plateMat is created per-plate in buildSpikeMeshes (random tile offset per trap)
 const doorMat    = new THREE.MeshBasicMaterial({ map: doorTex,      color: doorColor });
 const sunMat     = new THREE.MeshBasicMaterial({ color: sunColor });
 const floorMat   = new THREE.MeshBasicMaterial({ map: floorTex,    color: floorColor,   side: THREE.DoubleSide });
