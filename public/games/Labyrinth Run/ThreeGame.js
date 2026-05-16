@@ -61,7 +61,7 @@ const SPIKE_MIN_DIST          = 4;    // min Manhattan distance between spike tr
 // — Boulder trap
 const BOULDER_SPEED       = 3.5;   // world units/s
 const BOULDER_DAMAGE      = 50;    // HP on direct hit
-const BOULDER_RADIUS      = 0.38;  // visual & collision radius
+const BOULDER_RADIUS      = 0.5;  // visual & collision radius
 const BOULDER_RESET_DELAY = 2.0;   // seconds before boulder resets to start
 const BOULDER_MIN_LEN     = 3;     // minimum corridor length to be eligible
 
@@ -1213,10 +1213,21 @@ function buildDemoRoom() {
         if (y > 0 && y < GH - 1) row[2] = 0;
         grid.push(row);
     }
-    grid[1][2] = 2;
+    grid[5][3] = 0;  // right alcove at y=5 — dodge spot for the boulder
+    grid[7][3] = 0;  // right alcove at y=7 — second dodge spot
+    grid[1][2] = 2;  // door
     return { grid, batteries: [], doorX: 2, doorY: 1, ladderX: -1, ladderY: -1,
-        squeezeTraps: [], spikeTraps: [[{ x:2, y:6 }]],
-        boulderTraps: [], arrowTraps: [] };
+        squeezeTraps: [],
+        spikeTraps:   [[{ x:2, y:6 }]],
+        boulderTraps: [{ cells: [
+            {x:2,y:2},{x:2,y:3},{x:2,y:4},{x:2,y:5},
+            {x:2,y:6},{x:2,y:7},{x:2,y:8},{x:2,y:9},{x:2,y:10},{x:2,y:11}
+        ], axis: 'y' }],
+        arrowTraps: [
+            { cellX: 2, cellY:  4, axis: 'x' },
+            { cellX: 2, cellY: 10, axis: 'x' },
+        ]
+    };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
