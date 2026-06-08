@@ -503,3 +503,6 @@ document.getElementById('amoebaCard').addEventListener('click', () => {
 document.getElementById('labyrinthRunCard').addEventListener('click', () => {
     window.location.href = '/games/Labyrinth Run/';
 });
+document.getElementById('ollieCard').addEventListener('click', () => {
+    window.location.href = '/games/platformer/';
+});
