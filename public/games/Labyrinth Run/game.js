@@ -56,8 +56,8 @@ const MODE_CONFIGS = {
     },
     level: {
         easy:     { startSize: 9,  sizeInc: 3, batMax: 200, batDrain: 1.5,  startBats: 1, batInc: 1, batIncEvery: 1 },
-        moderate: { startSize: 11, sizeInc: 4, batMax: 175, batDrain: 1.75, startBats: 1, batInc: 2, batIncEvery: 2 },
-        hard:     { startSize: 10, sizeInc: 5, batMax: 150, batDrain: 1.75,  startBats: 2, batInc: 2, batIncEvery: 3 },
+        moderate: { startSize: 9, sizeInc: 4, batMax: 175, batDrain: 1.5, startBats: 1, batInc: 2, batIncEvery: 2 },
+        hard:     { startSize: 9, sizeInc: 4, batMax: 175, batDrain: 1.5,  startBats: 1, batInc: 1, batIncEvery: 2 },
     },
     'tomb-robber': {
         easy:     { labSizes: [21, 51], batteries: [1, 5], batMax: 500, batDrain: 1.0, maxLabs: 2 },

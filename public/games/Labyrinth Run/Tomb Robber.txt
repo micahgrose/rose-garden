@@ -1,0 +1,13 @@
+Here is how Tomb Robber is going to work.
+1. The player starts in a long hallway with a glowing wall at their back (should look like its the entrance to a pyramid on a really sunny day)
+2. They have to navigate a labyrinth to find a ladder that leads through the ceiling. (when the player is near the middle of the ladders world cell, then the veiw looks up to where the ladder dissapears, zooms in, and fades out. It then fades back in rising into a new labyrinth with a trapdoor at their feet.)
+3. This labyrinth should be MUCH larger. There should also be booby traps.
+    - hallways that slowly close together when the player enters them.
+    - boulders that roll down passageways with branch offs for the user to duck into before it reaches them
+    - sections of walls that shoot arrows at intervals.
+4. You'll need to add health for getting shot by an arrow (lower amount of damage) and getting smooshed by a boulder (large damage) and getting trapped in a squeze hall (instant death)
+The player should have 500 battery, and there should be like a battery per 7.5 world size in the labyrinths. (rounded to nearest whole battery of course)
+Lets start with the first labyrinth being 20 world size, and the second being 50.
+WEll start with that for now, see how you are able to handle this.
+
+also, slightly loosen the hitbox for walls, I get stuck rounding corners sometimes.
