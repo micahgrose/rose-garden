@@ -578,16 +578,17 @@ function worldToScreen(wx, wy){
 }
 
 function resizeEdCanvas(){
-    edCanvas.width  = edCanvas.parentElement.clientWidth - 120; // minus toolbar
-    edCanvas.height = edCanvas.parentElement.clientHeight;
+    edCanvas.width  = edCanvas.offsetWidth;
+    edCanvas.height = edCanvas.offsetHeight;
 }
 
 function openEditor(){
-    resizeEdCanvas();
-    editorOverlay.classList.remove('hidden');
-    // Center view on world middle
-    edPanX = edCanvas.width  / 2 - (world.width  / 2) * edZoom;
-    edPanY = edCanvas.height / 2 - (world.height / 2) * edZoom;
+    editorOverlay.classList.remove('hidden'); // show first so layout is calculated
+    requestAnimationFrame(() => {             // measure after browser lays out
+        resizeEdCanvas();
+        edPanX = edCanvas.width  / 2 - (world.width  / 2) * edZoom;
+        edPanY = edCanvas.height / 2 - (world.height / 2) * edZoom;
+    });
     populateEdLevelDropdown();
     editorRaf = requestAnimationFrame(editorLoop);
 }
