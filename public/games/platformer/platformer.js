@@ -120,11 +120,13 @@ let keys=[];
 document.addEventListener("keydown", e => {
     if(!keys.includes(e.key)) keys.push(e.key);
 
+    const inInput = e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT';
+
     // Editor space pan
-    if(e.code==='Space' && editorOpen && edMode==='edit'){ e.preventDefault(); edSpaceHeld=true; canvas.style.cursor='grab'; }
+    if(e.code==='Space' && editorOpen && edMode==='edit' && !inInput){ e.preventDefault(); edSpaceHeld=true; canvas.style.cursor='grab'; }
 
     // Delete selected in editor
-    if(e.key==='Delete' && editorOpen && edMode==='edit'){
+    if(e.key==='Delete' && editorOpen && edMode==='edit' && !inInput){
         if(edSelected){ edDeleteSelected(); }
     }
 
@@ -135,7 +137,7 @@ document.addEventListener("keydown", e => {
     }
 
     // Editor tool hotkeys
-    if(editorOpen && edMode==='edit'){
+    if(editorOpen && edMode==='edit' && !inInput){
         if(e.key==='s'||e.key==='S') setTool('select');
         if(e.key==='p'||e.key==='P') setTool('platform');
         if(e.key==='j'||e.key==='J') setTool('jumppad');
@@ -611,7 +613,7 @@ canvas.addEventListener('mousedown', e=>{
 
     if(edTool==='spawn'){const{x,y}=edSW(sx,sy); edSpawn={x:snapV(x-25),y:snapV(y-25)};}
 
-    if(edTool==='finish'){const{x,y}=edSW(sx,sy); edFinish={x:snapV(x),y:snapV(y)}; edSelected=null;}
+    if(edTool==='finish'){const{x,y}=edSW(sx,sy); edFinish={x:snapV(x),y:snapV(y)-SNAP/2}; edSelected=null;}
 
     if(edTool==='delete'){const hit=edHitTest(sx,sy);if(hit){if(hit.type==='platform')edPlatforms.splice(hit.index,1);if(hit.type==='jumppad')edJumpPads.splice(hit.index,1);if(hit.type==='finish')edFinish=null;edSelected=null;}}
 });
