@@ -81,6 +81,7 @@ class SwitchParticle {
 // ── Game state ─────────────────────────────────────────
 let startPos  = null, player = null, platforms = [], jumpPads = [];
 let spikes = [], sawblades = [], movingPlatforms = [], onOffBlocks = [], onOffSwitches = [], orbitSaws = [];
+let orbitPlatforms = [];
 let onOffState = false, deathCooldown = 0;
 let finish = null, levelCompleted = false;
 let currentLevelOrder = null;
@@ -131,16 +132,18 @@ let animFrameId=null, gameStarted=false;
 function gameLoop(){
     camera.width=canvas.width; camera.height=canvas.height;
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    movePlayer(); moveCamera();
     if(deathCooldown>0) deathCooldown--;
-    updateMovingPlatforms(); updateSaws(); updateOrbitSaws();
+    updateMovingPlatforms(); updateSaws(); updateOrbitSaws(); updateOrbitPlatforms();
+    preMovePlatformRide();
+    movePlayer(); moveCamera();
     wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
     checkJumpPad(); checkCollision(); updateStretch(); updateEyePos();
     if(grounded){resetGravity(); jumped=false;}
     if(ceiling){player.velocity.y=0;}
+    updatePlatformRideState();
     checkSpikes(); checkSaws(); checkSwitches(); checkOrbitSaws();
     drawBackground(); handleParticles();
-    drawMovingPlatforms(); drawOnOffBlocks(); drawPlatforms(); drawJumpPads(); drawSpikes(); drawSaws(); drawOrbitSaws(); drawSwitches();
+    drawMovingPlatforms(); drawOrbitPlatforms(); drawOnOffBlocks(); drawPlatforms(); drawJumpPads(); drawSpikes(); drawSaws(); drawOrbitSaws(); drawSwitches();
     drawPlayer();
     drawFinish(); checkFinish(); drawFinishParticles();
     drawDeathParticles(); drawSwitchParticles();
@@ -182,6 +185,13 @@ document.addEventListener("keydown", e => {
         if(e.key==='t'||e.key==='T') setTool('onoff');
         if(e.key==='h'||e.key==='H') setTool('switch');
         if(e.key==='b'||e.key==='B') setTool('orbitsaw');
+        if(e.key==='o'||e.key==='O') setTool('orbitplat');
+        if((e.key==='+'||e.key==='=')&&!inInput){
+            if(edSelected&&(edSelected.type==='mplatform'||edSelected.type==='mplatform_pt')){
+                const mp=edMovingPlatforms[edSelected.index];const last=mp.points[mp.points.length-1];
+                mp.points.push({x:last.x+100,y:last.y,stop:false});
+            }
+        }
     }
 });
 document.addEventListener("keyup", e => {
@@ -245,6 +255,7 @@ function checkCollision(){
     grounded=false; clampLeft=false; clampRight=false; ceiling=false;
     for(const p of platforms) resolveAABB(p);
     for(const mp of movingPlatforms) resolveAABB({x:mp._cx,y:mp._cy,width:mp.width,height:mp.height});
+    for(const op of orbitPlatforms) resolveAABB({x:op._cx,y:op._cy,width:op.width,height:op.height});
     for(const b of onOffBlocks) if(blockIsOn(b)) resolveAABB(b);
 }
 function blockIsOn(b){ return (b.startsOn!==false) ? !onOffState : onOffState; }
@@ -309,9 +320,24 @@ function drawJumpPads(){
 // ── Moving platforms ───────────────────────────────────
 function updateMovingPlatforms(){
     for(const mp of movingPlatforms){
-        mp._t+=(mp._dir||1)*(mp.speed||1)*0.005;
-        if(mp._t>=1){mp._t=1;mp._dir=-1;} if(mp._t<=0){mp._t=0;mp._dir=1;}
-        mp._cx=mp.x+(mp.tx-mp.x)*mp._t; mp._cy=mp.y+(mp.ty-mp.y)*mp._t;
+        const prevX=mp._cx, prevY=mp._cy;
+        const pts=mp.points, n=pts.length;
+        if(n<2){ mp._vx=0; mp._vy=0; continue; }
+        if(mp._pause>0){ mp._pause--; mp._vx=0; mp._vy=0; continue; }
+        mp._t += (mp.speed||1)*0.01;
+        const a=pts[mp._fromPt], b=pts[mp._toPt];
+        if(mp._t>=1){
+            mp._t=0; mp._cx=b.x; mp._cy=b.y;
+            if(b.stop!==false) mp._pause=60;
+            const dir=mp._toPt>mp._fromPt?1:-1;
+            const nextTo=mp._toPt+dir;
+            if(nextTo<0||nextTo>=n){ mp._fromPt=mp._toPt; mp._toPt=mp._toPt-dir; }
+            else { mp._fromPt=mp._toPt; mp._toPt=nextTo; }
+        } else {
+            mp._cx=a.x+(b.x-a.x)*mp._t;
+            mp._cy=a.y+(b.y-a.y)*mp._t;
+        }
+        mp._vx=mp._cx-prevX; mp._vy=mp._cy-prevY;
     }
 }
 function drawMovingPlatforms(){
@@ -320,6 +346,48 @@ function drawMovingPlatforms(){
         ctx.fillStyle='#5588cc'; ctx.strokeStyle='#3366aa';
         ctx.fillRect(mp._cx-camera.x,mp._cy-camera.y,mp.width,mp.height);
         ctx.strokeRect(mp._cx-camera.x,mp._cy-camera.y,mp.width,mp.height);
+    }
+}
+
+// ── Orbit platforms ────────────────────────────────────
+function updateOrbitPlatforms(){
+    for(const op of orbitPlatforms){
+        const prevX=op._cx, prevY=op._cy;
+        op._angle=(op._angle||0)+(op.speed||1)*0.02;
+        op._cx=op.cx+Math.cos(op._angle)*op.radius-op.width/2;
+        op._cy=op.cy+Math.sin(op._angle)*op.radius-op.height/2;
+        op._vx=op._cx-prevX; op._vy=op._cy-prevY;
+    }
+}
+function drawOrbitPlatforms(){
+    ctx.lineWidth=2;
+    for(const op of orbitPlatforms){
+        ctx.fillStyle='#44aa66'; ctx.strokeStyle='#226644';
+        ctx.fillRect(op._cx-camera.x,op._cy-camera.y,op.width,op.height);
+        ctx.strokeRect(op._cx-camera.x,op._cy-camera.y,op.width,op.height);
+    }
+}
+
+// ── Platform ride physics ──────────────────────────────
+function preMovePlatformRide(){
+    if(deathCooldown>0) return;
+    for(const mp of movingPlatforms){
+        if(mp._playerRiding){ player.x+=mp._vx; player.y+=mp._vy; }
+    }
+    for(const op of orbitPlatforms){
+        if(op._playerRiding){ player.x+=op._vx; player.y+=op._vy; }
+    }
+}
+function updatePlatformRideState(){
+    for(const mp of movingPlatforms){
+        const onTop=player.y+player.height>=mp._cy-2&&player.y+player.height<=mp._cy+2;
+        const hOverlap=player.x+player.width>mp._cx&&player.x<mp._cx+mp.width;
+        mp._playerRiding=onTop&&hOverlap;
+    }
+    for(const op of orbitPlatforms){
+        const onTop=player.y+player.height>=op._cy-2&&player.y+player.height<=op._cy+2;
+        const hOverlap=player.x+player.width>op._cx&&player.x<op._cx+op.width;
+        op._playerRiding=onTop&&hOverlap;
     }
 }
 
@@ -564,10 +632,17 @@ function startLevel(levelData){
     jumpPads       =(levelData.jumpPads       ||[]).map(j=>new JumpPad(j.x,j.y,j.strength));
     spikes         =(levelData.spikes         ||[]).map(s=>({...s}));
     sawblades      =(levelData.sawblades      ||[]).map(s=>({...s,_rot:0}));
-    movingPlatforms=(levelData.movingPlatforms||[]).map(p=>({...p,_t:0,_dir:1,_cx:p.x,_cy:p.y}));
+    movingPlatforms=(levelData.movingPlatforms||[]).map(p=>{
+        const pts=p.points||[{x:p.x,y:p.y,stop:false},{x:p.tx??p.x+200,y:p.ty??p.y,stop:false}];
+        return {...p,points:pts,_fromPt:0,_toPt:1,_t:0,_pause:0,_cx:pts[0].x,_cy:pts[0].y,_vx:0,_vy:0,_playerRiding:false};
+    });
     onOffBlocks    =(levelData.onOffBlocks    ||[]).map(b=>({...b}));
     onOffSwitches  =(levelData.onOffSwitches  ||[]).map(s=>({...s,_triggered:false}));
     orbitSaws      =(levelData.orbitSaws      ||[]).map(s=>({...s,_angle:Math.random()*Math.PI*2}));
+    orbitPlatforms =(levelData.orbitPlatforms ||[]).map(op=>{
+        const angle=Math.random()*Math.PI*2;
+        return {...op,_angle:angle,_cx:op.cx+Math.cos(angle)*op.radius-op.width/2,_cy:op.cy+Math.sin(angle)*op.radius-op.height/2,_vx:0,_vy:0,_playerRiding:false};
+    });
     onOffState=false; deathCooldown=0;
     platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[]; deathParticles=[]; switchParticles=[];
     classifiersInUse={platform:[],boost:[],jump:[]};
@@ -663,6 +738,7 @@ let edMovingPlatforms= [];
 let edOnOffBlocks    = [];
 let edOnOffSwitches  = [];
 let edOrbitSaws      = [];
+let edOrbitPlatforms = [];
 
 // Selection + drag
 let edSelected     = null;
@@ -753,21 +829,45 @@ function editorDrawFrame(){
 
     // Moving platforms (editor)
     for(let i=0;i<edMovingPlatforms.length;i++){
-        const mp=edMovingPlatforms[i], sel=edSelected?.type==='mplatform'&&edSelected.index===i;
+        const mp=edMovingPlatforms[i], pts=mp.points;
+        const sel=edSelected?.type==='mplatform'&&edSelected.index===i;
+        // Path line
+        ctx.strokeStyle='rgba(100,160,255,0.4)'; ctx.lineWidth=1.5/edZoom; ctx.setLineDash([8/edZoom,4/edZoom]);
+        ctx.beginPath(); ctx.moveTo(pts[0].x+mp.width/2,pts[0].y+mp.height/2);
+        for(let j=1;j<pts.length;j++) ctx.lineTo(pts[j].x+mp.width/2,pts[j].y+mp.height/2);
+        ctx.stroke(); ctx.setLineDash([]);
+        // Body at pts[0]
         ctx.fillStyle=sel?'#6699dd':'#5588cc'; ctx.strokeStyle=sel?'#aaccff':'#3366aa'; ctx.lineWidth=(sel?3:2)/edZoom;
-        ctx.fillRect(mp.x,mp.y,mp.width,mp.height); ctx.strokeRect(mp.x,mp.y,mp.width,mp.height);
-        // Path line to target
-        ctx.strokeStyle='rgba(100,160,255,0.5)'; ctx.lineWidth=1.5/edZoom; ctx.setLineDash([8/edZoom,4/edZoom]);
-        ctx.beginPath(); ctx.moveTo(mp.x+mp.width/2,mp.y+mp.height/2); ctx.lineTo(mp.tx+mp.width/2,mp.ty+mp.height/2); ctx.stroke();
-        ctx.setLineDash([]);
-        // Ghost at target
-        ctx.fillStyle='rgba(85,136,204,0.2)'; ctx.strokeStyle='rgba(100,160,255,0.6)'; ctx.lineWidth=1.5/edZoom;
-        ctx.fillRect(mp.tx,mp.ty,mp.width,mp.height); ctx.strokeRect(mp.tx,mp.ty,mp.width,mp.height);
-        // Endpoint handle
+        ctx.fillRect(pts[0].x,pts[0].y,mp.width,mp.height); ctx.strokeRect(pts[0].x,pts[0].y,mp.width,mp.height);
+        // Waypoint ghosts + handles
         const hs2=HS*1.5/edZoom;
-        ctx.fillStyle=(edSelected?.type==='mplatform_end'&&edSelected.index===i)?'#aaccff':'#5599ff';
-        ctx.strokeStyle='#223'; ctx.lineWidth=1/edZoom;
-        ctx.beginPath(); ctx.arc(mp.tx+mp.width/2,mp.ty+mp.height/2,hs2,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        for(let j=1;j<pts.length;j++){
+            const pt=pts[j], ptSel=edSelected?.type==='mplatform_pt'&&edSelected.index===i&&edSelected.ptIdx===j;
+            ctx.fillStyle='rgba(85,136,204,0.2)';
+            ctx.strokeStyle=pt.stop!==false?'rgba(255,210,80,0.7)':'rgba(100,160,255,0.6)'; ctx.lineWidth=1.5/edZoom;
+            ctx.fillRect(pt.x,pt.y,mp.width,mp.height); ctx.strokeRect(pt.x,pt.y,mp.width,mp.height);
+            ctx.fillStyle=ptSel?'#fff':(pt.stop!==false?'#ffcc44':'#5599ff');
+            ctx.strokeStyle='#112233'; ctx.lineWidth=1/edZoom;
+            ctx.beginPath(); ctx.arc(pt.x+mp.width/2,pt.y+mp.height/2,hs2,0,Math.PI*2); ctx.fill(); ctx.stroke();
+            if(pt.stop!==false){
+                ctx.fillStyle='#332200'; ctx.font=`bold ${10/edZoom}px sans-serif`; ctx.textAlign='center';
+                ctx.fillText('||',pt.x+mp.width/2,pt.y+mp.height/2+4/edZoom); ctx.textAlign='left';
+            }
+        }
+    }
+
+    // Orbit platforms (editor)
+    for(let i=0;i<edOrbitPlatforms.length;i++){
+        const op=edOrbitPlatforms[i], sel=edSelected?.type==='orbitplat'&&edSelected.index===i;
+        ctx.strokeStyle=sel?'rgba(80,200,120,0.6)':'rgba(60,160,90,0.35)'; ctx.lineWidth=1.2/edZoom; ctx.setLineDash([5/edZoom,4/edZoom]);
+        ctx.beginPath(); ctx.arc(op.cx,op.cy,op.radius,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle=sel?'#88ffaa':'#44aa66'; ctx.strokeStyle='#226644'; ctx.lineWidth=1/edZoom;
+        ctx.beginPath(); ctx.arc(op.cx,op.cy,5/edZoom,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        const px=op.cx+op.radius-op.width/2, py=op.cy-op.height/2;
+        ctx.fillStyle=sel?'#55bb77':'#44aa66'; ctx.strokeStyle=sel?'#88ffaa':'#226644'; ctx.lineWidth=(sel?3:2)/edZoom;
+        ctx.fillRect(px,py,op.width,op.height); ctx.strokeRect(px,py,op.width,op.height);
+        ctx.strokeStyle='rgba(60,160,90,0.5)'; ctx.lineWidth=1/edZoom;
+        ctx.beginPath(); ctx.moveTo(op.cx,op.cy); ctx.lineTo(px+op.width/2,py+op.height/2); ctx.stroke();
     }
 
     // On/off blocks (editor) — solid if startsOn, dashed outline if starts off
@@ -863,6 +963,14 @@ function editorDrawFrame(){
         ctx.fillStyle='#555'; ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.fill();
         ctx.globalAlpha=1;
     }
+    // Ghost orbit platform preview
+    if(edTool==='orbitplat'&&edCursorWorld){
+        const cx=snapV(edCursorWorld.x), cy=snapV(edCursorWorld.y);
+        ctx.globalAlpha=0.35; ctx.strokeStyle='rgba(60,160,90,0.7)'; ctx.lineWidth=1.5/edZoom; ctx.setLineDash([5/edZoom,4/edZoom]);
+        ctx.beginPath(); ctx.arc(cx,cy,100,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle='#44aa66'; ctx.beginPath(); ctx.arc(cx,cy,5/edZoom,0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha=1;
+    }
 
     // Orbit saws (editor — animated)
     for(let i=0;i<edOrbitSaws.length;i++){
@@ -932,6 +1040,11 @@ function editorDrawFrame(){
             } else if(edSelected.type==='spike'){
                 const b=spikeBBoxEd(obj);
                 edDrawHandles(b.x, b.y, b.w, b.h);
+            } else if(edSelected.type==='mplatform'){
+                const p0=obj.points[0];
+                edDrawHandles(p0.x,p0.y,obj.width,obj.height);
+            } else if(edSelected.type==='mplatform_pt'||edSelected.type==='orbitplat'){
+                // no resize handles for these types
             } else {
                 const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height;
                 edDrawHandles(obj.x,obj.y,ww,wh);
@@ -968,15 +1081,30 @@ function edGetHandleName(sx,sy,wx,wy,ww,wh){
 function edHitTest(sx,sy){
     const{x:wx,y:wy}=edSW(sx,sy);
     if(edFinish&&wx>=edFinish.x-8&&wx<=edFinish.x+55&&wy>=edFinish.y&&wy<=edFinish.y+78)return{type:'finish'};
+    // mplatform waypoint handles (j>=1)
     for(let i=edMovingPlatforms.length-1;i>=0;i--){
-        const mp=edMovingPlatforms[i];
-        const dx=wx-(mp.tx+mp.width/2), dy=wy-(mp.ty+mp.height/2);
-        if(Math.abs(dx)<14/edZoom&&Math.abs(dy)<14/edZoom)return{type:'mplatform_end',index:i};
+        const mp=edMovingPlatforms[i],pts=mp.points;
+        for(let j=pts.length-1;j>=1;j--){
+            const dx=wx-(pts[j].x+mp.width/2),dy=wy-(pts[j].y+mp.height/2);
+            if(Math.sqrt(dx*dx+dy*dy)<14/edZoom)return{type:'mplatform_pt',index:i,ptIdx:j};
+        }
     }
     for(let i=edSpikes.length-1;i>=0;i--){const sp=edSpikes[i];const b=spikeBBoxEd(sp);if(wx>=b.x&&wx<=b.x+b.w&&wy>=b.y&&wy<=b.y+b.h)return{type:'spike',index:i};}
     for(let i=edSawblades.length-1;i>=0;i--){const s=edSawblades[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=(s.radius||25))return{type:'saw',index:i};}
     for(let i=edOrbitSaws.length-1;i>=0;i--){const s=edOrbitSaws[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=14/edZoom)return{type:'orbitsaw',index:i};}
-    for(let i=edMovingPlatforms.length-1;i>=0;i--){const mp=edMovingPlatforms[i];if(wx>=mp.x&&wx<=mp.x+mp.width&&wy>=mp.y&&wy<=mp.y+mp.height)return{type:'mplatform',index:i};}
+    // orbitplat center and body
+    for(let i=edOrbitPlatforms.length-1;i>=0;i--){
+        const op=edOrbitPlatforms[i];
+        const dx=wx-op.cx,dy=wy-op.cy;
+        if(Math.sqrt(dx*dx+dy*dy)<14/edZoom)return{type:'orbitplat',index:i};
+        const px=op.cx+op.radius-op.width/2,py=op.cy-op.height/2;
+        if(wx>=px&&wx<=px+op.width&&wy>=py&&wy<=py+op.height)return{type:'orbitplat',index:i};
+    }
+    // mplatform body at pts[0]
+    for(let i=edMovingPlatforms.length-1;i>=0;i--){
+        const mp=edMovingPlatforms[i],p0=mp.points[0];
+        if(wx>=p0.x&&wx<=p0.x+mp.width&&wy>=p0.y&&wy<=p0.y+mp.height)return{type:'mplatform',index:i};
+    }
     for(let i=edOnOffBlocks.length-1;i>=0;i--){const b=edOnOffBlocks[i];if(wx>=b.x&&wx<=b.x+b.width&&wy>=b.y&&wy<=b.y+b.height)return{type:'onoff',index:i};}
     for(let i=edOnOffSwitches.length-1;i>=0;i--){const sw=edOnOffSwitches[i];if(wx>=sw.x&&wx<=sw.x+25&&wy>=sw.y&&wy<=sw.y+25)return{type:'switch',index:i};}
     for(let i=edPlatforms.length-1;i>=0;i--){const p=edPlatforms[i]; if(wx>=p.x&&wx<=p.x+p.width&&wy>=p.y&&wy<=p.y+p.height)return{type:'platform',index:i};}
@@ -991,10 +1119,12 @@ function edGetSel(){
     if(edSelected.type==='jumppad')   return edJumpPads[edSelected.index];
     if(edSelected.type==='spike')     return edSpikes[edSelected.index];
     if(edSelected.type==='saw')       return edSawblades[edSelected.index];
-    if(edSelected.type==='mplatform'||edSelected.type==='mplatform_end') return edMovingPlatforms[edSelected.index];
+    if(edSelected.type==='mplatform') return edMovingPlatforms[edSelected.index];
+    if(edSelected.type==='mplatform_pt') return edMovingPlatforms[edSelected.index];
     if(edSelected.type==='onoff')     return edOnOffBlocks[edSelected.index];
     if(edSelected.type==='switch')    return edOnOffSwitches[edSelected.index];
     if(edSelected.type==='orbitsaw')  return edOrbitSaws[edSelected.index];
+    if(edSelected.type==='orbitplat') return edOrbitPlatforms[edSelected.index];
     return null;
 }
 
@@ -1005,10 +1135,16 @@ function edDeleteSelected(){
     if(edSelected.type==='finish')    edFinish=null;
     if(edSelected.type==='spike')     edSpikes.splice(edSelected.index,1);
     if(edSelected.type==='saw')       edSawblades.splice(edSelected.index,1);
-    if(edSelected.type==='mplatform'||edSelected.type==='mplatform_end') edMovingPlatforms.splice(edSelected.index,1);
+    if(edSelected.type==='mplatform') edMovingPlatforms.splice(edSelected.index,1);
+    if(edSelected.type==='mplatform_pt'){
+        const mp=edMovingPlatforms[edSelected.index];
+        if(mp.points.length>2)mp.points.splice(edSelected.ptIdx,1);
+        else edMovingPlatforms.splice(edSelected.index,1);
+    }
     if(edSelected.type==='onoff')     edOnOffBlocks.splice(edSelected.index,1);
     if(edSelected.type==='switch')    edOnOffSwitches.splice(edSelected.index,1);
     if(edSelected.type==='orbitsaw')  edOrbitSaws.splice(edSelected.index,1);
+    if(edSelected.type==='orbitplat') edOrbitPlatforms.splice(edSelected.index,1);
     edSelected=null;
 }
 
@@ -1021,22 +1157,24 @@ canvas.addEventListener('mousedown', e=>{
     if(e.button!==0)return;
 
     if(edTool==='select'){
-        const noHandleTypes=new Set(['finish','saw','switch','mplatform_end']);
+        const noHandleTypes=new Set(['finish','saw','switch','mplatform_pt','orbitplat']);
         if(edSelected&&!noHandleTypes.has(edSelected.type)){ const obj=edGetSel(); if(obj){
-            let ww,wh,wy;
-            if(edSelected.type==='jumppad'){ww=50;wh=10;wy=obj.y;}
-            else if(edSelected.type==='spike'){const b=spikeBBoxEd(obj);ww=b.w;wh=b.h;wy=b.y;}
-            else{ww=obj.width;wh=obj.height;wy=obj.y;}
-            const h=edGetHandleName(sx,sy,obj.x,wy,ww,wh);
-            if(h){edDragging=true;edDragHandle=h;const{x,y}=edSW(sx,sy);edDragStart={x,y};edDragOriginal={x:obj.x,y:wy,width:ww,height:wh};return;}
+            let ww,wh,wx_,wy;
+            if(edSelected.type==='jumppad'){ww=50;wh=10;wx_=obj.x;wy=obj.y;}
+            else if(edSelected.type==='spike'){const b=spikeBBoxEd(obj);ww=b.w;wh=b.h;wx_=b.x;wy=b.y;}
+            else if(edSelected.type==='mplatform'){wx_=obj.points[0].x;wy=obj.points[0].y;ww=obj.width;wh=obj.height;}
+            else{ww=obj.width;wh=obj.height;wx_=obj.x;wy=obj.y;}
+            const h=edGetHandleName(sx,sy,wx_,wy,ww,wh);
+            if(h){edDragging=true;edDragHandle=h;const{x,y}=edSW(sx,sy);edDragStart={x,y};edDragOriginal={x:wx_,y:wy,width:ww,height:wh,points:edSelected.type==='mplatform'?obj.points.map(p=>({...p})):undefined};return;}
         } }
         const hit=edHitTest(sx,sy); edSelected=hit;
         if(hit){
-            edDragging=true; edDragHandle=hit.type==='mplatform_end'?'endpoint':'move';
+            edDragging=true; edDragHandle=(hit.type==='mplatform_pt')?'move_pt':'move';
             const{x,y}=edSW(sx,sy); edDragStart={x,y};
             const o=edGetSel();
-            if(hit.type==='mplatform_end') edDragOriginal={tx:o.tx,ty:o.ty};
-            else if(hit.type==='mplatform') edDragOriginal={x:o.x,y:o.y,tx:o.tx,ty:o.ty};
+            if(hit.type==='mplatform') edDragOriginal={x:o.points[0].x,y:o.points[0].y,points:o.points.map(p=>({...p}))};
+            else if(hit.type==='mplatform_pt'){const pt=o.points[hit.ptIdx];edDragOriginal={x:pt.x,y:pt.y};}
+            else if(hit.type==='orbitplat') edDragOriginal={x:o.cx,y:o.cy};
             else edDragOriginal={x:o.x,y:o.y};
         }
     }
@@ -1076,13 +1214,21 @@ canvas.addEventListener('mousedown', e=>{
             if(hit.type==='finish')    edFinish=null;
             if(hit.type==='spike')     edSpikes.splice(hit.index,1);
             if(hit.type==='saw')       edSawblades.splice(hit.index,1);
-            if(hit.type==='mplatform'||hit.type==='mplatform_end') edMovingPlatforms.splice(hit.index,1);
+            if(hit.type==='mplatform') edMovingPlatforms.splice(hit.index,1);
+            if(hit.type==='mplatform_pt'){
+                const mp=edMovingPlatforms[hit.index];
+                if(mp.points.length>2)mp.points.splice(hit.ptIdx,1);
+                else edMovingPlatforms.splice(hit.index,1);
+            }
             if(hit.type==='onoff')     edOnOffBlocks.splice(hit.index,1);
             if(hit.type==='switch')    edOnOffSwitches.splice(hit.index,1);
             if(hit.type==='orbitsaw')  edOrbitSaws.splice(hit.index,1);
+            if(hit.type==='orbitplat') edOrbitPlatforms.splice(hit.index,1);
             edSelected=null;
         }
     }
+
+    if(edTool==='orbitplat'){const{x,y}=edSW(sx,sy);edOrbitPlatforms.push({cx:snapV(x),cy:snapV(y),radius:100,speed:1,width:100,height:25});edSelected={type:'orbitplat',index:edOrbitPlatforms.length-1};}
 });
 
 canvas.addEventListener('mousemove', e=>{
@@ -1106,8 +1252,21 @@ canvas.addEventListener('mousemove', e=>{
         const obj=edGetSel(); if(!obj)return;
         const{x:cwx,y:cwy}=edSW(sx,sy);
         const dx=cwx-edDragStart.x, dy=cwy-edDragStart.y;
-        if(edDragHandle==='endpoint'){obj.tx=snapV(edDragOriginal.tx+dx);obj.ty=snapV(edDragOriginal.ty+dy);}
-        else if(edDragHandle==='move'){obj.x=snapV(edDragOriginal.x+dx);obj.y=snapV(edDragOriginal.y+dy);if(edSelected.type==='mplatform'){obj.tx=snapV((edDragOriginal.tx!==undefined?edDragOriginal.tx:obj.tx)+dx);obj.ty=snapV((edDragOriginal.ty!==undefined?edDragOriginal.ty:obj.ty)+dy);}}
+        if(edDragHandle==='move_pt'){
+            const mp=edMovingPlatforms[edSelected.index];
+            const pt=mp.points[edSelected.ptIdx];
+            pt.x=snapV(edDragOriginal.x+dx); pt.y=snapV(edDragOriginal.y+dy);
+        }
+        else if(edDragHandle==='move'){
+            if(edSelected.type==='mplatform'){
+                const base=edDragOriginal.points[0];const nx=snapV(base.x+dx),ny=snapV(base.y+dy);const ddx=nx-base.x,ddy=ny-base.y;
+                for(let j=0;j<obj.points.length;j++){obj.points[j].x=edDragOriginal.points[j].x+ddx;obj.points[j].y=edDragOriginal.points[j].y+ddy;}
+            } else if(edSelected.type==='orbitplat'){
+                obj.cx=snapV(edDragOriginal.x+dx); obj.cy=snapV(edDragOriginal.y+dy);
+            } else {
+                obj.x=snapV(edDragOriginal.x+dx); obj.y=snapV(edDragOriginal.y+dy);
+            }
+        }
         else if(edSelected.type==='spike'){
             const o=edDragOriginal;let nx=o.x,ny=o.y,nw=o.width,nh=o.height;
             if(edDragHandle.includes('e')){nw=Math.max(SNAP,snapV(o.width+dx));}
@@ -1120,13 +1279,21 @@ canvas.addEventListener('mousemove', e=>{
             else if(dir==='down') { obj.y=snapV(ny);    obj.width=nw; obj.height=nh; }
             else                  { obj.y=snapV(ny);    obj.width=nh; obj.height=nw; }
         }
-        else if(edSelected.type==='platform'||edSelected.type==='mplatform'||edSelected.type==='onoff'){
+        else if(edSelected.type==='platform'||edSelected.type==='onoff'){
             const o=edDragOriginal;let nx=o.x,ny=o.y,nw=o.width,nh=o.height;
             if(edDragHandle.includes('e')){nw=Math.max(SNAP,snapV(o.width+dx));}
             if(edDragHandle.includes('s')){nh=Math.max(SNAP,snapV(o.height+dy));}
             if(edDragHandle.includes('w')){const d=snapV(dx);nx=o.x+d;nw=Math.max(SNAP,o.width-d);}
             if(edDragHandle.includes('n')){const d=snapV(dy);ny=o.y+d;nh=Math.max(SNAP,o.height-d);}
             obj.x=nx;obj.y=ny;obj.width=nw;obj.height=nh;
+        }
+        else if(edSelected.type==='mplatform'){
+            const o=edDragOriginal;let nx=o.x,ny=o.y,nw=o.width,nh=o.height;
+            if(edDragHandle.includes('e')){nw=Math.max(SNAP,snapV(o.width+dx));}
+            if(edDragHandle.includes('s')){nh=Math.max(SNAP,snapV(o.height+dy));}
+            if(edDragHandle.includes('w')){const d=snapV(dx);nx=o.x+d;nw=Math.max(SNAP,o.width-d);}
+            if(edDragHandle.includes('n')){const d=snapV(dy);ny=o.y+d;nh=Math.max(SNAP,o.height-d);}
+            obj.points[0].x=nx;obj.points[0].y=ny;obj.width=nw;obj.height=nh;
         }
     }
 });
@@ -1143,7 +1310,7 @@ canvas.addEventListener('mouseup', e=>{
             edSpikes.push({x:edGhostRect.x,y:edGhostRect.y,width:edGhostRect.width,dir:'up',height:25}); edSelected={type:'spike',index:edSpikes.length-1};
         }
         if(edTool==='mplatform'&&edGhostRect.width>=SNAP&&edGhostRect.height>=SNAP){
-            const mp={x:edGhostRect.x,y:edGhostRect.y,width:edGhostRect.width,height:edGhostRect.height,tx:edGhostRect.x+200,ty:edGhostRect.y,speed:1};
+            const mp={points:[{x:edGhostRect.x,y:edGhostRect.y,stop:false},{x:edGhostRect.x+200,y:edGhostRect.y,stop:false}],width:edGhostRect.width,height:edGhostRect.height,speed:1};
             edMovingPlatforms.push(mp); edSelected={type:'mplatform',index:edMovingPlatforms.length-1};
         }
         if(edTool==='onoff'&&edGhostRect.width>=SNAP&&edGhostRect.height>=SNAP){
@@ -1180,6 +1347,17 @@ canvas.addEventListener('dblclick',e=>{
         const mp=edMovingPlatforms[edSelected.index];
         const v=prompt('Move speed (default 1):',mp.speed||1);
         if(v!==null&&!isNaN(+v))mp.speed=Math.max(0.1,+v);
+    }
+    if(edSelected.type==='mplatform_pt'){
+        const pt=edMovingPlatforms[edSelected.index].points[edSelected.ptIdx];
+        pt.stop=(pt.stop!==false)?false:true;
+    }
+    if(edSelected.type==='orbitplat'){
+        const op=edOrbitPlatforms[edSelected.index];
+        const r=prompt('Orbit radius:',op.radius);if(r!==null&&!isNaN(+r))op.radius=Math.max(25,+r);
+        const sp=prompt('Speed (negative=reverse):',op.speed);if(sp!==null&&!isNaN(+sp))op.speed=+sp;
+        const w=prompt('Platform width:',op.width);if(w!==null&&!isNaN(+w))op.width=Math.max(25,+w);
+        const h=prompt('Platform height:',op.height);if(h!==null&&!isNaN(+h))op.height=Math.max(10,+h);
     }
     if(edSelected.type==='onoff'){
         const b=edOnOffBlocks[edSelected.index];
@@ -1220,16 +1398,11 @@ function rotateSelected(){
         else                     { sp.x=cx-nth/2; sp.y=cy-ntw/2; }
         return;
     }
+    if(edSelected.type==='mplatform'||edSelected.type==='mplatform_pt'||edSelected.type==='orbitplat') return;
     const obj=edGetSel(); if(!obj||!obj.width||!obj.height)return;
     const cx=obj.x+obj.width/2, cy=obj.y+obj.height/2;
     const nw=obj.height, nh=obj.width;
-    if(edSelected.type==='mplatform'){
-        const ex=obj.tx+obj.width/2, ey=obj.ty+obj.height/2;
-        obj.x=cx-nw/2; obj.y=cy-nh/2; obj.width=nw; obj.height=nh;
-        obj.tx=(cx+(ey-cy))-nw/2; obj.ty=(cy-(ex-cx))-nh/2;
-    } else {
-        obj.x=cx-nw/2; obj.y=cy-nh/2; obj.width=nw; obj.height=nh;
-    }
+    obj.x=cx-nw/2; obj.y=cy-nh/2; obj.width=nw; obj.height=nh;
 }
 
 // ── Tool buttons ───────────────────────────────────────
@@ -1253,10 +1426,14 @@ function openEditor(levelData=null){
         edFinish         =levelData.finish?{...levelData.finish}:null;
         edSpikes         =(levelData.spikes         ||[]).map(s=>({...s}));
         edSawblades      =(levelData.sawblades      ||[]).map(s=>({...s}));
-        edMovingPlatforms=(levelData.movingPlatforms||[]).map(p=>({...p}));
+        edMovingPlatforms=(levelData.movingPlatforms||[]).map(p=>{
+            const pts=p.points||[{x:p.x,y:p.y,stop:false},{x:p.tx??p.x+200,y:p.ty??p.y,stop:false}];
+            return {points:pts.map(pt=>({...pt})),width:p.width,height:p.height,speed:p.speed||1};
+        });
         edOnOffBlocks    =(levelData.onOffBlocks    ||[]).map(b=>({...b}));
         edOnOffSwitches  =(levelData.onOffSwitches  ||[]).map(s=>({...s}));
         edOrbitSaws      =(levelData.orbitSaws      ||[]).map(s=>({...s}));
+        edOrbitPlatforms =(levelData.orbitPlatforms ||[]).map(op=>({...op}));
         document.getElementById('edLevelName').value =levelData.name||'';
         document.getElementById('edLevelOrder').value=levelData.order||1;
         document.getElementById('edDeleteBtn').style.display='inline-block';
@@ -1290,10 +1467,17 @@ function enterPlayTest(){
     jumpPads       =edJumpPads.map(j=>new JumpPad(j.x,j.y,j.strength));
     spikes         =edSpikes.map(s=>({...s}));
     sawblades      =edSawblades.map(s=>({...s,_rot:0}));
-    movingPlatforms=edMovingPlatforms.map(p=>({...p,_t:0,_dir:1,_cx:p.x,_cy:p.y}));
+    movingPlatforms=edMovingPlatforms.map(p=>{
+        const pts=p.points||[{x:p.x,y:p.y,stop:false},{x:p.tx??p.x+200,y:p.ty??p.y,stop:false}];
+        return {...p,points:pts,_fromPt:0,_toPt:1,_t:0,_pause:0,_cx:pts[0].x,_cy:pts[0].y,_vx:0,_vy:0,_playerRiding:false};
+    });
     onOffBlocks    =edOnOffBlocks.map(b=>({...b}));
     onOffSwitches  =edOnOffSwitches.map(s=>({...s,_triggered:false}));
     orbitSaws      =edOrbitSaws.map(s=>({...s,_angle:Math.random()*Math.PI*2}));
+    orbitPlatforms =edOrbitPlatforms.map(op=>{
+        const angle=Math.random()*Math.PI*2;
+        return {...op,_angle:angle,_cx:op.cx+Math.cos(angle)*op.radius-op.width/2,_cy:op.cy+Math.sin(angle)*op.radius-op.height/2,_vx:0,_vy:0,_playerRiding:false};
+    });
     onOffState=false; deathCooldown=0;
     startPos ={...edSpawn};
     player   =new Player(edSpawn.x,edSpawn.y);
@@ -1328,7 +1512,7 @@ document.getElementById('edQuitBtn').addEventListener('click',closeEditor);
 // ── Level management ───────────────────────────────────
 function edClearState(){
     edPlatforms=[]; edJumpPads=[]; edSpawn={x:250,y:4500}; edFinish=null;
-    edSpikes=[]; edSawblades=[]; edMovingPlatforms=[]; edOnOffBlocks=[]; edOnOffSwitches=[]; edOrbitSaws=[];
+    edSpikes=[]; edSawblades=[]; edMovingPlatforms=[]; edOnOffBlocks=[]; edOnOffSwitches=[]; edOrbitSaws=[]; edOrbitPlatforms=[];
     edSelected=null; edCurrentId=null; edGhostRect=null;
     document.getElementById('edLevelName').value='';
     document.getElementById('edLevelOrder').value=(allLevels.length+1)||1;
@@ -1359,10 +1543,14 @@ document.getElementById('edLevelSelect').addEventListener('change',async e=>{
     edFinish         =lvl.finish?{...lvl.finish}:null;
     edSpikes         =(lvl.spikes         ||[]).map(s=>({...s}));
     edSawblades      =(lvl.sawblades      ||[]).map(s=>({...s}));
-    edMovingPlatforms=(lvl.movingPlatforms||[]).map(p=>({...p}));
+    edMovingPlatforms=(lvl.movingPlatforms||[]).map(p=>{
+        const pts=p.points||[{x:p.x,y:p.y,stop:false},{x:p.tx??p.x+200,y:p.ty??p.y,stop:false}];
+        return {points:pts.map(pt=>({...pt})),width:p.width,height:p.height,speed:p.speed||1};
+    });
     edOnOffBlocks    =(lvl.onOffBlocks    ||[]).map(b=>({...b}));
     edOnOffSwitches  =(lvl.onOffSwitches  ||[]).map(s=>({...s}));
     edOrbitSaws      =(lvl.orbitSaws      ||[]).map(s=>({...s}));
+    edOrbitPlatforms =(lvl.orbitPlatforms ||[]).map(op=>({...op}));
     document.getElementById('edLevelName').value =lvl.name||'';
     document.getElementById('edLevelOrder').value=lvl.order||1;
     document.getElementById('edDeleteBtn').style.display='inline-block';
@@ -1376,7 +1564,7 @@ document.getElementById('edSaveBtn').addEventListener('click',async()=>{
     const name =document.getElementById('edLevelName').value.trim()||'Untitled';
     const order=parseInt(document.getElementById('edLevelOrder').value)||1;
     if(edPlatforms.length===0)return setEdStatus('Add at least one platform.');
-    const body={name,order,startPos:edSpawn,platforms:edPlatforms,jumpPads:edJumpPads,finish:edFinish,spikes:edSpikes,sawblades:edSawblades,movingPlatforms:edMovingPlatforms,onOffBlocks:edOnOffBlocks,onOffSwitches:edOnOffSwitches,orbitSaws:edOrbitSaws};
+    const body={name,order,startPos:edSpawn,platforms:edPlatforms,jumpPads:edJumpPads,finish:edFinish,spikes:edSpikes,sawblades:edSawblades,movingPlatforms:edMovingPlatforms,onOffBlocks:edOnOffBlocks,onOffSwitches:edOnOffSwitches,orbitSaws:edOrbitSaws,orbitPlatforms:edOrbitPlatforms};
     const isNew=!edCurrentId;
     try{
         const r=await fetch(isNew?'/api/ollie/levels':`/api/ollie/levels/${edCurrentId}`,{method:isNew?'POST':'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${authToken}`},body:JSON.stringify(body)});
