@@ -1038,6 +1038,64 @@ app.post('/api/stats/labyrinth', requireAuth, async (req, res) => {
     res.json({ ok: true });
 });
 
+// ── Ollie ──────────────────────────────────────────────
+
+function requireAdmin(req, res, next) {
+    if (req.user?.username !== 'Mr.Rose') return res.status(403).json({ error: 'Forbidden.' });
+    next();
+}
+
+app.get('/api/ollie/admin-check', requireAuth, (req, res) => {
+    res.json({ isAdmin: req.user.username === 'Mr.Rose' });
+});
+
+app.get('/api/ollie/levels', async (req, res) => {
+    const levels = await db.collection('ollie_levels').find({}).sort({ order: 1 }).toArray();
+    res.json(levels);
+});
+
+app.post('/api/ollie/levels', requireAuth, requireAdmin, async (req, res) => {
+    const { name, order, startPos, platforms, jumpPads } = req.body;
+    if (!startPos || !platforms) return res.status(400).json({ error: 'startPos and platforms required.' });
+    const doc = { name: name || `Level ${order}`, order: order ?? 1, startPos, platforms, jumpPads: jumpPads || [], created_at: new Date().toISOString() };
+    const result = await db.collection('ollie_levels').insertOne(doc);
+    res.json({ ...doc, _id: result.insertedId });
+});
+
+app.put('/api/ollie/levels/:id', requireAuth, requireAdmin, async (req, res) => {
+    const { name, order, startPos, platforms, jumpPads } = req.body;
+    try {
+        await db.collection('ollie_levels').updateOne(
+            { _id: uid(req.params.id) },
+            { $set: { name, order, startPos, platforms, jumpPads: jumpPads || [] } }
+        );
+        res.json({ ok: true });
+    } catch { res.status(400).json({ error: 'Invalid ID.' }); }
+});
+
+app.delete('/api/ollie/levels/:id', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        await db.collection('ollie_levels').deleteOne({ _id: uid(req.params.id) });
+        res.json({ ok: true });
+    } catch { res.status(400).json({ error: 'Invalid ID.' }); }
+});
+
+app.get('/api/ollie/progress', requireAuth, async (req, res) => {
+    const doc = await db.collection('ollie_progress').findOne({ userId: uid(req.user.id) });
+    res.json({ completedOrders: doc?.completedOrders || [] });
+});
+
+app.post('/api/ollie/progress/:order', requireAuth, async (req, res) => {
+    const order = parseInt(req.params.order);
+    if (isNaN(order)) return res.status(400).json({ error: 'Invalid order.' });
+    await db.collection('ollie_progress').updateOne(
+        { userId: uid(req.user.id) },
+        { $addToSet: { completedOrders: order } },
+        { upsert: true }
+    );
+    res.json({ ok: true });
+});
+
 // ── Serve games ────────────────────────────────────────
 app.get('/automata',   (req, res) => res.redirect('/games/automata/'));
 app.get('/marble-run', (req, res) => res.redirect('/games/marble-run/'));
