@@ -44,6 +44,7 @@ class JumpParticle {
 
 // ── Game state ─────────────────────────────────────────
 let startPos  = null, player = null, platforms = [], jumpPads = [];
+let finish = null, levelCompleted = false;
 let currentLevelOrder = null;
 
 let gravity = 0.5;
@@ -98,6 +99,7 @@ function gameLoop(){
     if(grounded){resetGravity(); jumped=false;}
     if(ceiling){player.velocity.y=0;}
     drawBackground(); handleParticles(); drawPlayer(); drawPlatforms(); drawJumpPads();
+    drawFinish(); checkFinish();
     animFrameId=requestAnimationFrame(gameLoop);
 }
 
@@ -127,6 +129,7 @@ document.addEventListener("keydown", e => {
         if(e.key==='j'||e.key==='J') setTool('jumppad');
         if(e.key==='r'||e.key==='R') setTool('spawn');
         if(e.key==='x'||e.key==='X') setTool('delete');
+        if(e.key==='f'||e.key==='F') setTool('finish');
     }
 });
 document.addEventListener("keyup", e => {
@@ -234,6 +237,51 @@ function drawJumpPads(){
     }
 }
 
+function drawFinish(){
+    if(!finish)return;
+    const t=Date.now()*0.003;
+    const px=finish.x-camera.x, py=finish.y-camera.y;
+    const poleH=120, flagW=60, flagH=35;
+    // Glow
+    const grd=ctx.createRadialGradient(px,py+poleH,0,px,py+poleH,45);
+    grd.addColorStop(0,'rgba(192,57,75,0.45)'); grd.addColorStop(1,'rgba(192,57,75,0)');
+    ctx.fillStyle=grd; ctx.fillRect(px-45,py+poleH-45,90,90);
+    // Pole
+    ctx.strokeStyle='#c8c8c8'; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px,py+poleH); ctx.stroke();
+    // Waving flag
+    const wave=Math.sin(t*2.5)*8, wave2=Math.sin(t*2.5+1.2)*5;
+    ctx.fillStyle='#c0394b';
+    ctx.beginPath(); ctx.moveTo(px,py);
+    ctx.bezierCurveTo(px+flagW*0.4,py+wave,       px+flagW*0.7,py+flagH/2+wave2, px+flagW,py+flagH/2);
+    ctx.bezierCurveTo(px+flagW*0.7,py+flagH/2-wave2, px+flagW*0.4,py+flagH-wave, px,py+flagH);
+    ctx.closePath(); ctx.fill();
+    // Star
+    const starX=px+flagW*0.85, starY=py+flagH/2+Math.sin(t*2.5+0.5)*3;
+    ctx.fillStyle='#ffd700'; ctx.beginPath();
+    for(let i=0;i<10;i++){const r=i%2===0?7:3.5;const a=(i/10)*Math.PI*2-Math.PI/2;i===0?ctx.moveTo(starX+r*Math.cos(a),starY+r*Math.sin(a)):ctx.lineTo(starX+r*Math.cos(a),starY+r*Math.sin(a));}
+    ctx.closePath(); ctx.fill();
+    // Base circle
+    ctx.fillStyle='rgba(255,255,255,0.3)';
+    ctx.beginPath(); ctx.arc(px,py+poleH,6,0,Math.PI*2); ctx.fill();
+}
+
+function checkFinish(){
+    if(!finish||levelCompleted)return;
+    if(player.x+player.width>finish.x-20&&player.x<finish.x+80&&player.y+player.height>finish.y&&player.y<finish.y+130){
+        levelCompleted=true; markLevelComplete(currentLevelOrder); showLevelComplete();
+    }
+}
+
+function showLevelComplete(){
+    cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false;
+    const lvl=allLevels.find(l=>l.order===currentLevelOrder);
+    document.getElementById('lcLevelName').textContent=lvl?(lvl.name||''):'';
+    const nextLvl=allLevels.find(l=>l.order===currentLevelOrder+1);
+    document.getElementById('lcNextBtn').style.display=nextLvl?'':'none';
+    document.getElementById('levelCompleteOverlay').classList.remove('hidden');
+}
+
 // ── Particles ──────────────────────────────────────────
 function handleParticles(){
     if(!wasGrounded.includes(true)&&grounded) makeParticles(classifiersInUse.platform,platformParticles,PlatformParticle,platformParticleCount);
@@ -273,6 +321,7 @@ function startLevel(levelData){
     platformParticles=[]; boostParticles=[]; jumpParticles=[];
     classifiersInUse={platform:[],boost:[],jump:[]};
     grounded=false; wasGrounded=[false,false,false,false];
+    finish=levelData.finish?{...levelData.finish}:null; levelCompleted=false;
     if(backgroundRects.length===0) createBackground();
     gameStarted=true;
     gameLoop();
@@ -307,6 +356,17 @@ document.getElementById('backFromSelect').addEventListener('click',()=>{ levelSe
 document.getElementById('controlsBtn').addEventListener('click',()=>controlsOverlay.classList.remove('hidden'));
 document.getElementById('closeControlsBtn').addEventListener('click',()=>controlsOverlay.classList.add('hidden'));
 document.getElementById('quitBtn').addEventListener('click',()=>{ window.location.href='/'; });
+document.getElementById('lcNextBtn').addEventListener('click',()=>{
+    const nextLvl=allLevels.find(l=>l.order===currentLevelOrder+1); if(!nextLvl)return;
+    document.getElementById('levelCompleteOverlay').classList.add('hidden'); levelCompleted=false; gameStarted=false; startLevel(nextLvl);
+});
+document.getElementById('lcAgainBtn').addEventListener('click',()=>{
+    const lvl=allLevels.find(l=>l.order===currentLevelOrder);
+    document.getElementById('levelCompleteOverlay').classList.add('hidden'); levelCompleted=false; gameStarted=false; if(lvl)startLevel(lvl);
+});
+document.getElementById('lcMenuBtn').addEventListener('click',()=>{
+    document.getElementById('levelCompleteOverlay').classList.add('hidden'); levelCompleted=false; gameStarted=false; menu.classList.remove('hidden');
+});
 document.getElementById('editorBtn').addEventListener('click',()=>openEditor());
 
 // ══════════════════════════════════════════════════════
@@ -333,6 +393,7 @@ let edPanOrigin = {x:0,y:0};
 let edPlatforms = [];
 let edJumpPads  = [];
 let edSpawn     = {x:250, y:4500};
+let edFinish    = null;
 
 // Selection + drag
 let edSelected     = null;
@@ -420,6 +481,38 @@ function editorDrawFrame(){
     ctx.fillRect(edSpawn.x+13,edSpawn.y+15,5,5);
     ctx.fillRect(edSpawn.x+33,edSpawn.y+15,5,5);
 
+    // Finish flag
+    if(edFinish){
+        const t=Date.now()*0.003, fx=edFinish.x, fy=edFinish.y;
+        const poleH=120, flagW=60, flagH=35;
+        const grd=ctx.createRadialGradient(fx,fy+poleH,0,fx,fy+poleH,45);
+        grd.addColorStop(0,'rgba(192,57,75,0.45)'); grd.addColorStop(1,'rgba(192,57,75,0)');
+        ctx.fillStyle=grd; ctx.fillRect(fx-45,fy+poleH-45,90,90);
+        ctx.strokeStyle='#c8c8c8'; ctx.lineWidth=4/edZoom;
+        ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx,fy+poleH); ctx.stroke();
+        const wave=Math.sin(t*2.5)*8, wave2=Math.sin(t*2.5+1.2)*5;
+        ctx.fillStyle='#c0394b'; ctx.beginPath(); ctx.moveTo(fx,fy);
+        ctx.bezierCurveTo(fx+flagW*0.4,fy+wave,fx+flagW*0.7,fy+flagH/2+wave2,fx+flagW,fy+flagH/2);
+        ctx.bezierCurveTo(fx+flagW*0.7,fy+flagH/2-wave2,fx+flagW*0.4,fy+flagH-wave,fx,fy+flagH);
+        ctx.closePath(); ctx.fill();
+        const starX=fx+flagW*0.85, starY=fy+flagH/2+Math.sin(t*2.5+0.5)*3;
+        ctx.fillStyle='#ffd700'; ctx.beginPath();
+        for(let i=0;i<10;i++){const r=i%2===0?7/edZoom:3.5/edZoom;const a=(i/10)*Math.PI*2-Math.PI/2;i===0?ctx.moveTo(starX+r*Math.cos(a),starY+r*Math.sin(a)):ctx.lineTo(starX+r*Math.cos(a),starY+r*Math.sin(a));}
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle='rgba(192,57,75,0.8)'; ctx.font=`${12/edZoom}px monospace`;
+        ctx.fillText('FINISH',fx-15/edZoom,fy-8/edZoom);
+    }
+
+    // Ghost finish preview
+    if(edTool==='finish'&&edCursorWorld){
+        const gfx=snapV(edCursorWorld.x), gfy=snapV(edCursorWorld.y);
+        ctx.globalAlpha=0.4;
+        ctx.strokeStyle='#c0394b'; ctx.lineWidth=3/edZoom;
+        ctx.beginPath(); ctx.moveTo(gfx,gfy); ctx.lineTo(gfx,gfy+120); ctx.stroke();
+        ctx.fillStyle='#c0394b'; ctx.fillRect(gfx,gfy,60,35);
+        ctx.globalAlpha=1;
+    }
+
     // Ghost platform preview
     if(edGhostRect){
         ctx.fillStyle='rgba(80,80,200,0.22)'; ctx.strokeStyle='rgba(120,120,255,0.85)'; ctx.lineWidth=2/edZoom;
@@ -436,12 +529,17 @@ function editorDrawFrame(){
         ctx.beginPath(); ctx.roundRect(edCursorWorld.x-25,edCursorWorld.y-5,50,10,[10/edZoom]); ctx.fill(); ctx.stroke();
     }
 
-    // Resize handles
+    // Resize handles / selection highlight
     if(edSelected){
         const obj=edGetSel();
         if(obj){
-            const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height;
-            edDrawHandles(obj.x,obj.y,ww,wh);
+            if(edSelected.type==='finish'){
+                ctx.strokeStyle='rgba(192,57,75,0.85)'; ctx.lineWidth=2/edZoom;
+                ctx.strokeRect(obj.x-8,obj.y-8,84,148);
+            } else {
+                const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height;
+                edDrawHandles(obj.x,obj.y,ww,wh);
+            }
         }
     }
 
@@ -466,17 +564,19 @@ function edGetHandleName(sx,sy,wx,wy,ww,wh){
 
 function edHitTest(sx,sy){
     const{x:wx,y:wy}=edSW(sx,sy);
+    if(edFinish&&wx>=edFinish.x-8&&wx<=edFinish.x+76&&wy>=edFinish.y&&wy<=edFinish.y+140)return{type:'finish'};
     for(let i=edPlatforms.length-1;i>=0;i--){const p=edPlatforms[i]; if(wx>=p.x&&wx<=p.x+p.width&&wy>=p.y&&wy<=p.y+p.height)return{type:'platform',index:i};}
     for(let i=edJumpPads.length-1; i>=0;i--){const j=edJumpPads[i];  if(wx>=j.x&&wx<=j.x+50&&wy>=j.y&&wy<=j.y+10)return{type:'jumppad',index:i};}
     return null;
 }
 
-function edGetSel(){ if(!edSelected)return null; return edSelected.type==='platform'?edPlatforms[edSelected.index]:edJumpPads[edSelected.index]; }
+function edGetSel(){ if(!edSelected)return null; if(edSelected.type==='finish')return edFinish; return edSelected.type==='platform'?edPlatforms[edSelected.index]:edJumpPads[edSelected.index]; }
 
 function edDeleteSelected(){
     if(!edSelected)return;
     if(edSelected.type==='platform')edPlatforms.splice(edSelected.index,1);
     if(edSelected.type==='jumppad') edJumpPads.splice(edSelected.index,1);
+    if(edSelected.type==='finish')  edFinish=null;
     edSelected=null;
 }
 
@@ -489,9 +589,9 @@ canvas.addEventListener('mousedown', e=>{
     if(e.button!==0)return;
 
     if(edTool==='select'){
-        if(edSelected){ const obj=edGetSel(); if(obj){ const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height; const h=edGetHandleName(sx,sy,obj.x,obj.y,ww,wh); if(h){edDragging=true;edDragHandle=h;edDragStart=edSW(sx,sy);edDragOriginal={x:obj.x,y:obj.y,width:ww,height:wh};return;} } }
+        if(edSelected&&edSelected.type!=='finish'){ const obj=edGetSel(); if(obj){ const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height; const h=edGetHandleName(sx,sy,obj.x,obj.y,ww,wh); if(h){edDragging=true;edDragHandle=h;const{x,y}=edSW(sx,sy);edDragStart={x,y};edDragOriginal={x:obj.x,y:obj.y,width:ww,height:wh};return;} } }
         const hit=edHitTest(sx,sy); edSelected=hit;
-        if(hit){edDragging=true;edDragHandle='move';edDragStart=edSW(sx,sy);const o=edGetSel();edDragOriginal={x:o.x,y:o.y};}
+        if(hit){edDragging=true;edDragHandle='move';const{x,y}=edSW(sx,sy);edDragStart={x,y};const o=edGetSel();edDragOriginal={x:o.x,y:o.y};}
     }
 
     if(edTool==='platform'){
@@ -503,7 +603,9 @@ canvas.addEventListener('mousedown', e=>{
 
     if(edTool==='spawn'){const{x,y}=edSW(sx,sy); edSpawn={x:snapV(x-25),y:snapV(y-25)};}
 
-    if(edTool==='delete'){const hit=edHitTest(sx,sy);if(hit){if(hit.type==='platform')edPlatforms.splice(hit.index,1);if(hit.type==='jumppad')edJumpPads.splice(hit.index,1);edSelected=null;}}
+    if(edTool==='finish'){const{x,y}=edSW(sx,sy); edFinish={x:snapV(x),y:snapV(y)}; edSelected=null;}
+
+    if(edTool==='delete'){const hit=edHitTest(sx,sy);if(hit){if(hit.type==='platform')edPlatforms.splice(hit.index,1);if(hit.type==='jumppad')edJumpPads.splice(hit.index,1);if(hit.type==='finish')edFinish=null;edSelected=null;}}
 });
 
 canvas.addEventListener('mousemove', e=>{
@@ -522,7 +624,7 @@ canvas.addEventListener('mousemove', e=>{
     if(edDragging&&edSelected){
         const obj=edGetSel(); if(!obj)return;
         const{x:cwx,y:cwy}=edSW(sx,sy);
-        const dx=cwx-edDragStart.wx, dy=cwy-edDragStart.wy;
+        const dx=cwx-edDragStart.x, dy=cwy-edDragStart.y;
         if(edDragHandle==='move'){obj.x=snapV(edDragOriginal.x+dx);obj.y=snapV(edDragOriginal.y+dy);}
         else if(edSelected.type==='platform'){
             const o=edDragOriginal;let nx=o.x,ny=o.y,nw=o.width,nh=o.height;
@@ -581,6 +683,7 @@ function openEditor(levelData=null){
         edPlatforms=(levelData.platforms||[]).map(p=>({...p}));
         edJumpPads =(levelData.jumpPads ||[]).map(j=>({...j}));
         edSpawn    =levelData.startPos?{...levelData.startPos}:{x:250,y:4500};
+        edFinish   =levelData.finish?{...levelData.finish}:null;
         document.getElementById('edLevelName').value =levelData.name||'';
         document.getElementById('edLevelOrder').value=levelData.order||1;
         document.getElementById('edDeleteBtn').style.display='inline-block';
@@ -614,6 +717,7 @@ function enterPlayTest(){
     jumpPads =(edJumpPads ).map(j=>new JumpPad(j.x,j.y,j.strength));
     startPos ={...edSpawn};
     player   =new Player(edSpawn.x,edSpawn.y);
+    finish   =edFinish?{...edFinish}:null; levelCompleted=false;
     platformParticles=[]; boostParticles=[]; jumpParticles=[];
     classifiersInUse={platform:[],boost:[],jump:[]};
     grounded=false; wasGrounded=[false,false,false,false]; gravity=0.5; speed=5;
@@ -642,7 +746,7 @@ document.getElementById('edQuitBtn').addEventListener('click',closeEditor);
 
 // ── Level management ───────────────────────────────────
 function edClearState(){
-    edPlatforms=[]; edJumpPads=[]; edSpawn={x:250,y:4500};
+    edPlatforms=[]; edJumpPads=[]; edSpawn={x:250,y:4500}; edFinish=null;
     edSelected=null; edCurrentId=null; edGhostRect=null;
     document.getElementById('edLevelName').value='';
     document.getElementById('edLevelOrder').value=(allLevels.length+1)||1;
@@ -670,6 +774,7 @@ document.getElementById('edLevelSelect').addEventListener('change',async e=>{
     edPlatforms=(lvl.platforms||[]).map(p=>({...p}));
     edJumpPads =(lvl.jumpPads ||[]).map(j=>({...j}));
     edSpawn    =lvl.startPos?{...lvl.startPos}:{x:250,y:4500};
+    edFinish   =lvl.finish?{...lvl.finish}:null;
     document.getElementById('edLevelName').value =lvl.name||'';
     document.getElementById('edLevelOrder').value=lvl.order||1;
     document.getElementById('edDeleteBtn').style.display='inline-block';
@@ -683,7 +788,7 @@ document.getElementById('edSaveBtn').addEventListener('click',async()=>{
     const name =document.getElementById('edLevelName').value.trim()||'Untitled';
     const order=parseInt(document.getElementById('edLevelOrder').value)||1;
     if(edPlatforms.length===0)return setEdStatus('Add at least one platform.');
-    const body={name,order,startPos:edSpawn,platforms:edPlatforms,jumpPads:edJumpPads};
+    const body={name,order,startPos:edSpawn,platforms:edPlatforms,jumpPads:edJumpPads,finish:edFinish};
     const isNew=!edCurrentId;
     try{
         const r=await fetch(isNew?'/api/ollie/levels':`/api/ollie/levels/${edCurrentId}`,{method:isNew?'POST':'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${authToken}`},body:JSON.stringify(body)});
