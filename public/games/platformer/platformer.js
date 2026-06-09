@@ -79,7 +79,7 @@ function checkAdmin(){
     if(!authToken) return;
     try {
         const payload = JSON.parse(atob(authToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
-        if(payload.username === 'Mr.Rose'){
+        if(payload.admin === true){
             isAdmin = true;
             document.getElementById('editorBtn').classList.remove('hidden');
         }

@@ -45,6 +45,16 @@ MongoClient.connect(process.env.MONGODB_URI)
             { $set: { created_at: migrationDate.toISOString() } }
         );
 
+        // Migration: add admin field — true only for Mr.Rose, false for everyone else
+        await db.collection('users').updateOne(
+            { username: 'Mr.Rose' },
+            { $set: { admin: true } }
+        );
+        await db.collection('users').updateMany(
+            { admin: { $exists: false } },
+            { $set: { admin: false } }
+        );
+
         // Daily cleanup & warning job
         setInterval(async () => {
             const now = Date.now();
@@ -677,7 +687,7 @@ app.post('/api/register', async (req, res) => {
             return res.status(500).json({ error: 'Failed to create account. Try again.' });
         }
         const token = jwt.sign(
-            { id: inserted._id.toString(), username },
+            { id: inserted._id.toString(), username, admin: false },
             process.env.JWT_SECRET,
             { expiresIn: '10d' }
         );
@@ -794,7 +804,7 @@ app.post('/api/login', async (req, res) => {
         });
 
     await dbUpdate({ _id: user._id }, { $set: { last_active: new Date() } });
-    const token = jwt.sign({ id: user._id.toString(), username: user.username }, process.env.JWT_SECRET, { expiresIn: '10d' });
+    const token = jwt.sign({ id: user._id.toString(), username: user.username, admin: user.admin === true }, process.env.JWT_SECRET, { expiresIn: '10d' });
     res.json({ token, username: user.username, noEmailWarning: !user.email });
 });
 
@@ -1041,12 +1051,12 @@ app.post('/api/stats/labyrinth', requireAuth, async (req, res) => {
 // ── Ollie ──────────────────────────────────────────────
 
 function requireAdmin(req, res, next) {
-    if (req.user?.username !== 'Mr.Rose') return res.status(403).json({ error: 'Forbidden.' });
+    if (!req.user?.admin) return res.status(403).json({ error: 'Forbidden.' });
     next();
 }
 
 app.get('/api/ollie/admin-check', requireAuth, (req, res) => {
-    res.json({ isAdmin: req.user.username === 'Mr.Rose' });
+    res.json({ isAdmin: req.user.admin === true });
 });
 
 app.get('/api/ollie/levels', async (req, res) => {

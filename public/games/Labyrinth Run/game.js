@@ -1870,14 +1870,12 @@ function showControls() {
 let isDemoUser = false;
 const tombRobberCard = document.querySelector('.modeCard[data-mode="tomb-robber"]');
 
-async function checkTombRobberAccess() {
+function checkTombRobberAccess() {
     const token = getToken();
     if (!token) return;
     try {
-        const res = await fetch('/api/me', { headers: { 'Authorization': `Bearer ${token}` } });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.email === 'micahgrose@gmail.com') {
+        const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (payload.admin === true) {
             isDemoUser = true;
             tombRobberCard.classList.remove('modeCardLocked');
             const soon = tombRobberCard.querySelector('.modeCardSoon');
