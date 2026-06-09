@@ -596,7 +596,7 @@ function buildLevelGrid(){
         const done=completedOrders.includes(lvl.order), unlocked=lvl.order<=maxUnlocked;
         if(done)      btn.classList.add('completed');
         if(!unlocked) btn.classList.add('locked');
-        btn.innerHTML=unlocked?`<span class="level-num">${lvl.order}</span>${lvl.name||''}`:`<span style="font-size:1.1rem;">🔒</span>`;
+        btn.innerHTML=unlocked?`<span class="level-num">${lvl.order}</span>${lvl.name?`<span class="level-name">${lvl.name}</span>`:''}`:`<span style="font-size:1.1rem;">🔒</span>`;
         if(unlocked){ btn.addEventListener('click',()=>{ levelSelect.classList.add('hidden'); cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false; startLevel(lvl); }); }
         grid.appendChild(btn);
     }
