@@ -165,7 +165,7 @@ document.addEventListener("keydown", e => {
     // Escape
     if(e.key==='Escape'){
         if(editorOpen && edMode==='playtest'){ exitPlayTest(); return; }
-        if(gameStarted && !editorOpen){ cancelAnimationFrame(animFrameId); animFrameId=null; document.getElementById('gameHUD').classList.add('hidden'); menu.classList.remove('hidden'); }
+        if(gameStarted && !editorOpen){ cancelAnimationFrame(animFrameId); animFrameId=null; document.getElementById('gameHUD').classList.add('hidden'); document.getElementById('levelNameDisplay').classList.add('hidden'); menu.classList.remove('hidden'); }
     }
 
     // Editor tool hotkeys
@@ -497,7 +497,7 @@ function checkFinish(){
         spawnFinishParticles();
         setTimeout(()=>{
             cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false;
-            document.getElementById('gameHUD').classList.add('hidden');
+            document.getElementById('gameHUD').classList.add('hidden'); document.getElementById('levelNameDisplay').classList.add('hidden');
             const nextLvl=allLevels.find(l=>l.order===currentLevelOrder+1);
             if(nextLvl){ startLevel(nextLvl); }
             else{ menu.classList.remove('hidden'); }
@@ -575,6 +575,9 @@ function startLevel(levelData){
     finish=levelData.finish?{...levelData.finish}:null; levelCompleted=false;
     if(backgroundRects.length===0) createBackground();
     document.getElementById('gameHUD').classList.remove('hidden');
+    const lnd=document.getElementById('levelNameDisplay');
+    lnd.textContent=levelData.name||`Level ${levelData.order}`;
+    lnd.classList.remove('hidden');
     gameStarted=true;
     snapCamera();
     gameLoop();
@@ -593,7 +596,7 @@ function buildLevelGrid(){
         const done=completedOrders.includes(lvl.order), unlocked=lvl.order<=maxUnlocked;
         if(done)      btn.classList.add('completed');
         if(!unlocked) btn.classList.add('locked');
-        btn.innerHTML=`<span class="level-num">${lvl.order}</span>${lvl.name||''}${done?'<span class="level-check">✓</span>':''}`;
+        btn.innerHTML=unlocked?`<span class="level-num">${lvl.order}</span>${lvl.name||''}`:`<span style="font-size:1.1rem;">🔒</span>`;
         if(unlocked){ btn.addEventListener('click',()=>{ levelSelect.classList.add('hidden'); cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false; startLevel(lvl); }); }
         grid.appendChild(btn);
     }
@@ -612,7 +615,7 @@ document.getElementById('quitBtn').addEventListener('click',()=>{ window.locatio
 document.getElementById('pauseBtn').addEventListener('click',()=>{
     if(!gameStarted||editorOpen)return;
     cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false;
-    document.getElementById('gameHUD').classList.add('hidden');
+    document.getElementById('gameHUD').classList.add('hidden'); document.getElementById('levelNameDisplay').classList.add('hidden');
     menu.classList.remove('hidden');
 });
 document.getElementById('restartBtn').addEventListener('click',()=>{

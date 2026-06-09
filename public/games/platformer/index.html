@@ -20,50 +20,50 @@
 
             /* ── Main menu ── */
             #menuBox {
-                text-align: center; color: #f0f0f0;
+                text-align: center; color: #dff0ff;
                 display: flex; flex-direction: column; align-items: center;
                 gap: 16px; min-width: 280px;
             }
-            #menuBox h1 { font-size: 4.5rem; font-weight: 800; letter-spacing: 6px; }
-            #menuBox .subtitle { font-size: 0.8rem; color: #555; letter-spacing: 3px; text-transform: uppercase; margin-top: -10px; }
+            #menuBox h1 { font-size: 4.5rem; font-weight: 800; letter-spacing: 6px; color: #c8e8ff; }
+            #menuBox .subtitle { font-size: 0.8rem; color: #3a6a8a; letter-spacing: 3px; text-transform: uppercase; margin-top: -10px; }
 
             .menu-btn {
-                width: 100%; padding: 12px; border: none; border-radius: 8px;
+                width: 100%; padding: 12px; border: none; border-radius: 4px;
                 font-size: 0.95rem; font-weight: 600; letter-spacing: 1px;
                 cursor: pointer; transition: opacity 0.15s, transform 0.1s;
             }
             .menu-btn:hover  { opacity: 0.85; transform: translateY(-1px); }
             .menu-btn:active { transform: translateY(0); }
-            #playBtn     { background: #e0e0e0; color: #111; margin-top: 8px; }
+            #playBtn     { background: #1a6ea8; color: #d0eeff; border: 1px solid #2a8fd4; margin-top: 8px; }
             #editorBtn   { background: #2a1a0a; color: #e09030; border: 1px solid #a06010; }
-            #controlsBtn { background: transparent; color: #888; border: 1px solid #333; }
-            #quitBtn     { background: transparent; color: #555; border: 1px solid #222; font-size: 0.8rem; }
+            #controlsBtn { background: transparent; color: #4a80a8; border: 1px solid #1a3a55; }
+            #quitBtn     { background: transparent; color: #2a4a60; border: 1px solid #1a2a35; font-size: 0.8rem; }
 
             /* ── Level select ── */
             #levelSelectBox {
-                color: #f0f0f0; display: flex; flex-direction: column;
-                align-items: center; gap: 20px; width: 90vw; max-width: 640px;
+                color: #dff0ff; display: flex; flex-direction: column;
+                align-items: center; gap: 16px; width: 90vw; max-width: 560px;
             }
-            #levelSelectBox h2 { font-size: 1.6rem; font-weight: 800; letter-spacing: 4px; }
+            #levelSelectBox h2 { font-size: 1.4rem; font-weight: 800; letter-spacing: 4px; color: #c8e8ff; }
             #levelGrid {
-                display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-                gap: 12px; width: 100%; max-height: 50vh; overflow-y: auto; padding: 4px;
+                display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+                gap: 8px; width: 100%; max-height: 50vh; overflow-y: auto; padding: 2px;
             }
             .level-btn {
-                padding: 16px 8px; border-radius: 10px; border: 2px solid #333;
-                background: #1a1a1a; color: #f0f0f0; font-size: 0.9rem; font-weight: 700;
+                padding: 10px 4px; border-radius: 3px; border: 1px solid #1a3a55;
+                background: #0d2233; color: #a0c8e8; font-size: 0.8rem; font-weight: 700;
                 cursor: pointer; transition: border-color 0.15s, transform 0.1s; text-align: center;
             }
-            .level-btn:hover:not(.locked) { border-color: #e0e0e0; transform: translateY(-2px); }
+            .level-btn:hover:not(.locked) { border-color: #2a8fd4; transform: translateY(-1px); }
             .level-btn.completed { border-color: #4caf50; color: #4caf50; }
             .level-btn.locked    { opacity: 0.3; cursor: default; }
-            .level-btn .level-num   { font-size: 1.4rem; display: block; margin-bottom: 4px; }
-            .level-btn .level-check { font-size: 0.75rem; color: #4caf50; }
+            .level-btn .level-num   { font-size: 1.1rem; display: block; margin-bottom: 2px; }
+            .level-btn .level-check { font-size: 0.7rem; color: #4caf50; }
             #backFromSelect {
-                background: transparent; border: 1px solid #333; color: #666;
-                padding: 8px 24px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+                background: transparent; border: 1px solid #1a3a55; color: #3a6a8a;
+                padding: 6px 20px; border-radius: 3px; cursor: pointer; font-size: 0.85rem;
             }
-            #backFromSelect:hover { color: #aaa; }
+            #backFromSelect:hover { color: #7ab8d8; }
 
             /* ── Game HUD ── */
             #gameHUD {
@@ -71,16 +71,25 @@
                 display: flex; gap: 6px; z-index: 10;
             }
             #gameHUD button {
-                width: 34px; height: 34px;
-                border-radius: 6px;
-                border: 1px solid rgba(255,255,255,0.12);
-                background: rgba(0,0,0,0.5); color: #ccc;
-                font-size: 1rem; cursor: pointer;
-                backdrop-filter: blur(6px);
+                width: 44px; height: 44px;
+                border-radius: 0;
+                border: 1px solid #2a8fd4;
+                background: #1a6ea8; color: #d0eeff;
+                font-size: 1.1rem; cursor: pointer;
                 display: flex; align-items: center; justify-content: center;
-                transition: background 0.1s, color 0.1s;
+                transition: background 0.1s;
             }
-            #gameHUD button:hover { background: rgba(0,0,0,0.8); color: #fff; }
+            #gameHUD button:hover { background: #2280c0; }
+            #levelNameDisplay {
+                position: fixed; top: 12px; right: 12px;
+                height: 44px; padding: 0 14px;
+                background: #1a6ea8; border: 1px solid #2a8fd4;
+                color: #d0eeff; font-size: 0.85rem; font-weight: 700;
+                letter-spacing: 1px; text-transform: uppercase;
+                display: flex; align-items: center;
+                z-index: 10;
+            }
+            #levelNameDisplay.hidden { display: none; }
 
             /* ── Controls popup ── */
             #controlsBox {
@@ -244,6 +253,7 @@
             <button id="pauseBtn" title="Pause">⏸</button>
             <button id="restartBtn" title="Restart">↺</button>
         </div>
+        <div id="levelNameDisplay" class="hidden"></div>
 
         <canvas id="gameCanvas"></canvas>
         <script src="platformer.js"></script>
