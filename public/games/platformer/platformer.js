@@ -220,6 +220,7 @@ function snapCamera(){
     camera.x=cx-w/2; camera.y=Math.max(0,Math.min(world.height-h,cy-h/2));
 }
 function moveCamera(){
+    if(deathCooldown>0) return;
     const cx=player.x+player.width/2, cy=player.y+player.height/2;
     const tx=cx-camera.width/2, ty=Math.max(0,Math.min(world.height-camera.height,cy-camera.height/2));
     camera.x+=(tx-camera.x)*cameraSpeed; camera.y+=(ty-camera.y)*cameraSpeed;
@@ -457,7 +458,7 @@ function killPlayer(){
     spawnDeathParticles();
     player.x=startPos.x; player.y=startPos.y;
     player.velocity={x:0,y:0}; gravity=0.5;
-    deathCooldown=15;
+    deathCooldown=27;
 }
 function spawnDeathParticles(){
     const cx=player.x+player.width/2, cy=player.y+player.height/2;
