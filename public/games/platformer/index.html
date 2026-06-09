@@ -68,14 +68,16 @@
             /* ── Game HUD ── */
             #gameHUD {
                 position: fixed; top: 12px; left: 12px;
-                display: flex; gap: 8px; z-index: 10;
+                display: flex; gap: 6px; z-index: 10;
             }
             #gameHUD button {
-                padding: 6px 14px; border-radius: 6px;
-                border: 1px solid rgba(255,255,255,0.15);
-                background: rgba(0,0,0,0.55); color: #ccc;
-                font-size: 0.8rem; font-weight: 600; cursor: pointer;
-                backdrop-filter: blur(6px); letter-spacing: 0.5px;
+                width: 34px; height: 34px;
+                border-radius: 6px;
+                border: 1px solid rgba(255,255,255,0.12);
+                background: rgba(0,0,0,0.5); color: #ccc;
+                font-size: 1rem; cursor: pointer;
+                backdrop-filter: blur(6px);
+                display: flex; align-items: center; justify-content: center;
                 transition: background 0.1s, color 0.1s;
             }
             #gameHUD button:hover { background: rgba(0,0,0,0.8); color: #fff; }
@@ -239,8 +241,8 @@
 
         <!-- Game HUD -->
         <div id="gameHUD" class="hidden">
-            <button id="pauseBtn">⏸ Pause</button>
-            <button id="restartBtn">↺ Restart</button>
+            <button id="pauseBtn" title="Pause">⏸</button>
+            <button id="restartBtn" title="Restart">↺</button>
         </div>
 
         <canvas id="gameCanvas"></canvas>

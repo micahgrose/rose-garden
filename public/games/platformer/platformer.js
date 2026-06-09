@@ -81,7 +81,7 @@ class SwitchParticle {
 // ── Game state ─────────────────────────────────────────
 let startPos  = null, player = null, platforms = [], jumpPads = [];
 let spikes = [], sawblades = [], movingPlatforms = [], onOffBlocks = [], onOffSwitches = [], orbitSaws = [];
-let onOffState = false, deathCooldown = 0;
+let onOffState = false, deathCooldown = 0, deathFlash = 0;
 let finish = null, levelCompleted = false;
 let currentLevelOrder = null;
 
@@ -133,6 +133,7 @@ function gameLoop(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     movePlayer(); moveCamera();
     if(deathCooldown>0) deathCooldown--;
+    if(deathFlash>0){ deathFlash--; if(deathFlash===0){ player.x=startPos.x; player.y=startPos.y; } }
     updateMovingPlatforms(); updateSaws(); updateOrbitSaws();
     wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
     checkJumpPad(); checkCollision(); updateStretch(); updateEyePos();
@@ -195,7 +196,7 @@ function movePlayer(){
         GORIGHT: if(keys.includes("ArrowRight")||keys.includes("d")){ player.pupilPadding.x=5; player.eyePaddingR.x=15; player.eyePaddingL.x=35; if(clampRight)break GORIGHT; player.velocity.x+=speed; }
         GOLEFT:  if(keys.includes("ArrowLeft") ||keys.includes("a")){ player.pupilPadding.x=0; player.eyePaddingR.x=5;  player.eyePaddingL.x=25; if(clampLeft) break GOLEFT;  player.velocity.x-=speed; }
         if((keys.includes("ArrowUp")||keys.includes("w"))&&(grounded||wasGrounded.includes(true))){ player.velocity.y=-jumpStrength; jumped=true; }
-        else if(!keys.includes("ArrowUp")&&!keys.includes("w")&&!grounded&&player.velocity.y<0&&jumped){ player.velocity.y*=0.9; }
+        else if(!keys.includes("ArrowUp")&&!keys.includes("w")&&!grounded&&player.velocity.y<0&&jumped){ player.velocity.y*=0.72; }
         if(keys.includes(" ")&&(keys.includes("ArrowRight")||keys.includes("d")||keys.includes("ArrowLeft")||keys.includes("a"))&&!boosting&&boostReady){
             if(clampRight&&(keys.includes("ArrowRight")||keys.includes("d")))return;
             if(clampLeft &&(keys.includes("ArrowLeft") ||keys.includes("a")))return;
@@ -262,6 +263,7 @@ function drawBackground(){
 }
 
 function drawPlayer(){
+    if(deathFlash>0) ctx.globalAlpha=Math.floor(deathFlash/4)%2===0?0.15:0.75;
     ctx.fillStyle="blue"; ctx.strokeStyle="rgb(50,50,200)"; ctx.lineWidth=1;
     ctx.fillRect(player.x-camera.x,player.y-camera.y,player.width,player.height);
     ctx.strokeRect(player.x-camera.x,player.y-camera.y,player.width,player.height);
@@ -271,6 +273,7 @@ function drawPlayer(){
     ctx.fillStyle="black";
     ctx.fillRect(player.x+player.eyePaddingR.x+player.pupilPadding.x-camera.x,player.y+player.eyePaddingR.y+player.pupilPadding.y-camera.y,player.pupilSize.width,player.pupilSize.height);
     ctx.fillRect(player.x+player.eyePaddingL.x+player.pupilPadding.x-camera.x,player.y+player.eyePaddingL.y+player.pupilPadding.y-camera.y,player.pupilSize.width,player.pupilSize.height);
+    ctx.globalAlpha=1;
 }
 
 function updateStretch(){
@@ -365,7 +368,7 @@ function drawSpikes(){
     ctx.fillStyle='#777'; ctx.strokeStyle='#444'; ctx.lineWidth=1;
     for(const sp of spikes){
         const n=Math.max(1,Math.round(sp.width/25));
-        const tw=sp.width/n, th=sp.th||25;
+        const tw=sp.width/n, th=sp.height||25;
         for(let i=0;i<n;i++){
             const bx=sp.x+i*tw-camera.x, by=sp.y-camera.y;
             ctx.beginPath();
@@ -380,7 +383,7 @@ function drawSpikes(){
 function checkSpikes(){
     if(deathCooldown>0)return;
     for(const sp of spikes){
-        const th=sp.th||25;
+        const th=sp.height||25;
         let hx=sp.x,hy=sp.y-th,hw=sp.width,hh=th;
         if(sp.dir==='right'||sp.dir==='left'){hw=th;hh=sp.width;hy=sp.y;}
         if(player.x+player.width>hx&&player.x<hx+hw&&player.y+player.height>hy&&player.y<hy+hh) killPlayer();
@@ -446,10 +449,9 @@ function checkOrbitSaws(){
 // ── Death ──────────────────────────────────────────────
 function killPlayer(){
     if(deathCooldown>0)return;
-    deathCooldown=30;
-    spawnDeathParticles();
-    player.x=startPos.x; player.y=startPos.y;
+    deathCooldown=55; deathFlash=35;
     player.velocity={x:0,y:0}; gravity=0.5;
+    spawnDeathParticles();
 }
 function spawnDeathParticles(){
     const cx=player.x+player.width/2, cy=player.y+player.height/2;
@@ -559,7 +561,7 @@ function startLevel(levelData){
     onOffBlocks    =(levelData.onOffBlocks    ||[]).map(b=>({...b}));
     onOffSwitches  =(levelData.onOffSwitches  ||[]).map(s=>({...s,_triggered:false}));
     orbitSaws      =(levelData.orbitSaws      ||[]).map(s=>({...s,_angle:Math.random()*Math.PI*2}));
-    onOffState=false; deathCooldown=0;
+    onOffState=false; deathCooldown=0; deathFlash=0;
     platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[]; deathParticles=[]; switchParticles=[];
     classifiersInUse={platform:[],boost:[],jump:[]};
     grounded=false; wasGrounded=[false,false,false,false];
@@ -780,14 +782,13 @@ function editorDrawFrame(){
     for(let i=0;i<edSpikes.length;i++){
         const sp=edSpikes[i], sel=edSelected?.type==='spike'&&edSelected.index===i;
         ctx.fillStyle=sel?'#aaa':'#777'; ctx.strokeStyle=sel?'#fff':'#444';
-        const n=Math.max(1,Math.round(sp.width/25)), tw=sp.width/n, th=sp.th||25;
+        const n=Math.max(1,Math.round(sp.width/25)), tw=sp.width/n, th=sp.height||25;
         for(let j=0;j<n;j++){
             const bx=sp.x+j*tw, by=sp.y;
             ctx.beginPath();
             if(sp.dir==='up'||!sp.dir){ctx.moveTo(bx,by);ctx.lineTo(bx+tw/2,sp.y-th);ctx.lineTo(bx+tw,by);}
             ctx.closePath(); ctx.fill(); ctx.stroke();
         }
-        if(sel){ ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font=`${10/edZoom}px monospace`; ctx.fillText(`${sp.th===50?'2':'1'}h`,sp.x+2/edZoom,sp.y-th-4/edZoom); }
     }
 
     // Sawblades (editor — animated)
@@ -914,6 +915,9 @@ function editorDrawFrame(){
             if(edSelected.type==='finish'){
                 ctx.strokeStyle='rgba(192,57,75,0.85)'; ctx.lineWidth=2/edZoom;
                 ctx.strokeRect(obj.x-8,obj.y-8,63,90);
+            } else if(edSelected.type==='spike'){
+                const h=obj.height||25;
+                edDrawHandles(obj.x, obj.y-h, obj.width, h);
             } else {
                 const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height;
                 edDrawHandles(obj.x,obj.y,ww,wh);
@@ -948,7 +952,7 @@ function edHitTest(sx,sy){
         const dx=wx-(mp.tx+mp.width/2), dy=wy-(mp.ty+mp.height/2);
         if(Math.abs(dx)<14/edZoom&&Math.abs(dy)<14/edZoom)return{type:'mplatform_end',index:i};
     }
-    for(let i=edSpikes.length-1;i>=0;i--){const sp=edSpikes[i];const th=sp.th||25;if(wx>=sp.x&&wx<=sp.x+sp.width&&wy>=sp.y-th&&wy<=sp.y)return{type:'spike',index:i};}
+    for(let i=edSpikes.length-1;i>=0;i--){const sp=edSpikes[i];const th=sp.height||25;if(wx>=sp.x&&wx<=sp.x+sp.width&&wy>=sp.y-th&&wy<=sp.y)return{type:'spike',index:i};}
     for(let i=edSawblades.length-1;i>=0;i--){const s=edSawblades[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=(s.radius||25))return{type:'saw',index:i};}
     for(let i=edOrbitSaws.length-1;i>=0;i--){const s=edOrbitSaws[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=14/edZoom)return{type:'orbitsaw',index:i};}
     for(let i=edMovingPlatforms.length-1;i>=0;i--){const mp=edMovingPlatforms[i];if(wx>=mp.x&&wx<=mp.x+mp.width&&wy>=mp.y&&wy<=mp.y+mp.height)return{type:'mplatform',index:i};}
@@ -996,8 +1000,15 @@ canvas.addEventListener('mousedown', e=>{
     if(e.button!==0)return;
 
     if(edTool==='select'){
-        const noHandleTypes=new Set(['finish','spike','saw','switch','mplatform_end']);
-        if(edSelected&&!noHandleTypes.has(edSelected.type)){ const obj=edGetSel(); if(obj){ const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height; const h=edGetHandleName(sx,sy,obj.x,obj.y,ww,wh); if(h){edDragging=true;edDragHandle=h;const{x,y}=edSW(sx,sy);edDragStart={x,y};edDragOriginal={x:obj.x,y:obj.y,width:ww,height:wh};return;} } }
+        const noHandleTypes=new Set(['finish','saw','switch','mplatform_end']);
+        if(edSelected&&!noHandleTypes.has(edSelected.type)){ const obj=edGetSel(); if(obj){
+            let ww,wh,wy;
+            if(edSelected.type==='jumppad'){ww=50;wh=10;wy=obj.y;}
+            else if(edSelected.type==='spike'){ww=obj.width;wh=obj.height||25;wy=obj.y-wh;}
+            else{ww=obj.width;wh=obj.height;wy=obj.y;}
+            const h=edGetHandleName(sx,sy,obj.x,wy,ww,wh);
+            if(h){edDragging=true;edDragHandle=h;const{x,y}=edSW(sx,sy);edDragStart={x,y};edDragOriginal={x:obj.x,y:wy,width:ww,height:wh};return;}
+        } }
         const hit=edHitTest(sx,sy); edSelected=hit;
         if(hit){
             edDragging=true; edDragHandle=hit.type==='mplatform_end'?'endpoint':'move';
@@ -1076,7 +1087,15 @@ canvas.addEventListener('mousemove', e=>{
         const dx=cwx-edDragStart.x, dy=cwy-edDragStart.y;
         if(edDragHandle==='endpoint'){obj.tx=snapV(edDragOriginal.tx+dx);obj.ty=snapV(edDragOriginal.ty+dy);}
         else if(edDragHandle==='move'){obj.x=snapV(edDragOriginal.x+dx);obj.y=snapV(edDragOriginal.y+dy);if(edSelected.type==='mplatform'){obj.tx=snapV((edDragOriginal.tx!==undefined?edDragOriginal.tx:obj.tx)+dx);obj.ty=snapV((edDragOriginal.ty!==undefined?edDragOriginal.ty:obj.ty)+dy);}}
-        else if(edSelected.type==='platform'||edSelected.type==='mplatform'||edSelected.type==='onoff'||edSelected.type==='spike'){
+        else if(edSelected.type==='spike'){
+            const o=edDragOriginal;let nx=o.x,ny=o.y,nw=o.width,nh=o.height;
+            if(edDragHandle.includes('e')){nw=Math.max(SNAP,snapV(o.width+dx));}
+            if(edDragHandle.includes('s')){nh=Math.max(SNAP,snapV(o.height+dy));}
+            if(edDragHandle.includes('w')){const d=snapV(dx);nx=o.x+d;nw=Math.max(SNAP,o.width-d);}
+            if(edDragHandle.includes('n')){const d=snapV(dy);ny=o.y+d;nh=Math.max(SNAP,o.height-d);}
+            obj.x=nx; obj.width=nw; obj.height=nh; obj.y=snapV(ny+nh);
+        }
+        else if(edSelected.type==='platform'||edSelected.type==='mplatform'||edSelected.type==='onoff'){
             const o=edDragOriginal;let nx=o.x,ny=o.y,nw=o.width,nh=o.height;
             if(edDragHandle.includes('e')){nw=Math.max(SNAP,snapV(o.width+dx));}
             if(edDragHandle.includes('s')){nh=Math.max(SNAP,snapV(o.height+dy));}
@@ -1096,7 +1115,7 @@ canvas.addEventListener('mouseup', e=>{
             edPlatforms.push({...edGhostRect}); edSelected={type:'platform',index:edPlatforms.length-1};
         }
         if(edTool==='spike'&&edGhostRect.width>=SNAP){
-            edSpikes.push({x:edGhostRect.x,y:edGhostRect.y,width:edGhostRect.width,dir:'up',th:25}); edSelected={type:'spike',index:edSpikes.length-1};
+            edSpikes.push({x:edGhostRect.x,y:edGhostRect.y,width:edGhostRect.width,dir:'up',height:25}); edSelected={type:'spike',index:edSpikes.length-1};
         }
         if(edTool==='mplatform'&&edGhostRect.width>=SNAP&&edGhostRect.height>=SNAP){
             const mp={x:edGhostRect.x,y:edGhostRect.y,width:edGhostRect.width,height:edGhostRect.height,tx:edGhostRect.x+200,ty:edGhostRect.y,speed:1};
@@ -1136,10 +1155,6 @@ canvas.addEventListener('dblclick',e=>{
         const mp=edMovingPlatforms[edSelected.index];
         const v=prompt('Move speed (default 1):',mp.speed||1);
         if(v!==null&&!isNaN(+v))mp.speed=Math.max(0.1,+v);
-    }
-    if(edSelected.type==='spike'){
-        const sp=edSpikes[edSelected.index];
-        sp.th = (sp.th||25)===25 ? 50 : 25;
     }
     if(edSelected.type==='onoff'){
         const b=edOnOffBlocks[edSelected.index];
@@ -1239,7 +1254,7 @@ function enterPlayTest(){
     onOffBlocks    =edOnOffBlocks.map(b=>({...b}));
     onOffSwitches  =edOnOffSwitches.map(s=>({...s,_triggered:false}));
     orbitSaws      =edOrbitSaws.map(s=>({...s,_angle:Math.random()*Math.PI*2}));
-    onOffState=false; deathCooldown=0;
+    onOffState=false; deathCooldown=0; deathFlash=0;
     startPos ={...edSpawn};
     player   =new Player(edSpawn.x,edSpawn.y);
     finish   =edFinish?{...edFinish}:null; levelCompleted=false;
