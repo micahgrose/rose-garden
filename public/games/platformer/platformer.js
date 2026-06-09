@@ -41,6 +41,18 @@ class BoostParticle {
 class JumpParticle {
     constructor(c){ this.x=player.x+Math.random()*player.width; this.y=player.y+player.height; this.size=Math.random()*5+5; this.velocity={x:Math.random()*3,y:(Math.random()*-7.5)-12.5}; this.gravity=0.5; this.direction=(this.x>player.x+player.width/2)?1:-1; this.classifier=c; this.lifeSpan=Math.random()*900+500; this.dead=false; }
 }
+class FinishParticle {
+    constructor(x,y){
+        this.x=x; this.y=y;
+        const a=Math.random()*Math.PI*2, spd=Math.random()*9+3;
+        this.vx=Math.cos(a)*spd; this.vy=Math.sin(a)*spd-5;
+        this.gravity=0.3; this.size=Math.random()*9+3;
+        this.life=1; this.decay=Math.random()*0.018+0.012;
+        this.rotation=Math.random()*Math.PI*2; this.rotSpeed=(Math.random()-0.5)*0.18;
+        const cols=['#c0394b','#e05070','#ffffff','#f0a0b0','#ff6080','#ffd0d8','#ff3355'];
+        this.color=cols[Math.floor(Math.random()*cols.length)];
+    }
+}
 
 // ── Game state ─────────────────────────────────────────
 let startPos  = null, player = null, platforms = [], jumpPads = [];
@@ -60,7 +72,7 @@ const world   = {width:5000, height:5000};
 const camera  = {x:0, y:0, width:canvas.width, height:canvas.height};
 const cameraSpeed = 0.075;
 
-let platformParticles=[], boostParticles=[], jumpParticles=[];
+let platformParticles=[], boostParticles=[], jumpParticles=[], finishParticles=[];
 const platformParticleCount=50, boostParticleCount=50, jumpParticleCount=20;
 let boosting=false, boostReady=true, doBoostParticle=false;
 const boostResetTime=500;
@@ -93,13 +105,13 @@ let animFrameId=null, gameStarted=false;
 function gameLoop(){
     camera.width=canvas.width; camera.height=canvas.height;
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    movePlayer(); moveCamera();
+    if(!levelCompleted) movePlayer(); moveCamera();
     wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
     checkJumpPad(); checkCollision(); updateStretch(); updateEyePos();
     if(grounded){resetGravity(); jumped=false;}
     if(ceiling){player.velocity.y=0;}
     drawBackground(); handleParticles(); drawPlayer(); drawPlatforms(); drawJumpPads();
-    drawFinish(); checkFinish();
+    drawFinish(); checkFinish(); drawFinishParticles();
     animFrameId=requestAnimationFrame(gameLoop);
 }
 
@@ -241,14 +253,10 @@ function drawFinish(){
     if(!finish)return;
     const px=finish.x-camera.x, py=finish.y-camera.y;
     const poleH=65, flagW=45, flagH=28;
-    // Glow
-    const grd=ctx.createRadialGradient(px,py+poleH,0,px,py+poleH,35);
-    grd.addColorStop(0,'rgba(192,57,75,0.4)'); grd.addColorStop(1,'rgba(192,57,75,0)');
-    ctx.fillStyle=grd; ctx.fillRect(px-35,py+poleH-35,70,70);
     // Pole
     ctx.strokeStyle='#c8c8c8'; ctx.lineWidth=4;
     ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px,py+poleH); ctx.stroke();
-    // Flag (static rectangle)
+    // Flag
     ctx.fillStyle='#c0394b';
     ctx.fillRect(px,py,flagW,flagH);
     // Base circle
@@ -259,8 +267,30 @@ function drawFinish(){
 function checkFinish(){
     if(!finish||levelCompleted)return;
     if(player.x+player.width>finish.x-10&&player.x<finish.x+55&&player.y+player.height>finish.y&&player.y<finish.y+75){
-        levelCompleted=true; markLevelComplete(currentLevelOrder); showLevelComplete();
+        levelCompleted=true; markLevelComplete(currentLevelOrder);
+        spawnFinishParticles(); setTimeout(showLevelComplete, 950);
     }
+}
+
+function spawnFinishParticles(){
+    const cx=finish.x, cy=finish.y+65;
+    for(let i=0;i<70;i++) finishParticles.push(new FinishParticle(cx,cy));
+}
+
+function drawFinishParticles(){
+    finishParticles=finishParticles.filter(p=>p.life>0);
+    for(const p of finishParticles){
+        p.vy+=p.gravity; p.x+=p.vx; p.y+=p.vy;
+        p.life-=p.decay; p.rotation+=p.rotSpeed;
+        ctx.save();
+        ctx.globalAlpha=Math.max(0,p.life);
+        ctx.fillStyle=p.color;
+        ctx.translate(p.x-camera.x, p.y-camera.y);
+        ctx.rotate(p.rotation);
+        ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size);
+        ctx.restore();
+    }
+    ctx.globalAlpha=1;
 }
 
 function showLevelComplete(){
@@ -308,7 +338,7 @@ function startLevel(levelData){
     player   =new Player(levelData.startPos.x, levelData.startPos.y);
     platforms=(levelData.platforms||[]).map(p=>new Platform(p.x,p.y,p.width,p.height));
     jumpPads =(levelData.jumpPads ||[]).map(j=>new JumpPad(j.x,j.y,j.strength));
-    platformParticles=[]; boostParticles=[]; jumpParticles=[];
+    platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[];
     classifiersInUse={platform:[],boost:[],jump:[]};
     grounded=false; wasGrounded=[false,false,false,false];
     finish=levelData.finish?{...levelData.finish}:null; levelCompleted=false;
@@ -474,9 +504,6 @@ function editorDrawFrame(){
     // Finish flag
     if(edFinish){
         const fx=edFinish.x, fy=edFinish.y, poleH=65, flagW=45, flagH=28;
-        const grd=ctx.createRadialGradient(fx,fy+poleH,0,fx,fy+poleH,35);
-        grd.addColorStop(0,'rgba(192,57,75,0.4)'); grd.addColorStop(1,'rgba(192,57,75,0)');
-        ctx.fillStyle=grd; ctx.fillRect(fx-35,fy+poleH-35,70,70);
         ctx.strokeStyle='#c8c8c8'; ctx.lineWidth=4/edZoom;
         ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx,fy+poleH); ctx.stroke();
         ctx.fillStyle='#c0394b'; ctx.fillRect(fx,fy,flagW,flagH);
@@ -699,7 +726,7 @@ function enterPlayTest(){
     startPos ={...edSpawn};
     player   =new Player(edSpawn.x,edSpawn.y);
     finish   =edFinish?{...edFinish}:null; levelCompleted=false;
-    platformParticles=[]; boostParticles=[]; jumpParticles=[];
+    platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[];
     classifiersInUse={platform:[],boost:[],jump:[]};
     grounded=false; wasGrounded=[false,false,false,false]; gravity=0.5; speed=5;
 
