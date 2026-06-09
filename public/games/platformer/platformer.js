@@ -380,9 +380,11 @@ function drawSpikes(){
 function checkSpikes(){
     if(deathCooldown>0)return;
     for(const sp of spikes){
-        const th=sp.height||25;
-        let hx=sp.x,hy=sp.y-th,hw=sp.width,hh=th;
-        if(sp.dir==='right'||sp.dir==='left'){hw=th;hh=sp.width;hy=sp.y;}
+        const tw=sp.width, th=sp.height||25, dir=sp.dir||'up';
+        let hx=sp.x, hy, hw, hh;
+        if(dir==='up')        { hy=sp.y-th; hw=tw; hh=th; }
+        else if(dir==='down') { hy=sp.y;    hw=tw; hh=th; }
+        else                  { hy=sp.y;    hw=th; hh=tw; }
         if(player.x+player.width>hx&&player.x<hx+hw&&player.y+player.height>hy&&player.y<hy+hh) killPlayer();
     }
 }
@@ -910,8 +912,8 @@ function editorDrawFrame(){
                 ctx.strokeStyle='rgba(192,57,75,0.85)'; ctx.lineWidth=2/edZoom;
                 ctx.strokeRect(obj.x-8,obj.y-8,63,90);
             } else if(edSelected.type==='spike'){
-                const h=obj.height||25;
-                edDrawHandles(obj.x, obj.y-h, obj.width, h);
+                const b=spikeBBoxEd(obj);
+                edDrawHandles(b.x, b.y, b.w, b.h);
             } else {
                 const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height;
                 edDrawHandles(obj.x,obj.y,ww,wh);
@@ -923,6 +925,13 @@ function editorDrawFrame(){
 }
 
 let edCursorWorld=null;
+
+function spikeBBoxEd(sp){
+    const tw=sp.width, th=sp.height||25, dir=sp.dir||'up';
+    if(dir==='up')   return {x:sp.x, y:sp.y-th, w:tw, h:th};
+    if(dir==='down') return {x:sp.x, y:sp.y,    w:tw, h:th};
+    return                  {x:sp.x, y:sp.y,    w:th, h:tw};
+}
 
 function edDrawHandles(wx,wy,ww,wh){
     const hs=HS/edZoom, mx=wx+ww/2, my=wy+wh/2;
@@ -946,7 +955,7 @@ function edHitTest(sx,sy){
         const dx=wx-(mp.tx+mp.width/2), dy=wy-(mp.ty+mp.height/2);
         if(Math.abs(dx)<14/edZoom&&Math.abs(dy)<14/edZoom)return{type:'mplatform_end',index:i};
     }
-    for(let i=edSpikes.length-1;i>=0;i--){const sp=edSpikes[i];const th=sp.height||25;if(wx>=sp.x&&wx<=sp.x+sp.width&&wy>=sp.y-th&&wy<=sp.y)return{type:'spike',index:i};}
+    for(let i=edSpikes.length-1;i>=0;i--){const sp=edSpikes[i];const b=spikeBBoxEd(sp);if(wx>=b.x&&wx<=b.x+b.w&&wy>=b.y&&wy<=b.y+b.h)return{type:'spike',index:i};}
     for(let i=edSawblades.length-1;i>=0;i--){const s=edSawblades[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=(s.radius||25))return{type:'saw',index:i};}
     for(let i=edOrbitSaws.length-1;i>=0;i--){const s=edOrbitSaws[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=14/edZoom)return{type:'orbitsaw',index:i};}
     for(let i=edMovingPlatforms.length-1;i>=0;i--){const mp=edMovingPlatforms[i];if(wx>=mp.x&&wx<=mp.x+mp.width&&wy>=mp.y&&wy<=mp.y+mp.height)return{type:'mplatform',index:i};}
@@ -998,7 +1007,7 @@ canvas.addEventListener('mousedown', e=>{
         if(edSelected&&!noHandleTypes.has(edSelected.type)){ const obj=edGetSel(); if(obj){
             let ww,wh,wy;
             if(edSelected.type==='jumppad'){ww=50;wh=10;wy=obj.y;}
-            else if(edSelected.type==='spike'){ww=obj.width;wh=obj.height||25;wy=obj.y-wh;}
+            else if(edSelected.type==='spike'){const b=spikeBBoxEd(obj);ww=b.w;wh=b.h;wy=b.y;}
             else{ww=obj.width;wh=obj.height;wy=obj.y;}
             const h=edGetHandleName(sx,sy,obj.x,wy,ww,wh);
             if(h){edDragging=true;edDragHandle=h;const{x,y}=edSW(sx,sy);edDragStart={x,y};edDragOriginal={x:obj.x,y:wy,width:ww,height:wh};return;}
@@ -1087,7 +1096,11 @@ canvas.addEventListener('mousemove', e=>{
             if(edDragHandle.includes('s')){nh=Math.max(SNAP,snapV(o.height+dy));}
             if(edDragHandle.includes('w')){const d=snapV(dx);nx=o.x+d;nw=Math.max(SNAP,o.width-d);}
             if(edDragHandle.includes('n')){const d=snapV(dy);ny=o.y+d;nh=Math.max(SNAP,o.height-d);}
-            obj.x=nx; obj.width=nw; obj.height=nh; obj.y=snapV(ny+nh);
+            const dir=obj.dir||'up';
+            obj.x=nx;
+            if(dir==='up')        { obj.y=snapV(ny+nh); obj.width=nw; obj.height=nh; }
+            else if(dir==='down') { obj.y=snapV(ny);    obj.width=nw; obj.height=nh; }
+            else                  { obj.y=snapV(ny);    obj.width=nh; obj.height=nw; }
         }
         else if(edSelected.type==='platform'||edSelected.type==='mplatform'||edSelected.type==='onoff'){
             const o=edDragOriginal;let nx=o.x,ny=o.y,nw=o.width,nh=o.height;
@@ -1172,9 +1185,21 @@ function rotateSelected(){
         const sp=edSpikes[edSelected.index];
         const dirs=['up','right','down','left'];
         const oldDir=sp.dir||'up', newDir=dirs[(dirs.indexOf(oldDir)+1)%4];
+        const th=sp.height||25, tw=sp.width;
+        // Center of bounding box before rotation
+        let cx, cy;
+        if(oldDir==='up')        { cx=sp.x+tw/2; cy=sp.y-th/2; }
+        else if(oldDir==='down') { cx=sp.x+tw/2; cy=sp.y+th/2; }
+        else                     { cx=sp.x+th/2; cy=sp.y+tw/2; }
+        // Swap dimensions when crossing up/down ↔ right/left
         const wasUpDown=oldDir==='up'||oldDir==='down', isUpDown=newDir==='up'||newDir==='down';
-        if(wasUpDown!==isUpDown){const tmp=sp.width;sp.width=sp.height||25;sp.height=tmp;}
+        if(wasUpDown!==isUpDown){ sp.width=th; sp.height=tw; }
+        const nth=sp.height||25, ntw=sp.width;
+        // Reposition anchor so center stays the same
         sp.dir=newDir;
+        if(newDir==='up')        { sp.x=cx-ntw/2; sp.y=cy+nth/2; }
+        else if(newDir==='down') { sp.x=cx-ntw/2; sp.y=cy-nth/2; }
+        else                     { sp.x=cx-nth/2; sp.y=cy-ntw/2; }
         return;
     }
     const obj=edGetSel(); if(!obj||!obj.width||!obj.height)return;
