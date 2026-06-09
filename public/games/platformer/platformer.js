@@ -81,7 +81,7 @@ class SwitchParticle {
 // ── Game state ─────────────────────────────────────────
 let startPos  = null, player = null, platforms = [], jumpPads = [];
 let spikes = [], sawblades = [], movingPlatforms = [], onOffBlocks = [], onOffSwitches = [], orbitSaws = [];
-let onOffState = false, deathCooldown = 0, deathFlash = 0;
+let onOffState = false, deathCooldown = 0;
 let finish = null, levelCompleted = false;
 let currentLevelOrder = null;
 
@@ -133,7 +133,6 @@ function gameLoop(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     movePlayer(); moveCamera();
     if(deathCooldown>0) deathCooldown--;
-    if(deathFlash>0){ deathFlash--; if(deathFlash===0){ player.x=startPos.x; player.y=startPos.y; } }
     updateMovingPlatforms(); updateSaws(); updateOrbitSaws();
     wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
     checkJumpPad(); checkCollision(); updateStretch(); updateEyePos();
@@ -235,6 +234,7 @@ function resolveAABB(p){
     }
 }
 function checkCollision(){
+    if(deathCooldown>0)return;
     grounded=false; clampLeft=false; clampRight=false; ceiling=false;
     for(const p of platforms) resolveAABB(p);
     for(const mp of movingPlatforms) resolveAABB({x:mp._cx,y:mp._cy,width:mp.width,height:mp.height});
@@ -263,7 +263,7 @@ function drawBackground(){
 }
 
 function drawPlayer(){
-    if(deathFlash>0) ctx.globalAlpha=Math.floor(deathFlash/4)%2===0?0.15:0.75;
+    if(deathCooldown>0) return;
     ctx.fillStyle="blue"; ctx.strokeStyle="rgb(50,50,200)"; ctx.lineWidth=1;
     ctx.fillRect(player.x-camera.x,player.y-camera.y,player.width,player.height);
     ctx.strokeRect(player.x-camera.x,player.y-camera.y,player.width,player.height);
@@ -448,9 +448,10 @@ function checkOrbitSaws(){
 // ── Death ──────────────────────────────────────────────
 function killPlayer(){
     if(deathCooldown>0)return;
-    deathCooldown=55; deathFlash=35;
-    player.velocity={x:0,y:0}; gravity=0.5;
     spawnDeathParticles();
+    player.x=startPos.x; player.y=startPos.y;
+    player.velocity={x:0,y:0}; gravity=0.5;
+    deathCooldown=15;
 }
 function spawnDeathParticles(){
     const cx=player.x+player.width/2, cy=player.y+player.height/2;
@@ -560,7 +561,7 @@ function startLevel(levelData){
     onOffBlocks    =(levelData.onOffBlocks    ||[]).map(b=>({...b}));
     onOffSwitches  =(levelData.onOffSwitches  ||[]).map(s=>({...s,_triggered:false}));
     orbitSaws      =(levelData.orbitSaws      ||[]).map(s=>({...s,_angle:Math.random()*Math.PI*2}));
-    onOffState=false; deathCooldown=0; deathFlash=0;
+    onOffState=false; deathCooldown=0;
     platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[]; deathParticles=[]; switchParticles=[];
     classifiersInUse={platform:[],boost:[],jump:[]};
     grounded=false; wasGrounded=[false,false,false,false];
@@ -1276,7 +1277,7 @@ function enterPlayTest(){
     onOffBlocks    =edOnOffBlocks.map(b=>({...b}));
     onOffSwitches  =edOnOffSwitches.map(s=>({...s,_triggered:false}));
     orbitSaws      =edOrbitSaws.map(s=>({...s,_angle:Math.random()*Math.PI*2}));
-    onOffState=false; deathCooldown=0; deathFlash=0;
+    onOffState=false; deathCooldown=0;
     startPos ={...edSpawn};
     player   =new Player(edSpawn.x,edSpawn.y);
     finish   =edFinish?{...edFinish}:null; levelCompleted=false;
