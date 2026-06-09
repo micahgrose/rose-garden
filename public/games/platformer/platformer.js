@@ -80,7 +80,7 @@ class SwitchParticle {
 
 // ── Game state ─────────────────────────────────────────
 let startPos  = null, player = null, platforms = [], jumpPads = [];
-let spikes = [], sawblades = [], movingPlatforms = [], onOffBlocks = [], onOffSwitches = [];
+let spikes = [], sawblades = [], movingPlatforms = [], onOffBlocks = [], onOffSwitches = [], orbitSaws = [];
 let onOffState = false, deathCooldown = 0;
 let finish = null, levelCompleted = false;
 let currentLevelOrder = null;
@@ -133,14 +133,14 @@ function gameLoop(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     movePlayer(); moveCamera();
     if(deathCooldown>0) deathCooldown--;
-    updateMovingPlatforms(); updateSaws();
+    updateMovingPlatforms(); updateSaws(); updateOrbitSaws();
     wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
     checkJumpPad(); checkCollision(); updateStretch(); updateEyePos();
     if(grounded){resetGravity(); jumped=false;}
     if(ceiling){player.velocity.y=0;}
-    checkSpikes(); checkSaws(); checkSwitches();
+    checkSpikes(); checkSaws(); checkSwitches(); checkOrbitSaws();
     drawBackground(); handleParticles();
-    drawMovingPlatforms(); drawOnOffBlocks(); drawPlatforms(); drawJumpPads(); drawSpikes(); drawSaws(); drawSwitches();
+    drawMovingPlatforms(); drawOnOffBlocks(); drawPlatforms(); drawJumpPads(); drawSpikes(); drawSaws(); drawOrbitSaws(); drawSwitches();
     drawPlayer();
     drawFinish(); checkFinish(); drawFinishParticles();
     drawDeathParticles(); drawSwitchParticles();
@@ -173,7 +173,7 @@ document.addEventListener("keydown", e => {
         if(e.key==='s'||e.key==='S') setTool('select');
         if(e.key==='p'||e.key==='P') setTool('platform');
         if(e.key==='j'||e.key==='J') setTool('jumppad');
-        if(e.key==='r'||e.key==='R') setTool('spawn');
+        if(e.key==='r'||e.key==='R'){ if(edTool==='select'&&edSelected) rotateSelected(); else setTool('spawn'); }
         if(e.key==='x'||e.key==='X') setTool('delete');
         if(e.key==='f'||e.key==='F') setTool('finish');
         if(e.key==='k'||e.key==='K') setTool('spike');
@@ -181,6 +181,7 @@ document.addEventListener("keydown", e => {
         if(e.key==='m'||e.key==='M') setTool('mplatform');
         if(e.key==='t'||e.key==='T') setTool('onoff');
         if(e.key==='h'||e.key==='H') setTool('switch');
+        if(e.key==='b'||e.key==='B') setTool('orbitsaw');
     }
 });
 document.addEventListener("keyup", e => {
@@ -206,7 +207,7 @@ function movePlayer(){
         setTimeout(()=>{ maxVelocity.x=10; boosting=false; setTimeout(()=>{boostReady=true;},boostResetTime); },150);
     }
     player.x+=player.velocity.x; player.y+=player.velocity.y;
-    if(player.y>world.height+500){ player.x=startPos.x; player.y=startPos.y; player.velocity={x:0,y:0}; gravity=0.5; speed=5; }
+    if(player.y>world.height+500){ player.x=startPos.x; player.y=startPos.y; player.velocity={x:0,y:0}; gravity=0.5; speed=5;}
 }
 
 // ── Camera ─────────────────────────────────────────────
@@ -252,6 +253,7 @@ const backgroundRects=[];
 function createBackground(){ backgroundRects.length=0; for(let i=0;i<50;i++){const s=Math.random()*300+200; backgroundRects.push({x:Math.random()*world.width,y:Math.random()*world.height,width:s,height:s});} }
 
 function drawBackground(){
+    ctx.fillStyle="rgb(195,245,195)"; ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle="rgb(130,230,130)"; ctx.globalAlpha=0.4;
     for(let r of backgroundRects){ const sx=r.x-camera.x*0.5,sy=r.y-camera.y*0.5; ctx.save(); ctx.translate(sx+r.width/2,sy+r.height/2); ctx.rotate(Math.PI/4); ctx.fillRect(-r.width/2,-r.height/2,r.width,r.height); ctx.restore(); }
     ctx.globalAlpha=1;
@@ -379,7 +381,7 @@ function checkSpikes(){
         const th=18;
         let hx=sp.x,hy=sp.y-th,hw=sp.width,hh=th;
         if(sp.dir==='right'||sp.dir==='left'){hw=th;hh=sp.width;hy=sp.y;}
-        if(player.x+player.width>hx+2&&player.x<hx+hw-2&&player.y+player.height>hy+2&&player.y<hy+hh-2) killPlayer();
+        if(player.x+player.width>hx&&player.x<hx+hw&&player.y+player.height>hy&&player.y<hy+hh) killPlayer();
     }
 }
 
@@ -404,14 +406,45 @@ function checkSaws(){
     if(deathCooldown>0)return;
     for(const s of sawblades){
         const dx=player.x+player.width/2-s.x, dy=player.y+player.height/2-s.y;
-        if(Math.sqrt(dx*dx+dy*dy)<(s.radius||25)+12) killPlayer();
+        if(Math.sqrt(dx*dx+dy*dy)<(s.radius||25)+18) killPlayer();
+    }
+}
+
+// ── Orbit saws ─────────────────────────────────────────
+function updateOrbitSaws(){ for(const s of orbitSaws) s._angle=(s._angle||0)+(s.speed||1)*0.03; }
+function drawOrbitSaws(){
+    for(const s of orbitSaws){
+        const r=s.rodLen||100, sawR=s.sawRadius||20;
+        const sawX=s.x+Math.cos(s._angle)*r, sawY=s.y+Math.sin(s._angle)*r;
+        // Rod
+        ctx.strokeStyle='#888'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.moveTo(s.x-camera.x,s.y-camera.y); ctx.lineTo(sawX-camera.x,sawY-camera.y); ctx.stroke();
+        // Pivot
+        ctx.fillStyle='#555'; ctx.beginPath(); ctx.arc(s.x-camera.x,s.y-camera.y,5,0,Math.PI*2); ctx.fill();
+        // Sawblade
+        const teeth=8;
+        ctx.save(); ctx.translate(sawX-camera.x,sawY-camera.y); ctx.rotate(s._angle*3);
+        ctx.fillStyle='#888'; ctx.strokeStyle='#444'; ctx.lineWidth=1.5;
+        ctx.beginPath();
+        for(let i=0;i<teeth*2;i++){const a=(i/(teeth*2))*Math.PI*2,rr=i%2===0?sawR:sawR*0.65; i===0?ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr):ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle='#555'; ctx.beginPath(); ctx.arc(0,0,sawR*0.22,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
+}
+function checkOrbitSaws(){
+    if(deathCooldown>0)return;
+    for(const s of orbitSaws){
+        const sawX=s.x+Math.cos(s._angle)*s.rodLen, sawY=s.y+Math.sin(s._angle)*s.rodLen;
+        const dx=player.x+player.width/2-sawX, dy=player.y+player.height/2-sawY;
+        if(Math.sqrt(dx*dx+dy*dy)<(s.sawRadius||20)+12) killPlayer();
     }
 }
 
 // ── Death ──────────────────────────────────────────────
 function killPlayer(){
     if(deathCooldown>0)return;
-    deathCooldown=70;
+    deathCooldown=30;
     spawnDeathParticles();
     player.x=startPos.x; player.y=startPos.y;
     player.velocity={x:0,y:0}; gravity=0.5;
@@ -525,6 +558,7 @@ function startLevel(levelData){
     movingPlatforms=(levelData.movingPlatforms||[]).map(p=>({...p,_t:0,_dir:1,_cx:p.x,_cy:p.y}));
     onOffBlocks    =(levelData.onOffBlocks    ||[]).map(b=>({...b}));
     onOffSwitches  =(levelData.onOffSwitches  ||[]).map(s=>({...s,_triggered:false}));
+    orbitSaws      =(levelData.orbitSaws      ||[]).map(s=>({...s,_angle:Math.random()*Math.PI*2}));
     onOffState=false; deathCooldown=0;
     platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[]; deathParticles=[]; switchParticles=[];
     classifiersInUse={platform:[],boost:[],jump:[]};
@@ -607,6 +641,7 @@ let edSawblades      = [];
 let edMovingPlatforms= [];
 let edOnOffBlocks    = [];
 let edOnOffSwitches  = [];
+let edOrbitSaws      = [];
 
 // Selection + drag
 let edSelected     = null;
@@ -802,6 +837,36 @@ function editorDrawFrame(){
         ctx.globalAlpha=0.4; ctx.fillStyle='#44ddff';
         ctx.fillRect(snapV(edCursorWorld.x),snapV(edCursorWorld.y),25,25); ctx.globalAlpha=1;
     }
+    // Ghost orbit saw preview
+    if(edTool==='orbitsaw'&&edCursorWorld){
+        const cx=snapV(edCursorWorld.x), cy=snapV(edCursorWorld.y);
+        ctx.globalAlpha=0.35; ctx.strokeStyle='#888'; ctx.lineWidth=1.5/edZoom;
+        ctx.beginPath(); ctx.arc(cx,cy,100,0,Math.PI*2); ctx.stroke();
+        ctx.fillStyle='#555'; ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha=1;
+    }
+
+    // Orbit saws (editor — animated)
+    for(let i=0;i<edOrbitSaws.length;i++){
+        const s=edOrbitSaws[i], sel=edSelected?.type==='orbitsaw'&&edSelected.index===i;
+        const angle=Date.now()*0.003*(s.speed||1);
+        const r=s.rodLen||100, sawR=s.sawRadius||20;
+        const sawX=s.x+Math.cos(angle)*r, sawY=s.y+Math.sin(angle)*r;
+        // Rod
+        ctx.strokeStyle=sel?'#aaa':'#888'; ctx.lineWidth=(sel?2.5:1.5)/edZoom;
+        ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(sawX,sawY); ctx.stroke();
+        // Pivot
+        ctx.fillStyle=sel?'#ccc':'#666'; ctx.beginPath(); ctx.arc(s.x,s.y,7,0,Math.PI*2); ctx.fill();
+        // Sawblade
+        const teeth=8;
+        ctx.save(); ctx.translate(sawX,sawY); ctx.rotate(angle*3);
+        ctx.fillStyle=sel?'#aaa':'#888'; ctx.strokeStyle=sel?'#fff':'#444'; ctx.lineWidth=(sel?2:1.5)/edZoom;
+        ctx.beginPath();
+        for(let j=0;j<teeth*2;j++){const a=(j/(teeth*2))*Math.PI*2,rr=j%2===0?sawR:sawR*0.65; j===0?ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr):ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle='#555'; ctx.beginPath(); ctx.arc(0,0,sawR*0.22,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
 
     // Finish flag
     if(edFinish){
@@ -882,6 +947,7 @@ function edHitTest(sx,sy){
     }
     for(let i=edSpikes.length-1;i>=0;i--){const sp=edSpikes[i];if(wx>=sp.x&&wx<=sp.x+sp.width&&wy>=sp.y-18&&wy<=sp.y)return{type:'spike',index:i};}
     for(let i=edSawblades.length-1;i>=0;i--){const s=edSawblades[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=(s.radius||25))return{type:'saw',index:i};}
+    for(let i=edOrbitSaws.length-1;i>=0;i--){const s=edOrbitSaws[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=14/edZoom)return{type:'orbitsaw',index:i};}
     for(let i=edMovingPlatforms.length-1;i>=0;i--){const mp=edMovingPlatforms[i];if(wx>=mp.x&&wx<=mp.x+mp.width&&wy>=mp.y&&wy<=mp.y+mp.height)return{type:'mplatform',index:i};}
     for(let i=edOnOffBlocks.length-1;i>=0;i--){const b=edOnOffBlocks[i];if(wx>=b.x&&wx<=b.x+b.width&&wy>=b.y&&wy<=b.y+b.height)return{type:'onoff',index:i};}
     for(let i=edOnOffSwitches.length-1;i>=0;i--){const sw=edOnOffSwitches[i];if(wx>=sw.x&&wx<=sw.x+25&&wy>=sw.y&&wy<=sw.y+25)return{type:'switch',index:i};}
@@ -900,6 +966,7 @@ function edGetSel(){
     if(edSelected.type==='mplatform'||edSelected.type==='mplatform_end') return edMovingPlatforms[edSelected.index];
     if(edSelected.type==='onoff')     return edOnOffBlocks[edSelected.index];
     if(edSelected.type==='switch')    return edOnOffSwitches[edSelected.index];
+    if(edSelected.type==='orbitsaw')  return edOrbitSaws[edSelected.index];
     return null;
 }
 
@@ -913,6 +980,7 @@ function edDeleteSelected(){
     if(edSelected.type==='mplatform'||edSelected.type==='mplatform_end') edMovingPlatforms.splice(edSelected.index,1);
     if(edSelected.type==='onoff')     edOnOffBlocks.splice(edSelected.index,1);
     if(edSelected.type==='switch')    edOnOffSwitches.splice(edSelected.index,1);
+    if(edSelected.type==='orbitsaw')  edOrbitSaws.splice(edSelected.index,1);
     edSelected=null;
 }
 
@@ -963,6 +1031,7 @@ canvas.addEventListener('mousedown', e=>{
         edGhostRect={x:edDrawStart.wx,y:edDrawStart.wy,width:SNAP,height:SNAP};
     }
     if(edTool==='switch'){const{x,y}=edSW(sx,sy); edOnOffSwitches.push({x:snapV(x-12),y:snapV(y-12)}); edSelected={type:'switch',index:edOnOffSwitches.length-1};}
+    if(edTool==='orbitsaw'){const{x,y}=edSW(sx,sy); edOrbitSaws.push({x:snapV(x),y:snapV(y),rodLen:100,sawRadius:20,speed:1}); edSelected={type:'orbitsaw',index:edOrbitSaws.length-1};}
 
     if(edTool==='delete'){
         const hit=edHitTest(sx,sy);
@@ -975,6 +1044,7 @@ canvas.addEventListener('mousedown', e=>{
             if(hit.type==='mplatform'||hit.type==='mplatform_end') edMovingPlatforms.splice(hit.index,1);
             if(hit.type==='onoff')     edOnOffBlocks.splice(hit.index,1);
             if(hit.type==='switch')    edOnOffSwitches.splice(hit.index,1);
+            if(hit.type==='orbitsaw')  edOrbitSaws.splice(hit.index,1);
             edSelected=null;
         }
     }
@@ -1068,7 +1138,37 @@ canvas.addEventListener('dblclick',e=>{
         const b=edOnOffBlocks[edSelected.index];
         b.startsOn = (b.startsOn===false) ? true : false;
     }
+    if(edSelected.type==='orbitsaw'){
+        const s=edOrbitSaws[edSelected.index];
+        const sp=prompt('Spin speed (default 1, negative=reverse):',s.speed??1);
+        if(sp!==null&&!isNaN(+sp)) s.speed=+sp;
+        const rl=prompt('Rod length (default 100):',s.rodLen??100);
+        if(rl!==null&&!isNaN(+rl)) s.rodLen=Math.max(20,+rl);
+        const sr=prompt('Saw radius (default 20):',s.sawRadius??20);
+        if(sr!==null&&!isNaN(+sr)) s.sawRadius=Math.max(8,+sr);
+    }
 });
+
+// ── Rotate selected ────────────────────────────────────
+function rotateSelected(){
+    if(!edSelected)return;
+    if(edSelected.type==='spike'){
+        const sp=edSpikes[edSelected.index];
+        const dirs=['up','right','down','left'];
+        sp.dir=dirs[(dirs.indexOf(sp.dir||'up')+1)%4];
+        return;
+    }
+    const obj=edGetSel(); if(!obj||!obj.width||!obj.height)return;
+    const cx=snapV(obj.x+obj.width/2), cy=snapV(obj.y+obj.height/2);
+    const nw=snapV(obj.height), nh=snapV(obj.width);
+    if(edSelected.type==='mplatform'){
+        const tdx=snapV(obj.tx+obj.width/2)-cx, tdy=snapV(obj.ty+obj.height/2)-cy;
+        obj.x=snapV(cx-nw/2); obj.y=snapV(cy-nh/2); obj.width=nw; obj.height=nh;
+        obj.tx=snapV(cx+tdy-nw/2); obj.ty=snapV(cy-tdx-nh/2);
+    } else {
+        obj.x=snapV(cx-nw/2); obj.y=snapV(cy-nh/2); obj.width=nw; obj.height=nh;
+    }
+}
 
 // ── Tool buttons ───────────────────────────────────────
 function setTool(name){
@@ -1094,6 +1194,7 @@ function openEditor(levelData=null){
         edMovingPlatforms=(levelData.movingPlatforms||[]).map(p=>({...p}));
         edOnOffBlocks    =(levelData.onOffBlocks    ||[]).map(b=>({...b}));
         edOnOffSwitches  =(levelData.onOffSwitches  ||[]).map(s=>({...s}));
+        edOrbitSaws      =(levelData.orbitSaws      ||[]).map(s=>({...s}));
         document.getElementById('edLevelName').value =levelData.name||'';
         document.getElementById('edLevelOrder').value=levelData.order||1;
         document.getElementById('edDeleteBtn').style.display='inline-block';
@@ -1130,6 +1231,7 @@ function enterPlayTest(){
     movingPlatforms=edMovingPlatforms.map(p=>({...p,_t:0,_dir:1,_cx:p.x,_cy:p.y}));
     onOffBlocks    =edOnOffBlocks.map(b=>({...b}));
     onOffSwitches  =edOnOffSwitches.map(s=>({...s,_triggered:false}));
+    orbitSaws      =edOrbitSaws.map(s=>({...s,_angle:Math.random()*Math.PI*2}));
     onOffState=false; deathCooldown=0;
     startPos ={...edSpawn};
     player   =new Player(edSpawn.x,edSpawn.y);
@@ -1163,7 +1265,7 @@ document.getElementById('edQuitBtn').addEventListener('click',closeEditor);
 // ── Level management ───────────────────────────────────
 function edClearState(){
     edPlatforms=[]; edJumpPads=[]; edSpawn={x:250,y:4500}; edFinish=null;
-    edSpikes=[]; edSawblades=[]; edMovingPlatforms=[]; edOnOffBlocks=[]; edOnOffSwitches=[];
+    edSpikes=[]; edSawblades=[]; edMovingPlatforms=[]; edOnOffBlocks=[]; edOnOffSwitches=[]; edOrbitSaws=[];
     edSelected=null; edCurrentId=null; edGhostRect=null;
     document.getElementById('edLevelName').value='';
     document.getElementById('edLevelOrder').value=(allLevels.length+1)||1;
@@ -1197,6 +1299,7 @@ document.getElementById('edLevelSelect').addEventListener('change',async e=>{
     edMovingPlatforms=(lvl.movingPlatforms||[]).map(p=>({...p}));
     edOnOffBlocks    =(lvl.onOffBlocks    ||[]).map(b=>({...b}));
     edOnOffSwitches  =(lvl.onOffSwitches  ||[]).map(s=>({...s}));
+    edOrbitSaws      =(lvl.orbitSaws      ||[]).map(s=>({...s}));
     document.getElementById('edLevelName').value =lvl.name||'';
     document.getElementById('edLevelOrder').value=lvl.order||1;
     document.getElementById('edDeleteBtn').style.display='inline-block';
@@ -1210,7 +1313,7 @@ document.getElementById('edSaveBtn').addEventListener('click',async()=>{
     const name =document.getElementById('edLevelName').value.trim()||'Untitled';
     const order=parseInt(document.getElementById('edLevelOrder').value)||1;
     if(edPlatforms.length===0)return setEdStatus('Add at least one platform.');
-    const body={name,order,startPos:edSpawn,platforms:edPlatforms,jumpPads:edJumpPads,finish:edFinish,spikes:edSpikes,sawblades:edSawblades,movingPlatforms:edMovingPlatforms,onOffBlocks:edOnOffBlocks,onOffSwitches:edOnOffSwitches};
+    const body={name,order,startPos:edSpawn,platforms:edPlatforms,jumpPads:edJumpPads,finish:edFinish,spikes:edSpikes,sawblades:edSawblades,movingPlatforms:edMovingPlatforms,onOffBlocks:edOnOffBlocks,onOffSwitches:edOnOffSwitches,orbitSaws:edOrbitSaws};
     const isNew=!edCurrentId;
     try{
         const r=await fetch(isNew?'/api/ollie/levels':`/api/ollie/levels/${edCurrentId}`,{method:isNew?'POST':'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${authToken}`},body:JSON.stringify(body)});
