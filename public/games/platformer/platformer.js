@@ -53,9 +53,35 @@ class FinishParticle {
         this.color=cols[Math.floor(Math.random()*cols.length)];
     }
 }
+class DeathParticle {
+    constructor(x,y){
+        this.x=x; this.y=y;
+        const a=Math.random()*Math.PI*2, spd=Math.random()*7+2;
+        this.vx=Math.cos(a)*spd; this.vy=Math.sin(a)*spd-3;
+        this.gravity=0.35; this.size=Math.random()*7+2;
+        this.life=1; this.decay=Math.random()*0.025+0.015;
+        this.rotation=Math.random()*Math.PI*2; this.rotSpeed=(Math.random()-0.5)*0.2;
+        const cols=['#cc2222','#ee4444','#882222','#aaaaaa','#dddddd'];
+        this.color=cols[Math.floor(Math.random()*cols.length)];
+    }
+}
+class SwitchParticle {
+    constructor(x,y){
+        this.x=x; this.y=y;
+        const a=Math.random()*Math.PI*2, spd=Math.random()*5+2;
+        this.vx=Math.cos(a)*spd; this.vy=Math.sin(a)*spd-4;
+        this.gravity=0.25; this.size=Math.random()*6+2;
+        this.life=1; this.decay=Math.random()*0.025+0.015;
+        this.rotation=Math.random()*Math.PI*2; this.rotSpeed=(Math.random()-0.5)*0.15;
+        const cols=['#44ddff','#88eeff','#ffffff','#22aacc','#aaffff'];
+        this.color=cols[Math.floor(Math.random()*cols.length)];
+    }
+}
 
 // ── Game state ─────────────────────────────────────────
 let startPos  = null, player = null, platforms = [], jumpPads = [];
+let spikes = [], sawblades = [], movingPlatforms = [], onOffBlocks = [], onOffSwitches = [];
+let onOffState = true, deathCooldown = 0;
 let finish = null, levelCompleted = false;
 let currentLevelOrder = null;
 
@@ -72,7 +98,7 @@ const world   = {width:5000, height:5000};
 const camera  = {x:0, y:0, width:canvas.width, height:canvas.height};
 const cameraSpeed = 0.075;
 
-let platformParticles=[], boostParticles=[], jumpParticles=[], finishParticles=[];
+let platformParticles=[], boostParticles=[], jumpParticles=[], finishParticles=[], deathParticles=[], switchParticles=[];
 const platformParticleCount=50, boostParticleCount=50, jumpParticleCount=20;
 let boosting=false, boostReady=true, doBoostParticle=false;
 const boostResetTime=500;
@@ -106,12 +132,18 @@ function gameLoop(){
     camera.width=canvas.width; camera.height=canvas.height;
     ctx.clearRect(0,0,canvas.width,canvas.height);
     movePlayer(); moveCamera();
+    if(deathCooldown>0) deathCooldown--;
+    updateMovingPlatforms(); updateSaws();
     wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
     checkJumpPad(); checkCollision(); updateStretch(); updateEyePos();
     if(grounded){resetGravity(); jumped=false;}
     if(ceiling){player.velocity.y=0;}
-    drawBackground(); handleParticles(); drawPlayer(); drawPlatforms(); drawJumpPads();
+    checkSpikes(); checkSaws(); checkSwitches();
+    drawBackground(); handleParticles();
+    drawMovingPlatforms(); drawOnOffBlocks(); drawPlatforms(); drawJumpPads(); drawSpikes(); drawSaws(); drawSwitches();
+    drawPlayer();
     drawFinish(); checkFinish(); drawFinishParticles();
+    drawDeathParticles(); drawSwitchParticles();
     animFrameId=requestAnimationFrame(gameLoop);
 }
 
@@ -144,6 +176,11 @@ document.addEventListener("keydown", e => {
         if(e.key==='r'||e.key==='R') setTool('spawn');
         if(e.key==='x'||e.key==='X') setTool('delete');
         if(e.key==='f'||e.key==='F') setTool('finish');
+        if(e.key==='k'||e.key==='K') setTool('spike');
+        if(e.key==='w'||e.key==='W') setTool('saw');
+        if(e.key==='m'||e.key==='M') setTool('mplatform');
+        if(e.key==='t'||e.key==='T') setTool('onoff');
+        if(e.key==='h'||e.key==='H') setTool('switch');
     }
 });
 document.addEventListener("keyup", e => {
@@ -180,21 +217,24 @@ function moveCamera(){
 }
 
 // ── Collision ──────────────────────────────────────────
+function resolveAABB(p){
+    if(player.x+player.width<=p.x||player.x>=p.x+p.width)return;
+    if(player.y+player.height<=p.y||player.y>=p.y+p.height)return;
+    const ox=Math.min(player.x+player.width-p.x, p.x+p.width-player.x);
+    const oy=Math.min(player.y+player.height-p.y, p.y+p.height-player.y);
+    if(ox>oy){
+        if(player.y+player.height/2<p.y+p.height/2){player.y-=oy; grounded=true;}
+        else{player.y+=oy; ceiling=true;}
+    }else{
+        if(player.x+player.width/2<p.x+p.width/2){player.x-=ox; clampRight=true;}
+        else{player.x+=ox; clampLeft=true;}
+    }
+}
 function checkCollision(){
     grounded=false; clampLeft=false; clampRight=false; ceiling=false;
-    for(let p of platforms){
-        if(player.x+player.width<=p.x||player.x>=p.x+p.width)continue;
-        if(player.y+player.height<=p.y||player.y>=p.y+p.height)continue;
-        const ox=Math.min(player.x+player.width-p.x, p.x+p.width-player.x);
-        const oy=Math.min(player.y+player.height-p.y, p.y+p.height-player.y);
-        if(ox>oy){
-            if(player.y+player.height/2<p.y+p.height/2){player.y-=oy; grounded=true;}
-            else{player.y+=oy; ceiling=true;}
-        }else{
-            if(player.x+player.width/2<p.x+p.width/2){player.x-=ox; clampRight=true;}
-            else{player.x+=ox; clampLeft=true;}
-        }
-    }
+    for(const p of platforms) resolveAABB(p);
+    for(const mp of movingPlatforms) resolveAABB({x:mp._cx,y:mp._cy,width:mp.width,height:mp.height});
+    if(onOffState) for(const b of onOffBlocks) resolveAABB(b);
 }
 
 function checkJumpPad(){
@@ -249,6 +289,146 @@ function drawJumpPads(){
         ctx.beginPath(); ctx.roundRect(pad.x-camera.x,pad.y-camera.y,pad.width,pad.height,[10]); ctx.fill();
         ctx.fillRect(pad.x+20-camera.x,pad.y-camera.y,10,pad.stickHeight);
     }
+}
+
+// ── Moving platforms ───────────────────────────────────
+function updateMovingPlatforms(){
+    for(const mp of movingPlatforms){
+        mp._t+=(mp._dir||1)*(mp.speed||1)*0.005;
+        if(mp._t>=1){mp._t=1;mp._dir=-1;} if(mp._t<=0){mp._t=0;mp._dir=1;}
+        mp._cx=mp.x+(mp.tx-mp.x)*mp._t; mp._cy=mp.y+(mp.ty-mp.y)*mp._t;
+    }
+}
+function drawMovingPlatforms(){
+    ctx.lineWidth=2;
+    for(const mp of movingPlatforms){
+        ctx.fillStyle='#5588cc'; ctx.strokeStyle='#3366aa';
+        ctx.fillRect(mp._cx-camera.x,mp._cy-camera.y,mp.width,mp.height);
+        ctx.strokeRect(mp._cx-camera.x,mp._cy-camera.y,mp.width,mp.height);
+    }
+}
+
+// ── On/off blocks & switches ───────────────────────────
+function drawOnOffBlocks(){
+    for(const b of onOffBlocks){
+        if(onOffState){
+            ctx.fillStyle='#e09030'; ctx.strokeStyle='#b87020'; ctx.lineWidth=2;
+            ctx.fillRect(b.x-camera.x,b.y-camera.y,b.width,b.height);
+            ctx.strokeRect(b.x-camera.x,b.y-camera.y,b.width,b.height);
+        } else {
+            ctx.strokeStyle='rgba(224,144,48,0.45)'; ctx.lineWidth=2;
+            ctx.setLineDash([6,4]);
+            ctx.strokeRect(b.x-camera.x,b.y-camera.y,b.width,b.height);
+            ctx.setLineDash([]);
+        }
+    }
+}
+function drawSwitches(){
+    for(const sw of onOffSwitches){
+        ctx.fillStyle=onOffState?'#44ddff':'#226688';
+        ctx.strokeStyle='#1a4455'; ctx.lineWidth=2;
+        ctx.fillRect(sw.x-camera.x,sw.y-camera.y,30,14);
+        ctx.strokeRect(sw.x-camera.x,sw.y-camera.y,30,14);
+        ctx.fillStyle='rgba(255,255,255,0.5)';
+        const bx=sw.x+7+(onOffState?0:10)-camera.x, by=sw.y+3-camera.y;
+        ctx.fillRect(bx,by,13,8);
+    }
+}
+function checkSwitches(){
+    for(const sw of onOffSwitches){
+        const touching=player.x+player.width>sw.x+2&&player.x<sw.x+28&&player.y+player.height>=sw.y&&player.y+player.height<=sw.y+20&&grounded;
+        if(touching&&!sw._triggered){
+            sw._triggered=true; onOffState=!onOffState;
+            spawnSwitchParticles(sw.x+15,sw.y);
+        }
+        if(!touching) sw._triggered=false;
+    }
+}
+function spawnSwitchParticles(x,y){ for(let i=0;i<30;i++) switchParticles.push(new SwitchParticle(x,y)); }
+function drawSwitchParticles(){
+    switchParticles=switchParticles.filter(p=>p.life>0);
+    for(const p of switchParticles){
+        p.vy+=p.gravity; p.x+=p.vx; p.y+=p.vy; p.life-=p.decay; p.rotation+=p.rotSpeed;
+        ctx.save(); ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle=p.color;
+        ctx.translate(p.x-camera.x,p.y-camera.y); ctx.rotate(p.rotation);
+        ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size); ctx.restore();
+    }
+    ctx.globalAlpha=1;
+}
+
+// ── Spikes ─────────────────────────────────────────────
+function drawSpikes(){
+    ctx.fillStyle='#777'; ctx.strokeStyle='#444'; ctx.lineWidth=1;
+    for(const sp of spikes){
+        const n=Math.max(1,Math.round(sp.width/25));
+        const tw=sp.width/n, th=18;
+        for(let i=0;i<n;i++){
+            const bx=sp.x+i*tw-camera.x, by=sp.y+th-camera.y;
+            ctx.beginPath();
+            if(sp.dir==='up'||!sp.dir){    ctx.moveTo(bx,by);ctx.lineTo(bx+tw/2,sp.y-camera.y);ctx.lineTo(bx+tw,by); }
+            else if(sp.dir==='down'){       ctx.moveTo(bx,sp.y-camera.y);ctx.lineTo(bx+tw/2,by);ctx.lineTo(bx+tw,sp.y-camera.y); }
+            else if(sp.dir==='right'){      const rx=sp.x-camera.x;ctx.moveTo(rx,sp.y+i*tw-camera.y);ctx.lineTo(rx+th,sp.y+i*tw+tw/2-camera.y);ctx.lineTo(rx,sp.y+i*tw+tw-camera.y); }
+            else if(sp.dir==='left'){       const rx=sp.x+th-camera.x;ctx.moveTo(rx,sp.y+i*tw-camera.y);ctx.lineTo(rx-th,sp.y+i*tw+tw/2-camera.y);ctx.lineTo(rx,sp.y+i*tw+tw-camera.y); }
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+    }
+}
+function checkSpikes(){
+    if(deathCooldown>0)return;
+    for(const sp of spikes){
+        const th=18;
+        let hx=sp.x,hy=sp.y,hw=sp.width,hh=th;
+        if(sp.dir==='right'||sp.dir==='left'){hw=th;hh=sp.width;}
+        if(player.x+player.width>hx+2&&player.x<hx+hw-2&&player.y+player.height>hy+2&&player.y<hy+hh-2) killPlayer();
+    }
+}
+
+// ── Sawblades ──────────────────────────────────────────
+function updateSaws(){ for(const s of sawblades) s._rot=(s._rot||0)+0.05; }
+function drawSaws(){
+    for(const s of sawblades){
+        const sx=s.x-camera.x, sy=s.y-camera.y, r=s.radius||25, teeth=10;
+        ctx.save(); ctx.translate(sx,sy); ctx.rotate(s._rot||0);
+        ctx.fillStyle='#888'; ctx.strokeStyle='#444'; ctx.lineWidth=1.5;
+        ctx.beginPath();
+        for(let i=0;i<teeth*2;i++){
+            const a=(i/(teeth*2))*Math.PI*2, rr=i%2===0?r:r*0.65;
+            i===0?ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr):ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);
+        }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle='#555'; ctx.beginPath(); ctx.arc(0,0,r*0.22,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
+}
+function checkSaws(){
+    if(deathCooldown>0)return;
+    for(const s of sawblades){
+        const dx=player.x+player.width/2-s.x, dy=player.y+player.height/2-s.y;
+        if(Math.sqrt(dx*dx+dy*dy)<(s.radius||25)+12) killPlayer();
+    }
+}
+
+// ── Death ──────────────────────────────────────────────
+function killPlayer(){
+    if(deathCooldown>0)return;
+    deathCooldown=70;
+    spawnDeathParticles();
+    player.x=startPos.x; player.y=startPos.y;
+    player.velocity={x:0,y:0}; gravity=0.5;
+}
+function spawnDeathParticles(){
+    const cx=player.x+player.width/2, cy=player.y+player.height/2;
+    for(let i=0;i<45;i++) deathParticles.push(new DeathParticle(cx,cy));
+}
+function drawDeathParticles(){
+    deathParticles=deathParticles.filter(p=>p.life>0);
+    for(const p of deathParticles){
+        p.vy+=p.gravity; p.x+=p.vx; p.y+=p.vy; p.life-=p.decay; p.rotation+=p.rotSpeed;
+        ctx.save(); ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle=p.color;
+        ctx.translate(p.x-camera.x,p.y-camera.y); ctx.rotate(p.rotation);
+        ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size); ctx.restore();
+    }
+    ctx.globalAlpha=1;
 }
 
 function drawFinish(){
@@ -338,9 +518,15 @@ function startLevel(levelData){
     currentLevelOrder=levelData.order;
     startPos =levelData.startPos;
     player   =new Player(levelData.startPos.x, levelData.startPos.y);
-    platforms=(levelData.platforms||[]).map(p=>new Platform(p.x,p.y,p.width,p.height));
-    jumpPads =(levelData.jumpPads ||[]).map(j=>new JumpPad(j.x,j.y,j.strength));
-    platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[];
+    platforms      =(levelData.platforms      ||[]).map(p=>new Platform(p.x,p.y,p.width,p.height));
+    jumpPads       =(levelData.jumpPads       ||[]).map(j=>new JumpPad(j.x,j.y,j.strength));
+    spikes         =(levelData.spikes         ||[]).map(s=>({...s}));
+    sawblades      =(levelData.sawblades      ||[]).map(s=>({...s,_rot:0}));
+    movingPlatforms=(levelData.movingPlatforms||[]).map(p=>({...p,_t:0,_dir:1,_cx:p.x,_cy:p.y}));
+    onOffBlocks    =(levelData.onOffBlocks    ||[]).map(b=>({...b}));
+    onOffSwitches  =(levelData.onOffSwitches  ||[]).map(s=>({...s,_triggered:false}));
+    onOffState=true; deathCooldown=0;
+    platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[]; deathParticles=[]; switchParticles=[];
     classifiersInUse={platform:[],boost:[],jump:[]};
     grounded=false; wasGrounded=[false,false,false,false];
     finish=levelData.finish?{...levelData.finish}:null; levelCompleted=false;
@@ -412,10 +598,15 @@ let edPanStart  = {x:0,y:0};
 let edPanOrigin = {x:0,y:0};
 
 // Level data being edited
-let edPlatforms = [];
-let edJumpPads  = [];
-let edSpawn     = {x:250, y:4500};
-let edFinish    = null;
+let edPlatforms      = [];
+let edJumpPads       = [];
+let edSpawn          = {x:250, y:4500};
+let edFinish         = null;
+let edSpikes         = [];
+let edSawblades      = [];
+let edMovingPlatforms= [];
+let edOnOffBlocks    = [];
+let edOnOffSwitches  = [];
 
 // Selection + drag
 let edSelected     = null;
@@ -434,6 +625,7 @@ let edCurrentId = null;
 
 const SNAP = 25;
 const HS   = 8; // handle size in screen pixels
+let edSawRadius = 25;
 
 function snapV(v){ return Math.round(v/SNAP)*SNAP; }
 function edSW(sx,sy){ return {x:(sx-edCamX)/edZoom, y:(sy-edCamY)/edZoom}; }
@@ -502,6 +694,107 @@ function editorDrawFrame(){
     ctx.fillStyle='rgba(0,0,0,0.5)';
     ctx.fillRect(edSpawn.x+13,edSpawn.y+15,5,5);
     ctx.fillRect(edSpawn.x+33,edSpawn.y+15,5,5);
+
+    // Moving platforms (editor)
+    for(let i=0;i<edMovingPlatforms.length;i++){
+        const mp=edMovingPlatforms[i], sel=edSelected?.type==='mplatform'&&edSelected.index===i;
+        ctx.fillStyle=sel?'#6699dd':'#5588cc'; ctx.strokeStyle=sel?'#aaccff':'#3366aa'; ctx.lineWidth=(sel?3:2)/edZoom;
+        ctx.fillRect(mp.x,mp.y,mp.width,mp.height); ctx.strokeRect(mp.x,mp.y,mp.width,mp.height);
+        // Path line to target
+        ctx.strokeStyle='rgba(100,160,255,0.5)'; ctx.lineWidth=1.5/edZoom; ctx.setLineDash([8/edZoom,4/edZoom]);
+        ctx.beginPath(); ctx.moveTo(mp.x+mp.width/2,mp.y+mp.height/2); ctx.lineTo(mp.tx+mp.width/2,mp.ty+mp.height/2); ctx.stroke();
+        ctx.setLineDash([]);
+        // Ghost at target
+        ctx.fillStyle='rgba(85,136,204,0.2)'; ctx.strokeStyle='rgba(100,160,255,0.6)'; ctx.lineWidth=1.5/edZoom;
+        ctx.fillRect(mp.tx,mp.ty,mp.width,mp.height); ctx.strokeRect(mp.tx,mp.ty,mp.width,mp.height);
+        // Endpoint handle
+        const hs2=HS*1.5/edZoom;
+        ctx.fillStyle=(edSelected?.type==='mplatform_end'&&edSelected.index===i)?'#aaccff':'#5599ff';
+        ctx.strokeStyle='#223'; ctx.lineWidth=1/edZoom;
+        ctx.beginPath(); ctx.arc(mp.tx+mp.width/2,mp.ty+mp.height/2,hs2,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    }
+
+    // On/off blocks (editor)
+    for(let i=0;i<edOnOffBlocks.length;i++){
+        const b=edOnOffBlocks[i], sel=edSelected?.type==='onoff'&&edSelected.index===i;
+        ctx.fillStyle=sel?'#f0a840':'#e09030'; ctx.strokeStyle=sel?'#ffd070':'#b87020'; ctx.lineWidth=(sel?3:2)/edZoom;
+        ctx.fillRect(b.x,b.y,b.width,b.height); ctx.strokeRect(b.x,b.y,b.width,b.height);
+    }
+
+    // Switches (editor)
+    for(let i=0;i<edOnOffSwitches.length;i++){
+        const sw=edOnOffSwitches[i], sel=edSelected?.type==='switch'&&edSelected.index===i;
+        ctx.fillStyle=sel?'#88eeff':'#44ddff'; ctx.strokeStyle=sel?'#aaffff':'#1a4455'; ctx.lineWidth=(sel?2.5:1.5)/edZoom;
+        ctx.fillRect(sw.x,sw.y,30,14); ctx.strokeRect(sw.x,sw.y,30,14);
+        ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.fillRect(sw.x+7,sw.y+3,13,8);
+        ctx.fillStyle='rgba(0,180,220,0.7)'; ctx.font=`${10/edZoom}px monospace`;
+        ctx.fillText('SW',sw.x+1/edZoom,sw.y-5/edZoom);
+    }
+
+    // Spikes (editor)
+    ctx.fillStyle='#777'; ctx.strokeStyle='#444'; ctx.lineWidth=1/edZoom;
+    for(let i=0;i<edSpikes.length;i++){
+        const sp=edSpikes[i], sel=edSelected?.type==='spike'&&edSelected.index===i;
+        ctx.fillStyle=sel?'#aaa':'#777'; ctx.strokeStyle=sel?'#fff':'#444';
+        const n=Math.max(1,Math.round(sp.width/25)), tw=sp.width/n, th=18;
+        for(let j=0;j<n;j++){
+            const bx=sp.x+j*tw, by=sp.y+th;
+            ctx.beginPath();
+            if(sp.dir==='up'||!sp.dir){ctx.moveTo(bx,by);ctx.lineTo(bx+tw/2,sp.y);ctx.lineTo(bx+tw,by);}
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+    }
+
+    // Sawblades (editor — animated)
+    for(let i=0;i<edSawblades.length;i++){
+        const s=edSawblades[i], sel=edSelected?.type==='saw'&&edSelected.index===i;
+        const r=s.radius||25, teeth=10, rot=Date.now()*0.003;
+        ctx.save(); ctx.translate(s.x,s.y); ctx.rotate(rot);
+        ctx.fillStyle=sel?'#aaa':'#888'; ctx.strokeStyle=sel?'#fff':'#444'; ctx.lineWidth=(sel?2:1.5)/edZoom;
+        ctx.beginPath();
+        for(let j=0;j<teeth*2;j++){
+            const a=(j/(teeth*2))*Math.PI*2, rr=j%2===0?r:r*0.65;
+            j===0?ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr):ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);
+        }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle='#555'; ctx.beginPath(); ctx.arc(0,0,r*0.22,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
+
+    // Ghost spike preview
+    if(edTool==='spike'&&edGhostRect){
+        const n=Math.max(1,Math.round(edGhostRect.width/25)), tw=edGhostRect.width/n, th=18;
+        ctx.fillStyle='rgba(120,120,180,0.4)'; ctx.strokeStyle='rgba(150,150,220,0.8)'; ctx.lineWidth=1.5/edZoom;
+        for(let j=0;j<n;j++){
+            const bx=edGhostRect.x+j*tw, by=edGhostRect.y+th;
+            ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+tw/2,edGhostRect.y); ctx.lineTo(bx+tw,by); ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+    }
+    // Ghost mplatform preview
+    if(edTool==='mplatform'&&edGhostRect){
+        ctx.fillStyle='rgba(85,136,204,0.35)'; ctx.strokeStyle='rgba(100,160,255,0.85)'; ctx.lineWidth=2/edZoom;
+        ctx.fillRect(edGhostRect.x,edGhostRect.y,edGhostRect.width,edGhostRect.height);
+        ctx.strokeRect(edGhostRect.x,edGhostRect.y,edGhostRect.width,edGhostRect.height);
+        ctx.fillStyle='rgba(150,200,255,0.9)'; ctx.font=`${14/edZoom}px monospace`;
+        ctx.fillText(`${edGhostRect.width}×${edGhostRect.height}`,edGhostRect.x+4/edZoom,edGhostRect.y-6/edZoom);
+    }
+    // Ghost onoff preview
+    if(edTool==='onoff'&&edGhostRect){
+        ctx.fillStyle='rgba(224,144,48,0.35)'; ctx.strokeStyle='rgba(255,180,80,0.85)'; ctx.lineWidth=2/edZoom;
+        ctx.fillRect(edGhostRect.x,edGhostRect.y,edGhostRect.width,edGhostRect.height);
+        ctx.strokeRect(edGhostRect.x,edGhostRect.y,edGhostRect.width,edGhostRect.height);
+    }
+    // Ghost saw preview
+    if(edTool==='saw'&&edCursorWorld){
+        const r=(edSawRadius||25);
+        ctx.globalAlpha=0.4; ctx.fillStyle='#888';
+        ctx.beginPath(); ctx.arc(snapV(edCursorWorld.x),snapV(edCursorWorld.y),r,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+    }
+    // Ghost switch preview
+    if(edTool==='switch'&&edCursorWorld){
+        ctx.globalAlpha=0.4; ctx.fillStyle='#44ddff';
+        ctx.fillRect(snapV(edCursorWorld.x),snapV(edCursorWorld.y),30,14); ctx.globalAlpha=1;
+    }
 
     // Finish flag
     if(edFinish){
@@ -575,18 +868,44 @@ function edGetHandleName(sx,sy,wx,wy,ww,wh){
 function edHitTest(sx,sy){
     const{x:wx,y:wy}=edSW(sx,sy);
     if(edFinish&&wx>=edFinish.x-8&&wx<=edFinish.x+55&&wy>=edFinish.y&&wy<=edFinish.y+78)return{type:'finish'};
+    for(let i=edMovingPlatforms.length-1;i>=0;i--){
+        const mp=edMovingPlatforms[i];
+        const dx=wx-(mp.tx+mp.width/2), dy=wy-(mp.ty+mp.height/2);
+        if(Math.abs(dx)<14/edZoom&&Math.abs(dy)<14/edZoom)return{type:'mplatform_end',index:i};
+    }
+    for(let i=edSpikes.length-1;i>=0;i--){const sp=edSpikes[i];if(wx>=sp.x&&wx<=sp.x+sp.width&&wy>=sp.y&&wy<=sp.y+18)return{type:'spike',index:i};}
+    for(let i=edSawblades.length-1;i>=0;i--){const s=edSawblades[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=(s.radius||25))return{type:'saw',index:i};}
+    for(let i=edMovingPlatforms.length-1;i>=0;i--){const mp=edMovingPlatforms[i];if(wx>=mp.x&&wx<=mp.x+mp.width&&wy>=mp.y&&wy<=mp.y+mp.height)return{type:'mplatform',index:i};}
+    for(let i=edOnOffBlocks.length-1;i>=0;i--){const b=edOnOffBlocks[i];if(wx>=b.x&&wx<=b.x+b.width&&wy>=b.y&&wy<=b.y+b.height)return{type:'onoff',index:i};}
+    for(let i=edOnOffSwitches.length-1;i>=0;i--){const sw=edOnOffSwitches[i];if(wx>=sw.x&&wx<=sw.x+30&&wy>=sw.y&&wy<=sw.y+14)return{type:'switch',index:i};}
     for(let i=edPlatforms.length-1;i>=0;i--){const p=edPlatforms[i]; if(wx>=p.x&&wx<=p.x+p.width&&wy>=p.y&&wy<=p.y+p.height)return{type:'platform',index:i};}
     for(let i=edJumpPads.length-1; i>=0;i--){const j=edJumpPads[i];  if(wx>=j.x&&wx<=j.x+50&&wy>=j.y&&wy<=j.y+10)return{type:'jumppad',index:i};}
     return null;
 }
 
-function edGetSel(){ if(!edSelected)return null; if(edSelected.type==='finish')return edFinish; return edSelected.type==='platform'?edPlatforms[edSelected.index]:edJumpPads[edSelected.index]; }
+function edGetSel(){
+    if(!edSelected)return null;
+    if(edSelected.type==='finish')    return edFinish;
+    if(edSelected.type==='platform')  return edPlatforms[edSelected.index];
+    if(edSelected.type==='jumppad')   return edJumpPads[edSelected.index];
+    if(edSelected.type==='spike')     return edSpikes[edSelected.index];
+    if(edSelected.type==='saw')       return edSawblades[edSelected.index];
+    if(edSelected.type==='mplatform'||edSelected.type==='mplatform_end') return edMovingPlatforms[edSelected.index];
+    if(edSelected.type==='onoff')     return edOnOffBlocks[edSelected.index];
+    if(edSelected.type==='switch')    return edOnOffSwitches[edSelected.index];
+    return null;
+}
 
 function edDeleteSelected(){
     if(!edSelected)return;
-    if(edSelected.type==='platform')edPlatforms.splice(edSelected.index,1);
-    if(edSelected.type==='jumppad') edJumpPads.splice(edSelected.index,1);
-    if(edSelected.type==='finish')  edFinish=null;
+    if(edSelected.type==='platform')  edPlatforms.splice(edSelected.index,1);
+    if(edSelected.type==='jumppad')   edJumpPads.splice(edSelected.index,1);
+    if(edSelected.type==='finish')    edFinish=null;
+    if(edSelected.type==='spike')     edSpikes.splice(edSelected.index,1);
+    if(edSelected.type==='saw')       edSawblades.splice(edSelected.index,1);
+    if(edSelected.type==='mplatform'||edSelected.type==='mplatform_end') edMovingPlatforms.splice(edSelected.index,1);
+    if(edSelected.type==='onoff')     edOnOffBlocks.splice(edSelected.index,1);
+    if(edSelected.type==='switch')    edOnOffSwitches.splice(edSelected.index,1);
     edSelected=null;
 }
 
@@ -599,9 +918,17 @@ canvas.addEventListener('mousedown', e=>{
     if(e.button!==0)return;
 
     if(edTool==='select'){
-        if(edSelected&&edSelected.type!=='finish'){ const obj=edGetSel(); if(obj){ const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height; const h=edGetHandleName(sx,sy,obj.x,obj.y,ww,wh); if(h){edDragging=true;edDragHandle=h;const{x,y}=edSW(sx,sy);edDragStart={x,y};edDragOriginal={x:obj.x,y:obj.y,width:ww,height:wh};return;} } }
+        const noHandleTypes=new Set(['finish','spike','saw','switch','mplatform_end']);
+        if(edSelected&&!noHandleTypes.has(edSelected.type)){ const obj=edGetSel(); if(obj){ const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height; const h=edGetHandleName(sx,sy,obj.x,obj.y,ww,wh); if(h){edDragging=true;edDragHandle=h;const{x,y}=edSW(sx,sy);edDragStart={x,y};edDragOriginal={x:obj.x,y:obj.y,width:ww,height:wh};return;} } }
         const hit=edHitTest(sx,sy); edSelected=hit;
-        if(hit){edDragging=true;edDragHandle='move';const{x,y}=edSW(sx,sy);edDragStart={x,y};const o=edGetSel();edDragOriginal={x:o.x,y:o.y};}
+        if(hit){
+            edDragging=true; edDragHandle=hit.type==='mplatform_end'?'endpoint':'move';
+            const{x,y}=edSW(sx,sy); edDragStart={x,y};
+            const o=edGetSel();
+            if(hit.type==='mplatform_end') edDragOriginal={tx:o.tx,ty:o.ty};
+            else if(hit.type==='mplatform') edDragOriginal={x:o.x,y:o.y,tx:o.tx,ty:o.ty};
+            else edDragOriginal={x:o.x,y:o.y};
+        }
     }
 
     if(edTool==='platform'){
@@ -615,7 +942,35 @@ canvas.addEventListener('mousedown', e=>{
 
     if(edTool==='finish'){const{x,y}=edSW(sx,sy); edFinish={x:snapV(x),y:snapV(y)-SNAP/2}; edSelected=null;}
 
-    if(edTool==='delete'){const hit=edHitTest(sx,sy);if(hit){if(hit.type==='platform')edPlatforms.splice(hit.index,1);if(hit.type==='jumppad')edJumpPads.splice(hit.index,1);if(hit.type==='finish')edFinish=null;edSelected=null;}}
+    if(edTool==='spike'){
+        const{x,y}=edSW(sx,sy); edDrawing=true; edDrawStart={wx:snapV(x),wy:snapV(y)};
+        edGhostRect={x:edDrawStart.wx,y:edDrawStart.wy,width:SNAP,height:18};
+    }
+    if(edTool==='saw'){const{x,y}=edSW(sx,sy); edSawblades.push({x:snapV(x),y:snapV(y),radius:edSawRadius}); edSelected={type:'saw',index:edSawblades.length-1};}
+    if(edTool==='mplatform'){
+        const{x,y}=edSW(sx,sy); edDrawing=true; edDrawStart={wx:snapV(x),wy:snapV(y)};
+        edGhostRect={x:edDrawStart.wx,y:edDrawStart.wy,width:SNAP,height:SNAP};
+    }
+    if(edTool==='onoff'){
+        const{x,y}=edSW(sx,sy); edDrawing=true; edDrawStart={wx:snapV(x),wy:snapV(y)};
+        edGhostRect={x:edDrawStart.wx,y:edDrawStart.wy,width:SNAP,height:SNAP};
+    }
+    if(edTool==='switch'){const{x,y}=edSW(sx,sy); edOnOffSwitches.push({x:snapV(x-15),y:snapV(y-7)}); edSelected={type:'switch',index:edOnOffSwitches.length-1};}
+
+    if(edTool==='delete'){
+        const hit=edHitTest(sx,sy);
+        if(hit){
+            if(hit.type==='platform')  edPlatforms.splice(hit.index,1);
+            if(hit.type==='jumppad')   edJumpPads.splice(hit.index,1);
+            if(hit.type==='finish')    edFinish=null;
+            if(hit.type==='spike')     edSpikes.splice(hit.index,1);
+            if(hit.type==='saw')       edSawblades.splice(hit.index,1);
+            if(hit.type==='mplatform'||hit.type==='mplatform_end') edMovingPlatforms.splice(hit.index,1);
+            if(hit.type==='onoff')     edOnOffBlocks.splice(hit.index,1);
+            if(hit.type==='switch')    edOnOffSwitches.splice(hit.index,1);
+            edSelected=null;
+        }
+    }
 });
 
 canvas.addEventListener('mousemove', e=>{
@@ -626,17 +981,22 @@ canvas.addEventListener('mousemove', e=>{
 
     if(edPanning){edCamX=edPanOrigin.x+(e.clientX-edPanStart.x); edCamY=edPanOrigin.y+(e.clientY-edPanStart.y);return;}
 
-    if(edDrawing&&edTool==='platform'){
+    if(edDrawing&&(edTool==='platform'||edTool==='mplatform'||edTool==='onoff')){
         const snx=snapV(edCursorWorld.x),sny=snapV(edCursorWorld.y);
         edGhostRect={x:Math.min(snx,edDrawStart.wx),y:Math.min(sny,edDrawStart.wy),width:Math.max(SNAP,Math.abs(snx-edDrawStart.wx)),height:Math.max(SNAP,Math.abs(sny-edDrawStart.wy))};
+    }
+    if(edDrawing&&edTool==='spike'){
+        const snx=snapV(edCursorWorld.x);
+        edGhostRect={x:Math.min(snx,edDrawStart.wx),y:edDrawStart.wy,width:Math.max(SNAP,Math.abs(snx-edDrawStart.wx)),height:18};
     }
 
     if(edDragging&&edSelected){
         const obj=edGetSel(); if(!obj)return;
         const{x:cwx,y:cwy}=edSW(sx,sy);
         const dx=cwx-edDragStart.x, dy=cwy-edDragStart.y;
-        if(edDragHandle==='move'){obj.x=snapV(edDragOriginal.x+dx);obj.y=snapV(edDragOriginal.y+dy);}
-        else if(edSelected.type==='platform'){
+        if(edDragHandle==='endpoint'){obj.tx=snapV(edDragOriginal.tx+dx);obj.ty=snapV(edDragOriginal.ty+dy);}
+        else if(edDragHandle==='move'){obj.x=snapV(edDragOriginal.x+dx);obj.y=snapV(edDragOriginal.y+dy);if(edSelected.type==='mplatform'){obj.tx=snapV((edDragOriginal.tx!==undefined?edDragOriginal.tx:obj.tx)+dx);obj.ty=snapV((edDragOriginal.ty!==undefined?edDragOriginal.ty:obj.ty)+dy);}}
+        else if(edSelected.type==='platform'||edSelected.type==='mplatform'||edSelected.type==='onoff'||edSelected.type==='spike'){
             const o=edDragOriginal;let nx=o.x,ny=o.y,nw=o.width,nh=o.height;
             if(edDragHandle.includes('e')){nw=Math.max(SNAP,snapV(o.width+dx));}
             if(edDragHandle.includes('s')){nh=Math.max(SNAP,snapV(o.height+dy));}
@@ -651,8 +1011,20 @@ canvas.addEventListener('mouseup', e=>{
     if(!editorOpen||edMode!=='edit')return;
     if(edPanning){ edPanning=false; canvas.style.cursor=edSpaceHeld?'grab':'default'; return; }
     edPanning=false;
-    if(edDrawing&&edGhostRect&&edTool==='platform'){
-        if(edGhostRect.width>=SNAP&&edGhostRect.height>=SNAP){edPlatforms.push({...edGhostRect});edSelected={type:'platform',index:edPlatforms.length-1};}
+    if(edDrawing&&edGhostRect){
+        if(edTool==='platform'&&edGhostRect.width>=SNAP&&edGhostRect.height>=SNAP){
+            edPlatforms.push({...edGhostRect}); edSelected={type:'platform',index:edPlatforms.length-1};
+        }
+        if(edTool==='spike'&&edGhostRect.width>=SNAP){
+            edSpikes.push({x:edGhostRect.x,y:edGhostRect.y,width:edGhostRect.width,dir:'up'}); edSelected={type:'spike',index:edSpikes.length-1};
+        }
+        if(edTool==='mplatform'&&edGhostRect.width>=SNAP&&edGhostRect.height>=SNAP){
+            const mp={x:edGhostRect.x,y:edGhostRect.y,width:edGhostRect.width,height:edGhostRect.height,tx:edGhostRect.x+200,ty:edGhostRect.y,speed:1};
+            edMovingPlatforms.push(mp); edSelected={type:'mplatform',index:edMovingPlatforms.length-1};
+        }
+        if(edTool==='onoff'&&edGhostRect.width>=SNAP&&edGhostRect.height>=SNAP){
+            edOnOffBlocks.push({...edGhostRect}); edSelected={type:'onoff',index:edOnOffBlocks.length-1};
+        }
         edGhostRect=null; edDrawing=false;
     }
     if(edDragging){edDragging=false;edDragHandle=null;edDragOriginal=null;}
@@ -669,10 +1041,22 @@ canvas.addEventListener('wheel',e=>{
 },{passive:false});
 
 canvas.addEventListener('dblclick',e=>{
-    if(!editorOpen||edMode!=='edit'||edTool!=='select'||!edSelected||edSelected.type!=='jumppad')return;
-    const j=edJumpPads[edSelected.index];
-    const v=prompt('Jump strength (default 25):',j.strength);
-    if(v!==null&&!isNaN(+v))j.strength=+v;
+    if(!editorOpen||edMode!=='edit'||edTool!=='select'||!edSelected)return;
+    if(edSelected.type==='jumppad'){
+        const j=edJumpPads[edSelected.index];
+        const v=prompt('Jump strength (default 25):',j.strength);
+        if(v!==null&&!isNaN(+v))j.strength=+v;
+    }
+    if(edSelected.type==='saw'){
+        const s=edSawblades[edSelected.index];
+        const v=prompt('Saw radius (default 25):',s.radius||25);
+        if(v!==null&&!isNaN(+v))s.radius=Math.max(10,+v);
+    }
+    if(edSelected.type==='mplatform'){
+        const mp=edMovingPlatforms[edSelected.index];
+        const v=prompt('Move speed (default 1):',mp.speed||1);
+        if(v!==null&&!isNaN(+v))mp.speed=Math.max(0.1,+v);
+    }
 });
 
 // ── Tool buttons ───────────────────────────────────────
@@ -690,10 +1074,15 @@ function openEditor(levelData=null){
 
     if(levelData){
         edCurrentId=String(levelData._id);
-        edPlatforms=(levelData.platforms||[]).map(p=>({...p}));
-        edJumpPads =(levelData.jumpPads ||[]).map(j=>({...j}));
-        edSpawn    =levelData.startPos?{...levelData.startPos}:{x:250,y:4500};
-        edFinish   =levelData.finish?{...levelData.finish}:null;
+        edPlatforms      =(levelData.platforms      ||[]).map(p=>({...p}));
+        edJumpPads       =(levelData.jumpPads       ||[]).map(j=>({...j}));
+        edSpawn          =levelData.startPos?{...levelData.startPos}:{x:250,y:4500};
+        edFinish         =levelData.finish?{...levelData.finish}:null;
+        edSpikes         =(levelData.spikes         ||[]).map(s=>({...s}));
+        edSawblades      =(levelData.sawblades      ||[]).map(s=>({...s}));
+        edMovingPlatforms=(levelData.movingPlatforms||[]).map(p=>({...p}));
+        edOnOffBlocks    =(levelData.onOffBlocks    ||[]).map(b=>({...b}));
+        edOnOffSwitches  =(levelData.onOffSwitches  ||[]).map(s=>({...s}));
         document.getElementById('edLevelName').value =levelData.name||'';
         document.getElementById('edLevelOrder').value=levelData.order||1;
         document.getElementById('edDeleteBtn').style.display='inline-block';
@@ -723,12 +1112,18 @@ function closeEditor(){
 
 // ── Play test ──────────────────────────────────────────
 function enterPlayTest(){
-    platforms=(edPlatforms).map(p=>new Platform(p.x,p.y,p.width,p.height));
-    jumpPads =(edJumpPads ).map(j=>new JumpPad(j.x,j.y,j.strength));
+    platforms      =edPlatforms.map(p=>new Platform(p.x,p.y,p.width,p.height));
+    jumpPads       =edJumpPads.map(j=>new JumpPad(j.x,j.y,j.strength));
+    spikes         =edSpikes.map(s=>({...s}));
+    sawblades      =edSawblades.map(s=>({...s,_rot:0}));
+    movingPlatforms=edMovingPlatforms.map(p=>({...p,_t:0,_dir:1,_cx:p.x,_cy:p.y}));
+    onOffBlocks    =edOnOffBlocks.map(b=>({...b}));
+    onOffSwitches  =edOnOffSwitches.map(s=>({...s,_triggered:false}));
+    onOffState=true; deathCooldown=0;
     startPos ={...edSpawn};
     player   =new Player(edSpawn.x,edSpawn.y);
     finish   =edFinish?{...edFinish}:null; levelCompleted=false;
-    platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[];
+    platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[]; deathParticles=[]; switchParticles=[];
     classifiersInUse={platform:[],boost:[],jump:[]};
     grounded=false; wasGrounded=[false,false,false,false]; gravity=0.5; speed=5;
 
@@ -757,6 +1152,7 @@ document.getElementById('edQuitBtn').addEventListener('click',closeEditor);
 // ── Level management ───────────────────────────────────
 function edClearState(){
     edPlatforms=[]; edJumpPads=[]; edSpawn={x:250,y:4500}; edFinish=null;
+    edSpikes=[]; edSawblades=[]; edMovingPlatforms=[]; edOnOffBlocks=[]; edOnOffSwitches=[];
     edSelected=null; edCurrentId=null; edGhostRect=null;
     document.getElementById('edLevelName').value='';
     document.getElementById('edLevelOrder').value=(allLevels.length+1)||1;
@@ -781,10 +1177,15 @@ document.getElementById('edLevelSelect').addEventListener('change',async e=>{
     if(!id){edClearState();return;}
     const lvl=allLevels.find(l=>String(l._id)===id); if(!lvl)return;
     edCurrentId=id;
-    edPlatforms=(lvl.platforms||[]).map(p=>({...p}));
-    edJumpPads =(lvl.jumpPads ||[]).map(j=>({...j}));
-    edSpawn    =lvl.startPos?{...lvl.startPos}:{x:250,y:4500};
-    edFinish   =lvl.finish?{...lvl.finish}:null;
+    edPlatforms      =(lvl.platforms      ||[]).map(p=>({...p}));
+    edJumpPads       =(lvl.jumpPads       ||[]).map(j=>({...j}));
+    edSpawn          =lvl.startPos?{...lvl.startPos}:{x:250,y:4500};
+    edFinish         =lvl.finish?{...lvl.finish}:null;
+    edSpikes         =(lvl.spikes         ||[]).map(s=>({...s}));
+    edSawblades      =(lvl.sawblades      ||[]).map(s=>({...s}));
+    edMovingPlatforms=(lvl.movingPlatforms||[]).map(p=>({...p}));
+    edOnOffBlocks    =(lvl.onOffBlocks    ||[]).map(b=>({...b}));
+    edOnOffSwitches  =(lvl.onOffSwitches  ||[]).map(s=>({...s}));
     document.getElementById('edLevelName').value =lvl.name||'';
     document.getElementById('edLevelOrder').value=lvl.order||1;
     document.getElementById('edDeleteBtn').style.display='inline-block';
@@ -798,7 +1199,7 @@ document.getElementById('edSaveBtn').addEventListener('click',async()=>{
     const name =document.getElementById('edLevelName').value.trim()||'Untitled';
     const order=parseInt(document.getElementById('edLevelOrder').value)||1;
     if(edPlatforms.length===0)return setEdStatus('Add at least one platform.');
-    const body={name,order,startPos:edSpawn,platforms:edPlatforms,jumpPads:edJumpPads,finish:edFinish};
+    const body={name,order,startPos:edSpawn,platforms:edPlatforms,jumpPads:edJumpPads,finish:edFinish,spikes:edSpikes,sawblades:edSawblades,movingPlatforms:edMovingPlatforms,onOffBlocks:edOnOffBlocks,onOffSwitches:edOnOffSwitches};
     const isNew=!edCurrentId;
     try{
         const r=await fetch(isNew?'/api/ollie/levels':`/api/ollie/levels/${edCurrentId}`,{method:isNew?'POST':'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${authToken}`},body:JSON.stringify(body)});

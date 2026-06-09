@@ -1065,19 +1065,19 @@ app.get('/api/ollie/levels', async (req, res) => {
 });
 
 app.post('/api/ollie/levels', requireAuth, requireAdmin, async (req, res) => {
-    const { name, order, startPos, platforms, jumpPads, finish } = req.body;
+    const { name, order, startPos, platforms, jumpPads, finish, spikes, sawblades, movingPlatforms, onOffBlocks, onOffSwitches } = req.body;
     if (!startPos || !platforms) return res.status(400).json({ error: 'startPos and platforms required.' });
-    const doc = { name: name || `Level ${order}`, order: order ?? 1, startPos, platforms, jumpPads: jumpPads || [], finish: finish || null, created_at: new Date().toISOString() };
+    const doc = { name: name || `Level ${order}`, order: order ?? 1, startPos, platforms, jumpPads: jumpPads || [], finish: finish || null, spikes: spikes || [], sawblades: sawblades || [], movingPlatforms: movingPlatforms || [], onOffBlocks: onOffBlocks || [], onOffSwitches: onOffSwitches || [], created_at: new Date().toISOString() };
     const result = await db.collection('ollie_levels').insertOne(doc);
     res.json({ ...doc, _id: result.insertedId });
 });
 
 app.put('/api/ollie/levels/:id', requireAuth, requireAdmin, async (req, res) => {
-    const { name, order, startPos, platforms, jumpPads, finish } = req.body;
+    const { name, order, startPos, platforms, jumpPads, finish, spikes, sawblades, movingPlatforms, onOffBlocks, onOffSwitches } = req.body;
     try {
         await db.collection('ollie_levels').updateOne(
             { _id: uid(req.params.id) },
-            { $set: { name, order, startPos, platforms, jumpPads: jumpPads || [], finish: finish || null } }
+            { $set: { name, order, startPos, platforms, jumpPads: jumpPads || [], finish: finish || null, spikes: spikes || [], sawblades: sawblades || [], movingPlatforms: movingPlatforms || [], onOffBlocks: onOffBlocks || [], onOffSwitches: onOffSwitches || [] } }
         );
         res.json({ ok: true });
     } catch { res.status(400).json({ error: 'Invalid ID.' }); }
