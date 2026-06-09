@@ -75,7 +75,16 @@ let allLevels       = [];
 async function loadLevels(){ try{ const r=await fetch('/api/ollie/levels'); allLevels=await r.json(); }catch{ allLevels=[]; } }
 async function loadProgress(){ if(!authToken){completedOrders=[];return;} try{ const r=await fetch('/api/ollie/progress',{headers:{Authorization:`Bearer ${authToken}`}}); completedOrders=(await r.json()).completedOrders||[]; }catch{ completedOrders=[]; } }
 async function markLevelComplete(order){ if(!authToken||completedOrders.includes(order))return; completedOrders.push(order); try{ await fetch(`/api/ollie/progress/${order}`,{method:'POST',headers:{Authorization:`Bearer ${authToken}`}}); }catch{} }
-async function checkAdmin(){ if(!authToken)return; try{ const r=await fetch('/api/ollie/admin-check',{headers:{Authorization:`Bearer ${authToken}`}}); isAdmin=(await r.json()).isAdmin===true; if(isAdmin)document.getElementById('editorBtn').classList.remove('hidden'); }catch{} }
+function checkAdmin(){
+    if(!authToken) return;
+    try {
+        const payload = JSON.parse(atob(authToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        if(payload.username === 'Mr.Rose'){
+            isAdmin = true;
+            document.getElementById('editorBtn').classList.remove('hidden');
+        }
+    } catch {}
+}
 
 // ── Game loop ──────────────────────────────────────────
 let animFrameId=null, gameStarted=false;
