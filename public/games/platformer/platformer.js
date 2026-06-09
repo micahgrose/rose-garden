@@ -191,7 +191,7 @@ document.addEventListener("keyup", e => {
 
 // ── Movement ───────────────────────────────────────────
 function movePlayer(){
-    if(!levelCompleted){
+    if(!levelCompleted && deathCooldown===0){
         GORIGHT: if(keys.includes("ArrowRight")||keys.includes("d")){ player.pupilPadding.x=5; player.eyePaddingR.x=15; player.eyePaddingL.x=35; if(clampRight)break GORIGHT; player.velocity.x+=speed; }
         GOLEFT:  if(keys.includes("ArrowLeft") ||keys.includes("a")){ player.pupilPadding.x=0; player.eyePaddingR.x=5;  player.eyePaddingL.x=25; if(clampLeft) break GOLEFT;  player.velocity.x-=speed; }
         if((keys.includes("ArrowUp")||keys.includes("w"))&&(grounded||wasGrounded.includes(true))){ player.velocity.y=-jumpStrength; jumped=true; }
@@ -213,6 +213,11 @@ function movePlayer(){
 }
 
 // ── Camera ─────────────────────────────────────────────
+function snapCamera(){
+    const cx=player.x+player.width/2, cy=player.y+player.height/2;
+    const w=canvas.width, h=canvas.height;
+    camera.x=cx-w/2; camera.y=Math.max(0,Math.min(world.height-h,cy-h/2));
+}
 function moveCamera(){
     const cx=player.x+player.width/2, cy=player.y+player.height/2;
     const tx=cx-camera.width/2, ty=Math.max(0,Math.min(world.height-camera.height,cy-camera.height/2));
@@ -569,6 +574,7 @@ function startLevel(levelData){
     if(backgroundRects.length===0) createBackground();
     document.getElementById('gameHUD').classList.remove('hidden');
     gameStarted=true;
+    snapCamera();
     gameLoop();
 }
 
@@ -1291,6 +1297,7 @@ function enterPlayTest(){
     document.getElementById('playTestHUD').classList.remove('hidden');
     canvas.style.cursor='';
     gameStarted=true;
+    snapCamera();
     animFrameId=requestAnimationFrame(gameLoop);
 }
 
