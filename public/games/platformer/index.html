@@ -7,44 +7,32 @@
         <link rel="icon" type="image/png" href="OllieIcon.png">
         <style>
             * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { overflow: hidden; background: rgb(214, 253, 214); font-family: 'Segoe UI', sans-serif; }
+            body { overflow: hidden; background: #0a1a0a; font-family: 'Segoe UI', sans-serif; }
 
+            /* ── Shared overlays ── */
             .overlay {
-                position: fixed;
-                inset: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: rgba(8, 8, 8, 0.92);
+                position: fixed; inset: 0;
+                display: flex; align-items: center; justify-content: center;
+                background: rgba(8,8,8,0.92);
                 z-index: 10;
             }
             .overlay.hidden { display: none; }
 
             /* ── Main menu ── */
             #menuBox {
-                text-align: center;
-                color: #f0f0f0;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 16px;
-                min-width: 280px;
+                text-align: center; color: #f0f0f0;
+                display: flex; flex-direction: column; align-items: center;
+                gap: 16px; min-width: 280px;
             }
-            #menuBox h1 { font-size: 4.5rem; font-weight: 800; letter-spacing: 6px; color: #f0f0f0; }
+            #menuBox h1 { font-size: 4.5rem; font-weight: 800; letter-spacing: 6px; }
             #menuBox .subtitle { font-size: 0.8rem; color: #555; letter-spacing: 3px; text-transform: uppercase; margin-top: -10px; }
 
             .menu-btn {
-                width: 100%;
-                padding: 12px;
-                border: none;
-                border-radius: 8px;
-                font-size: 0.95rem;
-                font-weight: 600;
-                letter-spacing: 1px;
-                cursor: pointer;
-                transition: opacity 0.15s, transform 0.1s;
+                width: 100%; padding: 12px; border: none; border-radius: 8px;
+                font-size: 0.95rem; font-weight: 600; letter-spacing: 1px;
+                cursor: pointer; transition: opacity 0.15s, transform 0.1s;
             }
-            .menu-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+            .menu-btn:hover  { opacity: 0.85; transform: translateY(-1px); }
             .menu-btn:active { transform: translateY(0); }
             #playBtn     { background: #e0e0e0; color: #111; margin-top: 8px; }
             #editorBtn   { background: #2a1a0a; color: #e09030; border: 1px solid #a06010; }
@@ -53,92 +41,101 @@
 
             /* ── Level select ── */
             #levelSelectBox {
-                color: #f0f0f0;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 20px;
-                width: 90vw;
-                max-width: 640px;
+                color: #f0f0f0; display: flex; flex-direction: column;
+                align-items: center; gap: 20px; width: 90vw; max-width: 640px;
             }
-            #levelSelectBox h2 { font-size: 1.6rem; font-weight: 800; letter-spacing: 4px; color: #e0e0e0; }
+            #levelSelectBox h2 { font-size: 1.6rem; font-weight: 800; letter-spacing: 4px; }
             #levelGrid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-                gap: 12px;
-                width: 100%;
-                max-height: 50vh;
-                overflow-y: auto;
-                padding: 4px;
+                display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+                gap: 12px; width: 100%; max-height: 50vh; overflow-y: auto; padding: 4px;
             }
             .level-btn {
-                padding: 16px 8px;
-                border-radius: 10px;
-                border: 2px solid #333;
-                background: #1a1a1a;
-                color: #f0f0f0;
-                font-size: 0.9rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: border-color 0.15s, transform 0.1s;
-                text-align: center;
+                padding: 16px 8px; border-radius: 10px; border: 2px solid #333;
+                background: #1a1a1a; color: #f0f0f0; font-size: 0.9rem; font-weight: 700;
+                cursor: pointer; transition: border-color 0.15s, transform 0.1s; text-align: center;
             }
             .level-btn:hover:not(.locked) { border-color: #e0e0e0; transform: translateY(-2px); }
             .level-btn.completed { border-color: #4caf50; color: #4caf50; }
-            .level-btn.locked { opacity: 0.3; cursor: default; }
-            .level-btn .level-num { font-size: 1.4rem; display: block; margin-bottom: 4px; }
+            .level-btn.locked    { opacity: 0.3; cursor: default; }
+            .level-btn .level-num   { font-size: 1.4rem; display: block; margin-bottom: 4px; }
             .level-btn .level-check { font-size: 0.75rem; color: #4caf50; }
-            #noLevelsMsg { color: #555; font-size: 0.9rem; }
-            #backFromSelect { background: transparent; border: 1px solid #333; color: #666; padding: 8px 24px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+            #backFromSelect {
+                background: transparent; border: 1px solid #333; color: #666;
+                padding: 8px 24px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+            }
             #backFromSelect:hover { color: #aaa; }
 
             /* ── Controls popup ── */
             #controlsBox {
-                background: #141414;
-                border: 1px solid #2a2a2a;
-                border-radius: 12px;
-                padding: 28px 36px;
-                color: #ccc;
-                min-width: 260px;
-                text-align: left;
+                background: #141414; border: 1px solid #2a2a2a; border-radius: 12px;
+                padding: 28px 36px; color: #ccc; min-width: 260px; text-align: left;
             }
             #controlsBox h2 { font-size: 1rem; letter-spacing: 2px; text-transform: uppercase; color: #f0f0f0; margin-bottom: 18px; }
             .control-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 6px 0; border-bottom: 1px solid #1e1e1e; font-size: 0.85rem; color: #888; }
             .control-row:last-of-type { border-bottom: none; }
             .keys { display: flex; gap: 4px; }
-            .key { background: #222; border: 1px solid #444; border-radius: 4px; padding: 2px 7px; font-size: 0.75rem; color: #ddd; font-family: monospace; }
-            #closeControlsBtn { margin-top: 20px; width: 100%; padding: 9px; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; color: #888; cursor: pointer; font-size: 0.85rem; transition: opacity 0.15s; }
+            .key  { background: #222; border: 1px solid #444; border-radius: 4px; padding: 2px 7px; font-size: 0.75rem; color: #ddd; font-family: monospace; }
+            #closeControlsBtn { margin-top: 20px; width: 100%; padding: 9px; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; color: #888; cursor: pointer; font-size: 0.85rem; }
             #closeControlsBtn:hover { opacity: 0.8; }
 
-            /* ── Level Editor ── */
-            #editorOverlay { flex-direction: column; background: #0a0a0a; }
-            #editorTopBar {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                padding: 8px 16px;
-                background: #111;
-                border-bottom: 1px solid #222;
-                width: 100%;
-                flex-wrap: wrap;
-                flex-shrink: 0;
+            /* ── Editor HUD (transparent container, top bar is the only solid part) ── */
+            #editorHUD {
+                position: fixed; inset: 0;
+                pointer-events: none;
+                z-index: 15;
             }
-            #editorTopBar input[type="text"],
-            #editorTopBar input[type="number"] { background: #1a1a1a; border: 1px solid #333; color: #f0f0f0; padding: 5px 10px; border-radius: 6px; font-size: 0.85rem; }
-            #editorTopBar input[type="text"] { width: 150px; }
-            #editorTopBar input[type="number"] { width: 70px; }
-            #edLevelSelect { background: #1a1a1a; border: 1px solid #333; color: #ccc; padding: 5px 8px; border-radius: 6px; font-size: 0.82rem; }
-            .ed-btn { padding: 5px 14px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #ccc; cursor: pointer; font-size: 0.82rem; font-weight: 600; transition: background 0.1s; }
-            .ed-btn:hover { background: #2a2a2a; }
-            .ed-btn.save-btn { background: #1a3a1a; border-color: #4caf50; color: #4caf50; }
-            .ed-btn.danger { background: #3a1a1a; border-color: #c0394b; color: #c0394b; }
-            #editorMain { flex: 1; display: flex; width: 100%; overflow: hidden; min-height: 0; }
-            #editorToolbar { width: 120px; background: #111; border-right: 1px solid #222; display: flex; flex-direction: column; gap: 6px; padding: 10px 8px; flex-shrink: 0; }
-            .tool-btn { padding: 8px 6px; border-radius: 6px; border: 1px solid #2a2a2a; background: #1a1a1a; color: #aaa; cursor: pointer; font-size: 0.78rem; font-weight: 600; text-align: center; transition: background 0.1s; }
-            .tool-btn:hover { background: #222; }
+            #editorHUD.hidden { display: none; }
+
+            #edTopBar {
+                pointer-events: auto;
+                display: flex; align-items: center; gap: 8px;
+                padding: 6px 12px;
+                background: rgba(10,10,10,0.93);
+                border-bottom: 1px solid #222;
+                flex-wrap: wrap;
+                backdrop-filter: blur(4px);
+            }
+            #edTopBar input[type="text"], #edTopBar input[type="number"] {
+                background: #1a1a1a; border: 1px solid #2a2a2a; color: #f0f0f0;
+                padding: 4px 8px; border-radius: 5px; font-size: 0.8rem;
+            }
+            #edTopBar input[type="text"]   { width: 130px; }
+            #edTopBar input[type="number"] { width: 55px;  }
+            #edLevelSelect { background: #1a1a1a; border: 1px solid #2a2a2a; color: #ccc; padding: 4px 6px; border-radius: 5px; font-size: 0.78rem; }
+
+            .tool-btn {
+                padding: 5px 9px; border-radius: 5px; border: 1px solid #2a2a2a;
+                background: #1a1a1a; color: #888; cursor: pointer; font-size: 0.82rem;
+                font-weight: 600; transition: background 0.1s; white-space: nowrap;
+            }
+            .tool-btn:hover { background: #252525; color: #ccc; }
             .tool-btn.active { background: #1a3a1a; border-color: #4caf50; color: #4caf50; }
-            #editorInfo { padding: 10px 8px; margin-top: auto; font-size: 0.72rem; color: #444; line-height: 1.6; }
-            #editorCanvas { flex: 1; display: block; cursor: crosshair; }
+
+            .ed-btn { padding: 4px 12px; border-radius: 5px; border: 1px solid #2a2a2a; background: #1a1a1a; color: #aaa; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+            .ed-btn:hover { background: #252525; }
+            .ed-btn.save-btn  { background: #152515; border-color: #3a8a3a; color: #4caf50; }
+            .ed-btn.play-btn  { background: #152525; border-color: #3a8aaa; color: #5bcfef; }
+            .ed-btn.danger    { background: #251515; border-color: #8a3a3a; color: #c05050; }
+            .ed-btn.quit-btn  { border-color: #333; color: #666; }
+
+            .ed-sep { width: 1px; height: 22px; background: #252525; flex-shrink: 0; }
+
+            /* ── Play test HUD ── */
+            #playTestHUD {
+                position: fixed; top: 0; left: 0; right: 0;
+                pointer-events: none;
+                z-index: 15;
+                display: flex; align-items: center; gap: 10px;
+                padding: 8px 14px;
+                background: rgba(10,10,10,0.7);
+                border-bottom: 1px solid #1a1a1a;
+                backdrop-filter: blur(4px);
+            }
+            #playTestHUD.hidden { display: none; }
+            #playTestHUD button { pointer-events: auto; }
+            #playTestLabel { color: #5bcfef; font-size: 0.8rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+
+            .hidden { display: none; }
         </style>
     </head>
     <body>
@@ -158,7 +155,7 @@
         <div id="levelSelect" class="overlay hidden">
             <div id="levelSelectBox">
                 <h2>SELECT LEVEL</h2>
-                <div id="levelGrid"><span id="noLevelsMsg">No levels yet.</span></div>
+                <div id="levelGrid"><span style="color:#555;font-size:0.9rem;">No levels yet.</span></div>
                 <button id="backFromSelect">← Back</button>
             </div>
         </div>
@@ -175,36 +172,46 @@
             </div>
         </div>
 
-        <!-- Level Editor (admin only) -->
-        <div id="editorOverlay" class="overlay hidden">
-            <div id="editorTopBar">
-                <span style="color:#e09030;font-weight:700;font-size:0.9rem;letter-spacing:2px;">EDITOR</span>
-                <input type="text" id="edLevelName" placeholder="Level name">
-                <label style="color:#666;font-size:0.8rem;">Order:</label>
+        <!-- Editor HUD (transparent, sits over game canvas) -->
+        <div id="editorHUD" class="hidden">
+            <div id="edTopBar">
+                <span style="color:#e09030;font-weight:700;font-size:0.82rem;letter-spacing:2px;">EDITOR</span>
+                <div class="ed-sep"></div>
+
+                <!-- Tools -->
+                <button class="tool-btn active" data-tool="select"   title="Select / Move [S]">✥ Select</button>
+                <button class="tool-btn"         data-tool="platform" title="Draw Platform [P]">▬ Platform</button>
+                <button class="tool-btn"         data-tool="jumppad"  title="Place JumpPad [J]">⬆ JumpPad</button>
+                <button class="tool-btn"         data-tool="spawn"    title="Set Spawn [R]">◎ Spawn</button>
+                <button class="tool-btn"         data-tool="delete"   title="Delete [X]">✕ Delete</button>
+                <div class="ed-sep"></div>
+
+                <!-- Level info -->
+                <input type="text"   id="edLevelName"  placeholder="Level name">
+                <label style="color:#444;font-size:0.75rem;">Ord:</label>
                 <input type="number" id="edLevelOrder" value="1" min="1">
                 <select id="edLevelSelect"><option value="">— New Level —</option></select>
-                <button class="ed-btn save-btn" id="edSaveBtn">Save Level</button>
-                <button class="ed-btn danger" id="edDeleteBtn" style="display:none;">Delete Level</button>
-                <button class="ed-btn" id="edClearBtn">Clear Canvas</button>
-                <button class="ed-btn" id="edQuitBtn" style="border-color:#555;color:#888;">← Menu</button>
-                <span id="edStatus" style="color:#666;font-size:0.8rem;margin-left:auto;"></span>
+                <div class="ed-sep"></div>
+
+                <!-- Actions -->
+                <button class="ed-btn save-btn" id="edSaveBtn">Save</button>
+                <button class="ed-btn danger"   id="edDeleteBtn" style="display:none;">Delete</button>
+                <button class="ed-btn"          id="edClearBtn">Clear</button>
+                <div class="ed-sep"></div>
+
+                <button class="ed-btn play-btn" id="edPlayTestBtn">▶ Play Test</button>
+                <button class="ed-btn quit-btn" id="edQuitBtn">← Menu</button>
+
+                <span id="edStatus" style="color:#555;font-size:0.75rem;margin-left:4px;"></span>
+                <span id="edCoordsInfo" style="margin-left:auto;color:#333;font-size:0.72rem;font-family:monospace;"></span>
             </div>
-            <div id="editorMain">
-                <div id="editorToolbar">
-                    <div style="color:#555;font-size:0.7rem;letter-spacing:2px;margin-bottom:4px;">TOOLS</div>
-                    <button class="tool-btn active" data-tool="select">✥ Select</button>
-                    <button class="tool-btn" data-tool="platform">▬ Platform</button>
-                    <button class="tool-btn" data-tool="jumppad">⬆ JumpPad</button>
-                    <button class="tool-btn" data-tool="spawn">◎ Spawn</button>
-                    <button class="tool-btn" data-tool="delete">✕ Delete</button>
-                    <div id="editorInfo">
-                        <div id="edCoordsInfo">—</div>
-                        <div id="edSelectedInfo" style="margin-top:6px;color:#555;font-size:0.68rem;"></div>
-                        <div style="margin-top:10px;color:#333;font-size:0.66rem;line-height:1.5;">Scroll: zoom<br>Space+drag: pan<br>Snap: 25px grid</div>
-                    </div>
-                </div>
-                <canvas id="editorCanvas"></canvas>
-            </div>
+        </div>
+
+        <!-- Play test HUD -->
+        <div id="playTestHUD" class="hidden">
+            <span id="playTestLabel">▶ Play Test</span>
+            <button class="ed-btn" id="backToEditorBtn" style="pointer-events:auto;">← Back to Editor</button>
+            <span style="color:#333;font-size:0.72rem;margin-left:4px;">Esc also works</span>
         </div>
 
         <canvas id="gameCanvas"></canvas>

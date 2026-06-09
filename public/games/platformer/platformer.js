@@ -1,1023 +1,698 @@
 const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const ctx    = canvas.getContext("2d");
 
 canvas.width  = window.innerWidth;
 canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+    if(!editorOpen && !gameStarted) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+});
 
 // ── Classes ────────────────────────────────────────────
 class Player {
     constructor(x, y){
         this.x = x; this.y = y;
         this.width = 50; this.height = 50;
-        this.velocity = {x: 0, y: 0};
-        this.stretchTarget = {width: 45, height: 60};
+        this.velocity = {x:0, y:0};
+        this.stretchTarget = {width:45, height:60};
         this.stretchSpeed  = 0.2;
         this.eyeSize       = {width:10, height:15};
-        this.eyePaddingR   = {x: 10, y: 10};
-        this.eyePaddingL   = {x: 30, y: 10};
+        this.eyePaddingR   = {x:10, y:10};
+        this.eyePaddingL   = {x:30, y:10};
         this.pupilSize     = {width:5, height:5};
-        this.pupilPadding  = {x: 2.5, y: 5};
+        this.pupilPadding  = {x:2.5, y:5};
     }
 }
-
-class Platform {
-    constructor(x, y, width, height){
-        this.x = x; this.y = y; this.width = width; this.height = height;
-    }
-}
-
+class Platform { constructor(x,y,w,h){ this.x=x; this.y=y; this.width=w; this.height=h; } }
 class JumpPad {
-    constructor(x, y, strength = 25){
-        this.x = x; this.y = y;
-        this.width = 50; this.height = 10;
-        this.strength = strength;
-        this.animate = false;
-        this.stickHeight = 20;
-        this.stickTargetHeight = 30;
-        this.targetY = y - 10;
-        this.speed = 0.9;
+    constructor(x, y, strength=25){
+        this.x=x; this.y=y; this.width=50; this.height=10; this.strength=strength;
+        this.animate=false; this.stickHeight=20; this.stickTargetHeight=30;
+        this.targetY=y-10; this.speed=0.9;
     }
 }
 
 class PlatformParticle {
-    constructor(classifier){
-        this.x = player.x + (Math.random()*(player.height + 15) - 7.5);
-        this.y = player.y + player.height;
-        this.size = Math.random()*5+5;
-        this.direction = (this.x > player.x + player.width/2) ? 1 : -1;
-        this.classifier = classifier;
-        this.lifeSpan = Math.random()*300 + 200;
-        this.dead = false;
-    }
+    constructor(c){ this.x=player.x+(Math.random()*(player.height+15)-7.5); this.y=player.y+player.height; this.size=Math.random()*5+5; this.direction=(this.x>player.x+player.width/2)?1:-1; this.classifier=c; this.lifeSpan=Math.random()*300+200; this.dead=false; }
 }
-
 class BoostParticle {
-    constructor(classifier){
-        this.x = player.x + player.width + (Math.random()*10)-5;
-        this.y = player.y + player.height + (Math.random()*10)-5;
-        this.size = Math.random() * 5 + 5;
-        this.speed = Math.random() *2 + 1;
-        this.direction = Math.sign(player.velocity.x);
-        this.classifier = classifier;
-        this.lifeSpan = Math.random()*1500+500;
-        this.dead = false;
-        this.rising = true;
-    }
+    constructor(c){ this.x=player.x+player.width+(Math.random()*10)-5; this.y=player.y+player.height+(Math.random()*10)-5; this.size=Math.random()*5+5; this.speed=Math.random()*2+1; this.direction=Math.sign(player.velocity.x); this.classifier=c; this.lifeSpan=Math.random()*1500+500; this.dead=false; this.rising=true; }
 }
-
 class JumpParticle {
-    constructor(classifier){
-        this.x = player.x + Math.random()*player.width;
-        this.y = player.y + player.height;
-        this.size = Math.random()* 5 + 5;
-        this.velocity = {x: Math.random()*3, y: (Math.random()*-7.5) - 12.5};
-        this.gravity = 0.5;
-        this.direction = (this.x > player.x + player.width/2) ? 1 : -1;
-        this.classifier = classifier;
-        this.lifeSpan = Math.random()*900 + 500;
-        this.dead = false;
-    }
+    constructor(c){ this.x=player.x+Math.random()*player.width; this.y=player.y+player.height; this.size=Math.random()*5+5; this.velocity={x:Math.random()*3,y:(Math.random()*-7.5)-12.5}; this.gravity=0.5; this.direction=(this.x>player.x+player.width/2)?1:-1; this.classifier=c; this.lifeSpan=Math.random()*900+500; this.dead=false; }
 }
 
-// ── Game variables ─────────────────────────────────────
-let startPos  = null;
-let player    = null;
-let platforms = [];
-let jumpPads  = [];
+// ── Game state ─────────────────────────────────────────
+let startPos  = null, player = null, platforms = [], jumpPads = [];
 let currentLevelOrder = null;
 
-let gravity       = 0.5;
-const gravityMult = 1.065;
-const gravityFloor = 5;
+let gravity = 0.5;
+const gravityMult=1.065, gravityFloor=5;
+let speed=5;
+const jumpStrength=15, friction=0.85;
+const maxVelocity={x:10,y:30};
 
-let speed          = 5;
-const jumpStrength = 15;
-const maxVelocity  = {x: 10, y: 30};
-const friction     = 0.85;
+let grounded=false, wasGrounded=[false,false,false,false];
+let clampLeft=false, clampRight=false, ceiling=false, jumped=false;
 
-let grounded    = false;
-let wasGrounded = [false, false, false, false];
-let clampLeft   = false;
-let clampRight  = false;
-let ceiling     = false;
-let jumped      = false;
-
-const world      = {width:5000, height:5000};
-const camera     = {x:0, y:0, width:canvas.width, height:canvas.height};
+const world   = {width:5000, height:5000};
+const camera  = {x:0, y:0, width:canvas.width, height:canvas.height};
 const cameraSpeed = 0.075;
 
-let platformParticles       = [];
-const platformParticleCount = 50;
-let boostParticles          = [];
-const boostParticleCount    = 50;
-let boosting                = false;
-const boostResetTime        = 500;
-let boostReady              = true;
-let doBoostParticle         = false;
-let jumpParticles           = [];
-const jumpParticleCount     = 20;
-let jumpHit                 = false;
-let classifiersInUse        = { platform: [], boost: [], jump: [] };
+let platformParticles=[], boostParticles=[], jumpParticles=[];
+const platformParticleCount=50, boostParticleCount=50, jumpParticleCount=20;
+let boosting=false, boostReady=true, doBoostParticle=false;
+const boostResetTime=500;
+let jumpHit=false;
+let classifiersInUse={platform:[],boost:[],jump:[]};
 
-// ── Progress / Auth ────────────────────────────────────
-let authToken        = localStorage.getItem('rg_token') || null;
-let isAdmin          = false;
-let completedOrders  = [];
-let allLevels        = [];
+// ── Auth / Progress ────────────────────────────────────
+let authToken       = localStorage.getItem('rg_token') || null;
+let isAdmin         = false;
+let completedOrders = [];
+let allLevels       = [];
 
-async function loadLevels() {
-    try {
-        const r = await fetch('/api/ollie/levels');
-        allLevels = await r.json();
-    } catch { allLevels = []; }
-}
-
-async function loadProgress() {
-    if (!authToken) { completedOrders = []; return; }
-    try {
-        const r = await fetch('/api/ollie/progress', { headers: { Authorization: `Bearer ${authToken}` } });
-        const d = await r.json();
-        completedOrders = d.completedOrders || [];
-    } catch { completedOrders = []; }
-}
-
-async function markLevelComplete(order) {
-    if (!authToken) return;
-    completedOrders.push(order);
-    try {
-        await fetch(`/api/ollie/progress/${order}`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${authToken}` }
-        });
-    } catch {}
-}
-
-async function checkAdmin() {
-    if (!authToken) return;
-    try {
-        const r = await fetch('/api/ollie/admin-check', { headers: { Authorization: `Bearer ${authToken}` } });
-        const d = await r.json();
-        isAdmin = d.isAdmin === true;
-        if (isAdmin) document.getElementById('editorBtn').classList.remove('hidden');
-    } catch {}
-}
+async function loadLevels(){ try{ const r=await fetch('/api/ollie/levels'); allLevels=await r.json(); }catch{ allLevels=[]; } }
+async function loadProgress(){ if(!authToken){completedOrders=[];return;} try{ const r=await fetch('/api/ollie/progress',{headers:{Authorization:`Bearer ${authToken}`}}); completedOrders=(await r.json()).completedOrders||[]; }catch{ completedOrders=[]; } }
+async function markLevelComplete(order){ if(!authToken||completedOrders.includes(order))return; completedOrders.push(order); try{ await fetch(`/api/ollie/progress/${order}`,{method:'POST',headers:{Authorization:`Bearer ${authToken}`}}); }catch{} }
+async function checkAdmin(){ if(!authToken)return; try{ const r=await fetch('/api/ollie/admin-check',{headers:{Authorization:`Bearer ${authToken}`}}); isAdmin=(await r.json()).isAdmin===true; if(isAdmin)document.getElementById('editorBtn').classList.remove('hidden'); }catch{} }
 
 // ── Game loop ──────────────────────────────────────────
+let animFrameId=null, gameStarted=false;
+
 function gameLoop(){
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    movePlayer();
-    moveCamera();
-
-    wasGrounded[3] = wasGrounded[2];
-    wasGrounded[2] = wasGrounded[1];
-    wasGrounded[1] = wasGrounded[0];
-    wasGrounded[0] = grounded;
-
-    checkJumpPad();
-    checkCollision();
-    updateStretch();
-    updateEyePos();
-
-    if(grounded){ resetGravity(); jumped = false; }
-    if(ceiling){ player.velocity.y = 0; }
-
-    drawBackground();
-    handleParticles();
-    drawPlayer();
-    drawPlatforms();
-    drawJumpPads();
-
-    animFrameId = requestAnimationFrame(gameLoop);
+    camera.width=canvas.width; camera.height=canvas.height;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    movePlayer(); moveCamera();
+    wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
+    checkJumpPad(); checkCollision(); updateStretch(); updateEyePos();
+    if(grounded){resetGravity(); jumped=false;}
+    if(ceiling){player.velocity.y=0;}
+    drawBackground(); handleParticles(); drawPlayer(); drawPlatforms(); drawJumpPads();
+    animFrameId=requestAnimationFrame(gameLoop);
 }
 
 // ── Input ──────────────────────────────────────────────
-let keys = [];
-document.addEventListener("keydown", e => { if(!keys.includes(e.key)) keys.push(e.key); });
-document.addEventListener("keyup",   e => { keys = keys.filter(k => k !== e.key); });
+let keys=[];
+document.addEventListener("keydown", e => {
+    if(!keys.includes(e.key)) keys.push(e.key);
+
+    // Editor space pan
+    if(e.code==='Space' && editorOpen && edMode==='edit'){ e.preventDefault(); edSpaceHeld=true; canvas.style.cursor='grab'; }
+
+    // Delete selected in editor
+    if(e.key==='Delete' && editorOpen && edMode==='edit'){
+        if(edSelected){ edDeleteSelected(); }
+    }
+
+    // Escape
+    if(e.key==='Escape'){
+        if(editorOpen && edMode==='playtest'){ exitPlayTest(); return; }
+        if(gameStarted && !editorOpen){ cancelAnimationFrame(animFrameId); animFrameId=null; menu.classList.remove('hidden'); }
+    }
+
+    // Editor tool hotkeys
+    if(editorOpen && edMode==='edit'){
+        if(e.key==='s'||e.key==='S') setTool('select');
+        if(e.key==='p'||e.key==='P') setTool('platform');
+        if(e.key==='j'||e.key==='J') setTool('jumppad');
+        if(e.key==='r'||e.key==='R') setTool('spawn');
+        if(e.key==='x'||e.key==='X') setTool('delete');
+    }
+});
+document.addEventListener("keyup", e => {
+    keys=keys.filter(k=>k!==e.key);
+    if(e.code==='Space'){ edSpaceHeld=false; if(editorOpen&&edMode==='edit') canvas.style.cursor='crosshair'; }
+});
 
 // ── Movement ───────────────────────────────────────────
 function movePlayer(){
-    GORIGHT: if(keys.includes("ArrowRight") || keys.includes("d")){
-        player.pupilPadding.x = 5;
-        player.eyePaddingR.x  = 15;
-        player.eyePaddingL.x  = 35;
-        if(clampRight) break GORIGHT;
-        player.velocity.x += speed;
+    GORIGHT: if(keys.includes("ArrowRight")||keys.includes("d")){ player.pupilPadding.x=5; player.eyePaddingR.x=15; player.eyePaddingL.x=35; if(clampRight)break GORIGHT; player.velocity.x+=speed; }
+    GOLEFT:  if(keys.includes("ArrowLeft") ||keys.includes("a")){ player.pupilPadding.x=0; player.eyePaddingR.x=5;  player.eyePaddingL.x=25; if(clampLeft) break GOLEFT;  player.velocity.x-=speed; }
+    if((keys.includes("ArrowUp")||keys.includes("w"))&&(grounded||wasGrounded.includes(true))){ player.velocity.y=-jumpStrength; jumped=true; }
+    else if(!keys.includes("ArrowUp")&&!keys.includes("w")&&!grounded&&player.velocity.y<0&&jumped){ player.velocity.y*=0.9; }
+    if(!grounded){ player.velocity.y+=gravity; if(gravity<gravityFloor){gravity*=gravityMult;}else{gravity=gravityFloor;} }
+    if(player.velocity.y>maxVelocity.y)  player.velocity.y=maxVelocity.y;
+    if(player.velocity.x>maxVelocity.x)  player.velocity.x=maxVelocity.x;
+    if(player.velocity.x<-maxVelocity.x) player.velocity.x=-maxVelocity.x;
+    if(!boosting) player.velocity.x*=friction;
+    if(keys.includes(" ")&&(keys.includes("ArrowRight")||keys.includes("d")||keys.includes("ArrowLeft")||keys.includes("a"))&&!boosting&&boostReady){
+        if(clampRight&&(keys.includes("ArrowRight")||keys.includes("d")))return;
+        if(clampLeft &&(keys.includes("ArrowLeft") ||keys.includes("a")))return;
+        maxVelocity.x=30; player.velocity.x*=1.75; boosting=true; boostReady=false; doBoostParticle=true;
+        setTimeout(()=>{ maxVelocity.x=10; boosting=false; setTimeout(()=>{boostReady=true;},boostResetTime); },150);
     }
-    GOLEFT: if(keys.includes("ArrowLeft") || keys.includes("a")){
-        player.pupilPadding.x = 0;
-        player.eyePaddingR.x  = 5;
-        player.eyePaddingL.x  = 25;
-        if(clampLeft) break GOLEFT;
-        player.velocity.x -= speed;
-    }
-
-    if((keys.includes("ArrowUp") || keys.includes("w")) && (grounded || wasGrounded.includes(true))){
-        player.velocity.y = -jumpStrength;
-        jumped = true;
-    } else if(!keys.includes("ArrowUp") && !keys.includes("w") && !grounded && player.velocity.y < 0 && jumped){
-        player.velocity.y *= 0.9;
-    }
-
-    if(!grounded){
-        player.velocity.y += gravity;
-        if(gravity < gravityFloor){ gravity *= gravityMult; } else { gravity = gravityFloor; }
-    }
-
-    if(player.velocity.y > maxVelocity.y)  player.velocity.y = maxVelocity.y;
-    if(player.velocity.x > maxVelocity.x)  player.velocity.x = maxVelocity.x;
-    if(player.velocity.x < -maxVelocity.x) player.velocity.x = -maxVelocity.x;
-
-    if(!boosting) player.velocity.x *= friction;
-
-    if(keys.includes(" ") && (keys.includes("ArrowRight") || keys.includes("d") || keys.includes("ArrowLeft") || keys.includes("a")) && !boosting && boostReady){
-        if(clampRight && (keys.includes("ArrowRight") || keys.includes("d"))) return;
-        if(clampLeft  && (keys.includes("ArrowLeft")  || keys.includes("a"))) return;
-        maxVelocity.x = 30;
-        player.velocity.x *= 1.75;
-        boosting = true;
-        boostReady = false;
-        doBoostParticle = true;
-        setTimeout(() => {
-            maxVelocity.x = 10;
-            boosting = false;
-            setTimeout(() => { boostReady = true; }, boostResetTime);
-        }, 150);
-    }
-
-    player.x += player.velocity.x;
-    player.y += player.velocity.y;
-
-    if(player.y > world.height + 500){
-        player.x = startPos.x;
-        player.y = startPos.y;
-        player.velocity = {x:0, y:0};
-        gravity = 0.5;
-        speed   = 5;
-    }
+    player.x+=player.velocity.x; player.y+=player.velocity.y;
+    if(player.y>world.height+500){ player.x=startPos.x; player.y=startPos.y; player.velocity={x:0,y:0}; gravity=0.5; speed=5; }
 }
 
 // ── Camera ─────────────────────────────────────────────
 function moveCamera(){
-    const cx = player.x + player.width  / 2;
-    const cy = player.y + player.height / 2;
-    const tx = cx - camera.width  / 2;
-    const ty = Math.max(0, Math.min(world.height - camera.height, cy - camera.height / 2));
-    camera.x += (tx - camera.x) * cameraSpeed;
-    camera.y += (ty - camera.y) * cameraSpeed;
+    const cx=player.x+player.width/2, cy=player.y+player.height/2;
+    const tx=cx-camera.width/2, ty=Math.max(0,Math.min(world.height-camera.height,cy-camera.height/2));
+    camera.x+=(tx-camera.x)*cameraSpeed; camera.y+=(ty-camera.y)*cameraSpeed;
 }
 
 // ── Collision ──────────────────────────────────────────
 function checkCollision(){
-    grounded = false; clampLeft = false; clampRight = false; ceiling = false;
-
-    for(let platform of platforms){
-        if(player.x + player.width <= platform.x || player.x >= platform.x + platform.width) continue;
-        if(player.y + player.height <= platform.y || player.y >= platform.y + platform.height) continue;
-
-        const overlapX = Math.min(player.x + player.width - platform.x, platform.x + platform.width - player.x);
-        const overlapY = Math.min(player.y + player.height - platform.y, platform.y + platform.height - player.y);
-
-        if(overlapX > overlapY){
-            if(player.y + player.height/2 < platform.y + platform.height/2){
-                player.y -= overlapY; grounded = true;
-            } else {
-                player.y += overlapY; ceiling = true;
-            }
-        } else {
-            if(player.x + player.width/2 < platform.x + platform.width/2){
-                player.x -= overlapX; clampRight = true;
-            } else {
-                player.x += overlapX; clampLeft = true;
-            }
+    grounded=false; clampLeft=false; clampRight=false; ceiling=false;
+    for(let p of platforms){
+        if(player.x+player.width<=p.x||player.x>=p.x+p.width)continue;
+        if(player.y+player.height<=p.y||player.y>=p.y+p.height)continue;
+        const ox=Math.min(player.x+player.width-p.x, p.x+p.width-player.x);
+        const oy=Math.min(player.y+player.height-p.y, p.y+p.height-player.y);
+        if(ox>oy){
+            if(player.y+player.height/2<p.y+p.height/2){player.y-=oy; grounded=true;}
+            else{player.y+=oy; ceiling=true;}
+        }else{
+            if(player.x+player.width/2<p.x+p.width/2){player.x-=ox; clampRight=true;}
+            else{player.x+=ox; clampLeft=true;}
         }
     }
 }
 
 function checkJumpPad(){
     for(let pad of jumpPads){
-        if(player.y + player.height >= pad.y && player.y < pad.y + pad.height){
-            if(player.x + player.width > pad.x && player.x < pad.x + pad.width){
-                resetGravity();
-                jumped = false;
-                pad.animate = true;
-                player.velocity.y = -pad.strength;
-                player.y = pad.y - player.height;
-                jumpHit = true;
-                return true;
-            }
+        if(player.y+player.height>=pad.y&&player.y<pad.y+pad.height&&player.x+player.width>pad.x&&player.x<pad.x+pad.width){
+            resetGravity(); jumped=false; pad.animate=true; player.velocity.y=-pad.strength; player.y=pad.y-player.height; jumpHit=true; return true;
         }
     }
     return false;
 }
 
 // ── Drawing ────────────────────────────────────────────
-const backgroundRects = [];
-function createBackground(){
-    backgroundRects.length = 0;
-    for(let i = 0; i < 50; i++){
-        let size = Math.random() * 300 + 200;
-        backgroundRects.push({ x: Math.random()*world.width, y: Math.random()*world.height, width: size, height: size });
-    }
-}
+const backgroundRects=[];
+function createBackground(){ backgroundRects.length=0; for(let i=0;i<50;i++){const s=Math.random()*300+200; backgroundRects.push({x:Math.random()*world.width,y:Math.random()*world.height,width:s,height:s});} }
 
 function drawBackground(){
-    ctx.fillStyle = "rgb(130, 230, 130)";
-    ctx.globalAlpha = 0.4;
-    for(let rect of backgroundRects){
-        let sx = rect.x - camera.x*0.5;
-        let sy = rect.y - camera.y*0.5;
-        ctx.save();
-        ctx.translate(sx + rect.width/2, sy + rect.height/2);
-        ctx.rotate(Math.PI / 4);
-        ctx.fillRect(-rect.width/2, -rect.height/2, rect.width, rect.height);
-        ctx.restore();
-    }
-    ctx.globalAlpha = 1;
+    ctx.fillStyle="rgb(130,230,130)"; ctx.globalAlpha=0.4;
+    for(let r of backgroundRects){ const sx=r.x-camera.x*0.5,sy=r.y-camera.y*0.5; ctx.save(); ctx.translate(sx+r.width/2,sy+r.height/2); ctx.rotate(Math.PI/4); ctx.fillRect(-r.width/2,-r.height/2,r.width,r.height); ctx.restore(); }
+    ctx.globalAlpha=1;
 }
 
 function drawPlayer(){
-    ctx.fillStyle  = "blue";
-    ctx.strokeStyle = "rgb(50, 50, 200)";
-    ctx.lineWidth  = 1;
-    ctx.fillRect(player.x-camera.x, player.y-camera.y, player.width, player.height);
-    ctx.strokeRect(player.x-camera.x, player.y-camera.y, player.width, player.height);
-    ctx.fillStyle = "white";
-    ctx.fillRect(player.x+player.eyePaddingR.x-camera.x, player.y+player.eyePaddingR.y-camera.y, player.eyeSize.width, player.eyeSize.height);
-    ctx.fillRect(player.x+player.eyePaddingL.x-camera.x, player.y+player.eyePaddingL.y-camera.y, player.eyeSize.width, player.eyeSize.height);
-    ctx.fillStyle = "black";
-    ctx.fillRect(player.x+player.eyePaddingR.x+player.pupilPadding.x-camera.x, player.y+player.eyePaddingR.y+player.pupilPadding.y-camera.y, player.pupilSize.width, player.pupilSize.height);
-    ctx.fillRect(player.x+player.eyePaddingL.x+player.pupilPadding.x-camera.x, player.y+player.eyePaddingL.y+player.pupilPadding.y-camera.y, player.pupilSize.width, player.pupilSize.height);
+    ctx.fillStyle="blue"; ctx.strokeStyle="rgb(50,50,200)"; ctx.lineWidth=1;
+    ctx.fillRect(player.x-camera.x,player.y-camera.y,player.width,player.height);
+    ctx.strokeRect(player.x-camera.x,player.y-camera.y,player.width,player.height);
+    ctx.fillStyle="white";
+    ctx.fillRect(player.x+player.eyePaddingR.x-camera.x,player.y+player.eyePaddingR.y-camera.y,player.eyeSize.width,player.eyeSize.height);
+    ctx.fillRect(player.x+player.eyePaddingL.x-camera.x,player.y+player.eyePaddingL.y-camera.y,player.eyeSize.width,player.eyeSize.height);
+    ctx.fillStyle="black";
+    ctx.fillRect(player.x+player.eyePaddingR.x+player.pupilPadding.x-camera.x,player.y+player.eyePaddingR.y+player.pupilPadding.y-camera.y,player.pupilSize.width,player.pupilSize.height);
+    ctx.fillRect(player.x+player.eyePaddingL.x+player.pupilPadding.x-camera.x,player.y+player.eyePaddingL.y+player.pupilPadding.y-camera.y,player.pupilSize.width,player.pupilSize.height);
 }
 
 function updateStretch(){
-    if(!grounded && !wasGrounded[0] && !wasGrounded[1]){
-        player.width  += (player.stretchTarget.width  - player.width)  * player.stretchSpeed;
-        player.height += (player.stretchTarget.height - player.height) * player.stretchSpeed;
-    } else {
-        const bottom = player.y + player.height;
-        player.width  += (50 - player.width)  * player.stretchSpeed;
-        player.height += (50 - player.height) * player.stretchSpeed;
-        player.y = bottom - player.height;
-        if(Math.abs(player.width  - 50) < 1) player.width  = 50;
-        if(Math.abs(player.height - 50) < 1) player.height = 50;
-    }
+    if(!grounded&&!wasGrounded[0]&&!wasGrounded[1]){ player.width+=(player.stretchTarget.width-player.width)*player.stretchSpeed; player.height+=(player.stretchTarget.height-player.height)*player.stretchSpeed; }
+    else{ const b=player.y+player.height; player.width+=(50-player.width)*player.stretchSpeed; player.height+=(50-player.height)*player.stretchSpeed; player.y=b-player.height; if(Math.abs(player.width-50)<1)player.width=50; if(Math.abs(player.height-50)<1)player.height=50; }
 }
-
-function updateEyePos(){
-    let target = player.velocity.y > 0 ? 10 : player.velocity.y < 0 ? 0 : 5;
-    player.pupilPadding.y += (target - player.pupilPadding.y) * 0.1;
-}
+function updateEyePos(){ const t=player.velocity.y>0?10:player.velocity.y<0?0:5; player.pupilPadding.y+=(t-player.pupilPadding.y)*0.1; }
 
 function drawPlatforms(){
-    ctx.fillStyle  = "gray";
-    ctx.strokeStyle = "gray";
-    ctx.lineWidth  = 2;
-    for(let p of platforms){
-        ctx.strokeRect(p.x-camera.x, p.y-camera.y, p.width, p.height);
-        ctx.fillRect(p.x-camera.x,   p.y-camera.y, p.width, p.height);
-    }
+    ctx.fillStyle="gray"; ctx.strokeStyle="gray"; ctx.lineWidth=2;
+    for(let p of platforms){ ctx.strokeRect(p.x-camera.x,p.y-camera.y,p.width,p.height); ctx.fillRect(p.x-camera.x,p.y-camera.y,p.width,p.height); }
 }
 
 function drawJumpPads(){
-    ctx.fillStyle  = "rgb(255, 246, 113)";
-    ctx.strokeStyle = "rgb(57, 57, 57)";
-    ctx.lineWidth  = 2;
+    ctx.fillStyle="rgb(255,246,113)"; ctx.strokeStyle="rgb(57,57,57)"; ctx.lineWidth=2;
     for(let pad of jumpPads){
-        if(pad.animate){
-            pad.y += (pad.targetY - pad.y) * pad.speed;
-            pad.stickHeight += (pad.stickTargetHeight - pad.stickHeight) * pad.speed;
-            if(Math.abs(pad.y - pad.targetY) < 1){ pad.animate = false; pad.y = pad.targetY; pad.stickHeight = pad.stickTargetHeight; }
-        } else {
-            pad.speed = 0.5;
-            pad.y += ((pad.targetY + 10) - pad.y) * pad.speed;
-            pad.stickHeight += (20 - pad.stickHeight) * pad.speed;
-            if(Math.abs(pad.y - pad.targetY) < 1){ pad.y = pad.targetY + 10; pad.stickHeight = 20; pad.speed = 0.9; }
-        }
-        ctx.beginPath(); ctx.roundRect(pad.x-camera.x, pad.y-camera.y, pad.width, pad.height, [10]); ctx.stroke();
-        ctx.strokeRect(pad.x+20-camera.x, pad.y-camera.y, 10, pad.stickHeight);
-        ctx.beginPath(); ctx.roundRect(pad.x-camera.x, pad.y-camera.y, pad.width, pad.height, [10]); ctx.fill();
-        ctx.fillRect(pad.x+20-camera.x, pad.y-camera.y, 10, pad.stickHeight);
+        if(pad.animate){ pad.y+=(pad.targetY-pad.y)*pad.speed; pad.stickHeight+=(pad.stickTargetHeight-pad.stickHeight)*pad.speed; if(Math.abs(pad.y-pad.targetY)<1){pad.animate=false;pad.y=pad.targetY;pad.stickHeight=pad.stickTargetHeight;} }
+        else{ pad.speed=0.5; pad.y+=((pad.targetY+10)-pad.y)*pad.speed; pad.stickHeight+=(20-pad.stickHeight)*pad.speed; if(Math.abs(pad.y-pad.targetY)<1){pad.y=pad.targetY+10;pad.stickHeight=20;pad.speed=0.9;} }
+        ctx.beginPath(); ctx.roundRect(pad.x-camera.x,pad.y-camera.y,pad.width,pad.height,[10]); ctx.stroke();
+        ctx.strokeRect(pad.x+20-camera.x,pad.y-camera.y,10,pad.stickHeight);
+        ctx.beginPath(); ctx.roundRect(pad.x-camera.x,pad.y-camera.y,pad.width,pad.height,[10]); ctx.fill();
+        ctx.fillRect(pad.x+20-camera.x,pad.y-camera.y,10,pad.stickHeight);
     }
 }
 
 // ── Particles ──────────────────────────────────────────
 function handleParticles(){
-    if(!wasGrounded.includes(true) && grounded)
-        makeParticles(classifiersInUse.platform, platformParticles, PlatformParticle, platformParticleCount);
-    if(doBoostParticle){ makeParticles(classifiersInUse.boost, boostParticles, BoostParticle, boostParticleCount); doBoostParticle = false; }
-    if(jumpHit){ makeParticles(classifiersInUse.jump, jumpParticles, JumpParticle, jumpParticleCount); jumpHit = false; }
-
-    platformParticles = platformParticles.filter(p => !p.dead);
-    boostParticles    = boostParticles.filter(p => !p.dead);
-    jumpParticles     = jumpParticles.filter(p => !p.dead);
-
-    for(let p of platformParticles){ p.x += (Math.random()*1)*p.direction; p.y -= Math.random()*0.2 + 0.1; }
-    for(let p of boostParticles){ p.x -= p.speed * p.direction; p.y += p.rising ? -Math.random()*0.8 : Math.random()*0.25; }
-    for(let p of jumpParticles){ p.velocity.y += p.gravity; p.x += p.velocity.x * p.direction; p.y += p.velocity.y; }
-
-    ctx.fillStyle = 'gray'; ctx.strokeStyle = 'darkgray'; ctx.lineWidth = 1;
-    for(let p of platformParticles){ ctx.strokeRect(p.x-camera.x, p.y-camera.y, p.size, p.size); ctx.fillRect(p.x-camera.x, p.y-camera.y, p.size, p.size); }
-
-    ctx.strokeStyle = "rgb(210,210,210)"; ctx.fillStyle = "rgb(245,245,245)"; ctx.lineWidth = 2;
-    for(let p of boostParticles){ ctx.strokeRect(p.x-camera.x, p.y-camera.y, p.size, p.size); ctx.fillRect(p.x-camera.x, p.y-camera.y, p.size, p.size); }
-
-    ctx.fillStyle = 'rgb(230,221,88)';
-    for(let p of jumpParticles){ ctx.fillRect(p.x-camera.x, p.y-camera.y, p.size, p.size); }
+    if(!wasGrounded.includes(true)&&grounded) makeParticles(classifiersInUse.platform,platformParticles,PlatformParticle,platformParticleCount);
+    if(doBoostParticle){makeParticles(classifiersInUse.boost,boostParticles,BoostParticle,boostParticleCount);doBoostParticle=false;}
+    if(jumpHit){makeParticles(classifiersInUse.jump,jumpParticles,JumpParticle,jumpParticleCount);jumpHit=false;}
+    platformParticles=platformParticles.filter(p=>!p.dead);
+    boostParticles   =boostParticles.filter(p=>!p.dead);
+    jumpParticles    =jumpParticles.filter(p=>!p.dead);
+    for(let p of platformParticles){p.x+=(Math.random()*1)*p.direction; p.y-=Math.random()*0.2+0.1;}
+    for(let p of boostParticles){p.x-=p.speed*p.direction; p.y+=p.rising?-Math.random()*0.8:Math.random()*0.25;}
+    for(let p of jumpParticles){p.velocity.y+=p.gravity; p.x+=p.velocity.x*p.direction; p.y+=p.velocity.y;}
+    ctx.fillStyle='gray'; ctx.strokeStyle='darkgray'; ctx.lineWidth=1;
+    for(let p of platformParticles){ctx.strokeRect(p.x-camera.x,p.y-camera.y,p.size,p.size);ctx.fillRect(p.x-camera.x,p.y-camera.y,p.size,p.size);}
+    ctx.strokeStyle="rgb(210,210,210)"; ctx.fillStyle="rgb(245,245,245)"; ctx.lineWidth=2;
+    for(let p of boostParticles){ctx.strokeRect(p.x-camera.x,p.y-camera.y,p.size,p.size);ctx.fillRect(p.x-camera.x,p.y-camera.y,p.size,p.size);}
+    ctx.fillStyle='rgb(230,221,88)';
+    for(let p of jumpParticles){ctx.fillRect(p.x-camera.x,p.y-camera.y,p.size,p.size);}
 }
 
-function makeParticles(classifierID, typeList, type, count){
-    let classifier = 1;
-    while(classifierID.includes(classifier)) classifier++;
-    classifierID.push(classifier);
-    for(let i = 0; i < count; i++) typeList.push(new type(classifier));
-    let newParticles = typeList.filter(p => p.classifier === classifier);
-    for(let p of newParticles){
-        setTimeout(() => {
-            if(type === BoostParticle) p.rising = false;
-            setTimeout(() => { p.dead = true; }, p.lifeSpan/2);
-        }, p.lifeSpan/2);
-    }
-    setTimeout(() => { classifierID.splice(classifierID.indexOf(classifier), 1); }, 5000);
+function makeParticles(cids,list,Type,count){
+    let c=1; while(cids.includes(c))c++; cids.push(c);
+    for(let i=0;i<count;i++)list.push(new Type(c));
+    const batch=list.filter(p=>p.classifier===c);
+    for(let p of batch){ setTimeout(()=>{if(Type===BoostParticle)p.rising=false; setTimeout(()=>{p.dead=true;},p.lifeSpan/2);},p.lifeSpan/2); }
+    setTimeout(()=>{const i=cids.indexOf(c);if(i>-1)cids.splice(i,1);},5000);
 }
 
 // ── Helpers ────────────────────────────────────────────
-function resetGravity(){ gravity = 0.5; player.velocity.y = 0; }
+function resetGravity(){ gravity=0.5; player.velocity.y=0; }
 
 function startLevel(levelData){
-    currentLevelOrder = levelData.order;
-    startPos  = levelData.startPos;
-    player    = new Player(levelData.startPos.x, levelData.startPos.y);
-    platforms = levelData.platforms.map(p => new Platform(p.x, p.y, p.width, p.height));
-    jumpPads  = (levelData.jumpPads || []).map(j => new JumpPad(j.x, j.y, j.strength));
-    platformParticles = []; boostParticles = []; jumpParticles = [];
-    classifiersInUse  = { platform: [], boost: [], jump: [] };
-    grounded = false; wasGrounded = [false,false,false,false];
-    createBackground();
-    if(!gameStarted){ gameStarted = true; }
+    currentLevelOrder=levelData.order;
+    startPos =levelData.startPos;
+    player   =new Player(levelData.startPos.x, levelData.startPos.y);
+    platforms=(levelData.platforms||[]).map(p=>new Platform(p.x,p.y,p.width,p.height));
+    jumpPads =(levelData.jumpPads ||[]).map(j=>new JumpPad(j.x,j.y,j.strength));
+    platformParticles=[]; boostParticles=[]; jumpParticles=[];
+    classifiersInUse={platform:[],boost:[],jump:[]};
+    grounded=false; wasGrounded=[false,false,false,false];
+    if(backgroundRects.length===0) createBackground();
+    gameStarted=true;
     gameLoop();
 }
 
-// ── Level select UI ────────────────────────────────────
+function onLevelComplete(){ markLevelComplete(currentLevelOrder); }
+
+// ── Level select ───────────────────────────────────────
 function buildLevelGrid(){
-    const grid = document.getElementById('levelGrid');
-    grid.innerHTML = '';
-    if(allLevels.length === 0){
-        grid.innerHTML = '<span id="noLevelsMsg" style="color:#555;font-size:0.9rem;">No levels yet.</span>';
-        return;
-    }
-    const maxUnlocked = completedOrders.length === 0 ? 1 : Math.max(...completedOrders) + 1;
+    const grid=document.getElementById('levelGrid');
+    grid.innerHTML='';
+    if(allLevels.length===0){ grid.innerHTML='<span style="color:#555;font-size:0.9rem;">No levels yet.</span>'; return; }
+    const maxUnlocked=completedOrders.length===0?1:Math.max(...completedOrders)+1;
     for(const lvl of allLevels){
-        const btn = document.createElement('button');
-        btn.className = 'level-btn';
-        const done    = completedOrders.includes(lvl.order);
-        const unlocked = lvl.order <= maxUnlocked;
+        const btn=document.createElement('button'); btn.className='level-btn';
+        const done=completedOrders.includes(lvl.order), unlocked=lvl.order<=maxUnlocked;
         if(done)      btn.classList.add('completed');
         if(!unlocked) btn.classList.add('locked');
-        btn.innerHTML = `<span class="level-num">${lvl.order}</span>${lvl.name || ''}${done ? '<span class="level-check">✓</span>' : ''}`;
-        if(unlocked){
-            btn.addEventListener('click', () => {
-                document.getElementById('levelSelect').classList.add('hidden');
-                cancelAnimationFrame(animFrameId);
-                animFrameId = null;
-                gameStarted = false;
-                startLevel(lvl);
-            });
-        }
+        btn.innerHTML=`<span class="level-num">${lvl.order}</span>${lvl.name||''}${done?'<span class="level-check">✓</span>':''}`;
+        if(unlocked){ btn.addEventListener('click',()=>{ levelSelect.classList.add('hidden'); cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false; startLevel(lvl); }); }
         grid.appendChild(btn);
     }
 }
 
 // ── Menu wiring ────────────────────────────────────────
-let animFrameId = null;
-let gameStarted = false;
-
 const menu            = document.getElementById('menu');
 const levelSelect     = document.getElementById('levelSelect');
 const controlsOverlay = document.getElementById('controlsOverlay');
-const editorOverlay   = document.getElementById('editorOverlay');
 
-document.getElementById('playBtn').addEventListener('click', async () => {
-    menu.classList.add('hidden');
-    await loadLevels();
-    await loadProgress();
-    buildLevelGrid();
-    levelSelect.classList.remove('hidden');
-});
-
-document.getElementById('backFromSelect').addEventListener('click', () => {
-    levelSelect.classList.add('hidden');
-    menu.classList.remove('hidden');
-});
-
-document.getElementById('controlsBtn').addEventListener('click', () => controlsOverlay.classList.remove('hidden'));
-document.getElementById('closeControlsBtn').addEventListener('click', () => controlsOverlay.classList.add('hidden'));
-document.getElementById('quitBtn').addEventListener('click', () => { window.location.href = '/'; });
-document.getElementById('editorBtn').addEventListener('click', () => { menu.classList.add('hidden'); openEditor(); });
-
-document.addEventListener('keydown', e => {
-    if(e.key === 'Escape'){
-        if(!editorOverlay.classList.contains('hidden')) return; // editor handles its own esc
-        if(gameStarted){
-            cancelAnimationFrame(animFrameId);
-            animFrameId = null;
-            menu.classList.remove('hidden');
-        }
-    }
-});
-
-// ── Level completion detection ─────────────────────────
-// Call this from game logic when player reaches end of level (placeholder — wire to your goal object)
-function onLevelComplete(){
-    if(currentLevelOrder !== null && !completedOrders.includes(currentLevelOrder)){
-        markLevelComplete(currentLevelOrder);
-    }
-}
+document.getElementById('playBtn').addEventListener('click', async()=>{ menu.classList.add('hidden'); await loadLevels(); await loadProgress(); buildLevelGrid(); levelSelect.classList.remove('hidden'); });
+document.getElementById('backFromSelect').addEventListener('click',()=>{ levelSelect.classList.add('hidden'); menu.classList.remove('hidden'); });
+document.getElementById('controlsBtn').addEventListener('click',()=>controlsOverlay.classList.remove('hidden'));
+document.getElementById('closeControlsBtn').addEventListener('click',()=>controlsOverlay.classList.add('hidden'));
+document.getElementById('quitBtn').addEventListener('click',()=>{ window.location.href='/'; });
+document.getElementById('editorBtn').addEventListener('click',()=>openEditor());
 
 // ══════════════════════════════════════════════════════
 // ── LEVEL EDITOR ──────────────────────────────────────
 // ══════════════════════════════════════════════════════
 
-const edCanvas  = document.getElementById('editorCanvas');
-const edCtx     = edCanvas.getContext('2d');
+let editorOpen  = false;
+let edMode      = 'edit'; // 'edit' | 'playtest'
+let edRaf       = null;
 
+// Editor camera
+let edZoom = 0.22;
+let edCamX = 0;
+let edCamY = 0;
+
+// Tool state
 let edTool      = 'select';
-let edPanX      = 0;
-let edPanY      = 0;
-let edZoom      = 0.15;
-let edPanning   = false;
 let edSpaceHeld = false;
-let edPanStart  = {x:0, y:0};
-let edPanOrigin = {x:0, y:0};
+let edPanning   = false;
+let edPanStart  = {x:0,y:0};
+let edPanOrigin = {x:0,y:0};
 
+// Level data being edited
 let edPlatforms = [];
 let edJumpPads  = [];
-let edSpawn     = {x: 250, y: 4500};
+let edSpawn     = {x:250, y:4500};
 
-let edSelected    = null; // {type, index}
-let edDragging    = false;
-let edDragHandle  = null; // 'move' | 'n'|'s'|'e'|'w'|'ne'|'nw'|'se'|'sw'
-let edDragStart   = {wx:0, wy:0};
+// Selection + drag
+let edSelected     = null;
+let edDragging     = false;
+let edDragHandle   = null;
+let edDragStart    = {wx:0,wy:0};
 let edDragOriginal = null;
 
+// Drawing new platform
 let edDrawing   = false;
-let edDrawStart = {wx:0, wy:0};
+let edDrawStart = {wx:0,wy:0};
 let edGhostRect = null;
 
-let edCurrentId  = null; // MongoDB _id of level being edited
+// Saved level identity
+let edCurrentId = null;
+
 const SNAP = 25;
+const HS   = 8; // handle size in screen pixels
 
-function snapV(v){ return Math.round(v / SNAP) * SNAP; }
+function snapV(v){ return Math.round(v/SNAP)*SNAP; }
+function edSW(sx,sy){ return {x:(sx-edCamX)/edZoom, y:(sy-edCamY)/edZoom}; }
+function edWS(wx,wy){ return {x:wx*edZoom+edCamX,   y:wy*edZoom+edCamY  }; }
 
-function screenToWorld(sx, sy){
-    return { x: (sx - edPanX) / edZoom, y: (sy - edPanY) / edZoom };
-}
-function worldToScreen(wx, wy){
-    return { x: wx * edZoom + edPanX, y: wy * edZoom + edPanY };
-}
+// ── Editor draw ────────────────────────────────────────
+function editorDrawFrame(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-function resizeEdCanvas(){
-    edCanvas.width  = edCanvas.offsetWidth;
-    edCanvas.height = edCanvas.offsetHeight;
-}
+    // Dark outside-world border
+    ctx.fillStyle='#071207';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
-function openEditor(){
-    editorOverlay.classList.remove('hidden'); // show first so layout is calculated
-    requestAnimationFrame(() => {             // measure after browser lays out
-        resizeEdCanvas();
-        edPanX = edCanvas.width  / 2 - (world.width  / 2) * edZoom;
-        edPanY = edCanvas.height / 2 - (world.height / 2) * edZoom;
-    });
-    populateEdLevelDropdown();
-    editorRaf = requestAnimationFrame(editorLoop);
-}
+    ctx.save();
+    ctx.setTransform(edZoom,0,0,edZoom,edCamX,edCamY);
 
-function closeEditor(){
-    cancelAnimationFrame(editorRaf);
-    editorOverlay.classList.add('hidden');
-    menu.classList.remove('hidden');
-}
+    // World fill — same green tint as body bg
+    ctx.fillStyle='rgb(195,245,195)';
+    ctx.fillRect(0,0,world.width,world.height);
 
-let editorRaf = null;
-
-function editorLoop(){
-    edDraw();
-    editorRaf = requestAnimationFrame(editorLoop);
-}
-
-function edDraw(){
-    const w = edCanvas.width, h = edCanvas.height;
-    edCtx.fillStyle = '#0d0d0d';
-    edCtx.fillRect(0, 0, w, h);
-
-    // World border
-    const wTL = worldToScreen(0, 0);
-    const wBR = worldToScreen(world.width, world.height);
-    edCtx.strokeStyle = '#2a2a2a';
-    edCtx.lineWidth   = 2;
-    edCtx.strokeRect(wTL.x, wTL.y, wBR.x - wTL.x, wBR.y - wTL.y);
+    // Background decorative rects (no parallax)
+    ctx.fillStyle='rgb(130,230,130)'; ctx.globalAlpha=0.35;
+    for(let r of backgroundRects){ ctx.save(); ctx.translate(r.x+r.width/2,r.y+r.height/2); ctx.rotate(Math.PI/4); ctx.fillRect(-r.width/2,-r.height/2,r.width,r.height); ctx.restore(); }
+    ctx.globalAlpha=1;
 
     // Grid
-    const gridStep = SNAP * edZoom;
-    if(gridStep > 6){
-        edCtx.strokeStyle = '#1a1a1a';
-        edCtx.lineWidth   = 0.5;
-        const startX = ((0 - edPanX) / edZoom);
-        const startY = ((0 - edPanY) / edZoom);
-        const snappedX = Math.floor(startX / SNAP) * SNAP;
-        const snappedY = Math.floor(startY / SNAP) * SNAP;
-        for(let gx = snappedX; gx < startX + w / edZoom; gx += SNAP){
-            const sx = worldToScreen(gx, 0).x;
-            edCtx.beginPath(); edCtx.moveTo(sx, 0); edCtx.lineTo(sx, h); edCtx.stroke();
-        }
-        for(let gy = snappedY; gy < startY + h / edZoom; gy += SNAP){
-            const sy = worldToScreen(0, gy).y;
-            edCtx.beginPath(); edCtx.moveTo(0, sy); edCtx.lineTo(w, sy); edCtx.stroke();
-        }
+    if(edZoom>0.06){
+        const a=Math.min(0.12,(edZoom-0.06)*1.5);
+        ctx.strokeStyle=`rgba(0,0,0,${a})`; ctx.lineWidth=1/edZoom;
+        for(let x=0;x<=world.width;x+=SNAP){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,world.height); ctx.stroke(); }
+        for(let y=0;y<=world.height;y+=SNAP){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(world.width,y); ctx.stroke(); }
     }
 
+    // World border
+    ctx.strokeStyle='rgba(0,120,0,0.5)'; ctx.lineWidth=4/edZoom;
+    ctx.strokeRect(0,0,world.width,world.height);
+
     // Platforms
-    for(let i = 0; i < edPlatforms.length; i++){
-        const p   = edPlatforms[i];
-        const sel = edSelected?.type === 'platform' && edSelected.index === i;
-        const tl  = worldToScreen(p.x, p.y);
-        const sw  = p.width  * edZoom;
-        const sh  = p.height * edZoom;
-        edCtx.fillStyle   = sel ? '#6a6aaa' : '#666';
-        edCtx.strokeStyle = sel ? '#aaaaff' : '#888';
-        edCtx.lineWidth   = sel ? 2 : 1;
-        edCtx.fillRect(tl.x, tl.y, sw, sh);
-        edCtx.strokeRect(tl.x, tl.y, sw, sh);
-        if(sel) drawHandles(p.x, p.y, p.width, p.height);
+    for(let i=0;i<edPlatforms.length;i++){
+        const p=edPlatforms[i], sel=edSelected?.type==='platform'&&edSelected.index===i;
+        ctx.fillStyle  =sel?'#7a7aaa':'#888';
+        ctx.strokeStyle=sel?'#aaaaff':'#666';
+        ctx.lineWidth=(sel?3:2)/edZoom;
+        ctx.fillRect(p.x,p.y,p.width,p.height);
+        ctx.strokeRect(p.x,p.y,p.width,p.height);
     }
 
     // Jump pads
-    for(let i = 0; i < edJumpPads.length; i++){
-        const j   = edJumpPads[i];
-        const sel = edSelected?.type === 'jumppad' && edSelected.index === i;
-        const tl  = worldToScreen(j.x, j.y);
-        edCtx.fillStyle   = sel ? '#ffee55' : 'rgb(255,246,113)';
-        edCtx.strokeStyle = sel ? '#fff' : '#aaa';
-        edCtx.lineWidth   = sel ? 2 : 1;
-        edCtx.fillRect(tl.x, tl.y, 50*edZoom, 10*edZoom);
-        edCtx.strokeRect(tl.x, tl.y, 50*edZoom, 10*edZoom);
-        if(sel) drawHandles(j.x, j.y, 50, 10);
+    for(let i=0;i<edJumpPads.length;i++){
+        const j=edJumpPads[i], sel=edSelected?.type==='jumppad'&&edSelected.index===i;
+        ctx.fillStyle  ='rgb(255,246,113)';
+        ctx.strokeStyle=sel?'#fff':'rgb(57,57,57)';
+        ctx.lineWidth=(sel?3:2)/edZoom;
+        ctx.beginPath(); ctx.roundRect(j.x,j.y,50,10,[10/edZoom]); ctx.fill(); ctx.stroke();
+        ctx.fillRect(j.x+20,j.y,10,20); ctx.strokeRect(j.x+20,j.y,10,20);
     }
 
-    // Spawn
-    const sp = worldToScreen(edSpawn.x, edSpawn.y);
-    edCtx.strokeStyle = '#4caf50';
-    edCtx.lineWidth   = 2;
-    edCtx.strokeRect(sp.x, sp.y, 50*edZoom, 50*edZoom);
-    edCtx.fillStyle = 'rgba(76,175,80,0.15)';
-    edCtx.fillRect(sp.x, sp.y, 50*edZoom, 50*edZoom);
-    edCtx.fillStyle = '#4caf50';
-    edCtx.font = `${Math.max(8, 11*edZoom)}px monospace`;
-    edCtx.fillText('SPAWN', sp.x + 2, sp.y - 4);
+    // Spawn — draw as a ghost Ollie
+    ctx.fillStyle  ='rgba(50,50,200,0.25)';
+    ctx.strokeStyle='#4caf50'; ctx.lineWidth=3/edZoom;
+    ctx.fillRect(edSpawn.x,edSpawn.y,50,50);
+    ctx.strokeRect(edSpawn.x,edSpawn.y,50,50);
+    ctx.fillStyle='rgba(255,255,255,0.5)';
+    ctx.fillRect(edSpawn.x+10,edSpawn.y+10,10,15);
+    ctx.fillRect(edSpawn.x+30,edSpawn.y+10,10,15);
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillRect(edSpawn.x+13,edSpawn.y+15,5,5);
+    ctx.fillRect(edSpawn.x+33,edSpawn.y+15,5,5);
 
-    // Ghost preview while drawing platform
+    // Ghost platform preview
     if(edGhostRect){
-        const tl = worldToScreen(edGhostRect.x, edGhostRect.y);
-        edCtx.fillStyle   = 'rgba(100,100,200,0.3)';
-        edCtx.strokeStyle = 'rgba(150,150,255,0.8)';
-        edCtx.lineWidth   = 1;
-        edCtx.fillRect(tl.x, tl.y, edGhostRect.width*edZoom, edGhostRect.height*edZoom);
-        edCtx.strokeRect(tl.x, tl.y, edGhostRect.width*edZoom, edGhostRect.height*edZoom);
-    }
-}
-
-const HANDLE_SIZE = 8;
-function drawHandles(wx, wy, ww, wh){
-    const handles = getHandleRects(wx, wy, ww, wh);
-    edCtx.fillStyle = '#fff';
-    edCtx.strokeStyle = '#444';
-    edCtx.lineWidth = 1;
-    for(const h of Object.values(handles)){
-        edCtx.fillRect(h.x, h.y, HANDLE_SIZE, HANDLE_SIZE);
-        edCtx.strokeRect(h.x, h.y, HANDLE_SIZE, HANDLE_SIZE);
-    }
-}
-
-function getHandleRects(wx, wy, ww, wh){
-    const tl = worldToScreen(wx, wy);
-    const br = worldToScreen(wx+ww, wy+wh);
-    const mx = (tl.x+br.x)/2, my = (tl.y+br.y)/2;
-    const hs = HANDLE_SIZE;
-    return {
-        nw: {x:tl.x-hs/2, y:tl.y-hs/2}, n:  {x:mx-hs/2, y:tl.y-hs/2}, ne: {x:br.x-hs/2, y:tl.y-hs/2},
-        w:  {x:tl.x-hs/2, y:my-hs/2  },                                 e:  {x:br.x-hs/2, y:my-hs/2  },
-        sw: {x:tl.x-hs/2, y:br.y-hs/2}, s:  {x:mx-hs/2, y:br.y-hs/2}, se: {x:br.x-hs/2, y:br.y-hs/2},
-    };
-}
-
-function hitTestHandle(sx, sy, wx, wy, ww, wh){
-    const handles = getHandleRects(wx, wy, ww, wh);
-    const hs = HANDLE_SIZE;
-    for(const [name, h] of Object.entries(handles)){
-        if(sx >= h.x && sx <= h.x+hs && sy >= h.y && sy <= h.y+hs) return name;
-    }
-    return null;
-}
-
-function hitTestElements(sx, sy){
-    const {x:wx, y:wy} = screenToWorld(sx, sy);
-    // Check platforms reverse (top-drawn = last = front)
-    for(let i = edPlatforms.length-1; i >= 0; i--){
-        const p = edPlatforms[i];
-        if(wx >= p.x && wx <= p.x+p.width && wy >= p.y && wy <= p.y+p.height)
-            return {type:'platform', index:i};
-    }
-    for(let i = edJumpPads.length-1; i >= 0; i--){
-        const j = edJumpPads[i];
-        if(wx >= j.x && wx <= j.x+50 && wy >= j.y && wy <= j.y+10)
-            return {type:'jumppad', index:i};
-    }
-    return null;
-}
-
-function getSelectedObj(){
-    if(!edSelected) return null;
-    if(edSelected.type === 'platform') return edPlatforms[edSelected.index];
-    if(edSelected.type === 'jumppad')  return edJumpPads[edSelected.index];
-    return null;
-}
-
-// Editor mouse events
-edCanvas.addEventListener('mousedown', e => {
-    const sx = e.offsetX, sy = e.offsetY;
-
-    if(edSpaceHeld){ // pan
-        edPanning   = true;
-        edPanStart  = {x:e.clientX, y:e.clientY};
-        edPanOrigin = {x:edPanX, y:edPanY};
-        return;
+        ctx.fillStyle='rgba(80,80,200,0.22)'; ctx.strokeStyle='rgba(120,120,255,0.85)'; ctx.lineWidth=2/edZoom;
+        ctx.fillRect(edGhostRect.x,edGhostRect.y,edGhostRect.width,edGhostRect.height);
+        ctx.strokeRect(edGhostRect.x,edGhostRect.y,edGhostRect.width,edGhostRect.height);
+        // Dimensions label
+        ctx.fillStyle='rgba(150,150,255,0.9)'; ctx.font=`${14/edZoom}px monospace`;
+        ctx.fillText(`${edGhostRect.width}×${edGhostRect.height}`, edGhostRect.x+4/edZoom, edGhostRect.y-6/edZoom);
     }
 
-    if(edTool === 'select'){
-        // Check handles first if something is selected
-        if(edSelected){
-            const obj = getSelectedObj();
-            if(obj){
-                const ww = edSelected.type === 'jumppad' ? 50 : obj.width;
-                const wh = edSelected.type === 'jumppad' ? 10  : obj.height;
-                const handle = hitTestHandle(sx, sy, obj.x, obj.y, ww, wh);
-                if(handle){
-                    edDragging   = true;
-                    edDragHandle = handle;
-                    const wp = screenToWorld(sx, sy);
-                    edDragStart   = {wx: wp.x, wy: wp.y};
-                    edDragOriginal = {x: obj.x, y: obj.y, width: ww, height: wh};
-                    return;
-                }
-            }
+    // Ghost jumppad (while tool is selected, show one under cursor)
+    if(edTool==='jumppad'&&edCursorWorld){
+        ctx.fillStyle='rgba(255,246,113,0.35)'; ctx.strokeStyle='rgba(255,246,113,0.6)'; ctx.lineWidth=1.5/edZoom;
+        ctx.beginPath(); ctx.roundRect(edCursorWorld.x-25,edCursorWorld.y-5,50,10,[10/edZoom]); ctx.fill(); ctx.stroke();
+    }
+
+    // Resize handles
+    if(edSelected){
+        const obj=edGetSel();
+        if(obj){
+            const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height;
+            edDrawHandles(obj.x,obj.y,ww,wh);
         }
-        const hit = hitTestElements(sx, sy);
-        edSelected = hit;
-        if(hit){
-            edDragging   = true;
-            edDragHandle = 'move';
-            const wp = screenToWorld(sx, sy);
-            edDragStart   = {wx: wp.x, wy: wp.y};
-            const obj = getSelectedObj();
-            edDragOriginal = {x: obj.x, y: obj.y};
-        }
-        updateEdInfo();
     }
 
-    if(edTool === 'platform'){
-        const wp = screenToWorld(sx, sy);
-        edDrawing   = true;
-        edDrawStart = {wx: snapV(wp.x), wy: snapV(wp.y)};
-        edGhostRect = {x: edDrawStart.wx, y: edDrawStart.wy, width: SNAP, height: SNAP};
+    ctx.restore();
+}
+
+let edCursorWorld=null;
+
+function edDrawHandles(wx,wy,ww,wh){
+    const hs=HS/edZoom, mx=wx+ww/2, my=wy+wh/2;
+    const pts=[[wx-hs/2,wy-hs/2],[mx-hs/2,wy-hs/2],[wx+ww-hs/2,wy-hs/2],[wx-hs/2,my-hs/2],[wx+ww-hs/2,my-hs/2],[wx-hs/2,wy+wh-hs/2],[mx-hs/2,wy+wh-hs/2],[wx+ww-hs/2,wy+wh-hs/2]];
+    ctx.fillStyle='#fff'; ctx.strokeStyle='#333'; ctx.lineWidth=1/edZoom;
+    for(const[hx,hy]of pts){ctx.fillRect(hx,hy,hs,hs);ctx.strokeRect(hx,hy,hs,hs);}
+}
+
+function edGetHandleName(sx,sy,wx,wy,ww,wh){
+    const t=(x,y)=>edWS(x,y), mx=wx+ww/2, my=wy+wh/2, h=HS/2;
+    const handles={nw:t(wx,wy),n:t(mx,wy),ne:t(wx+ww,wy),w:t(wx,my),e:t(wx+ww,my),sw:t(wx,wy+wh),s:t(mx,wy+wh),se:t(wx+ww,wy+wh)};
+    for(const[name,p]of Object.entries(handles)){ if(sx>=p.x-h&&sx<=p.x+h&&sy>=p.y-h&&sy<=p.y+h)return name; }
+    return null;
+}
+
+function edHitTest(sx,sy){
+    const{x:wx,y:wy}=edSW(sx,sy);
+    for(let i=edPlatforms.length-1;i>=0;i--){const p=edPlatforms[i]; if(wx>=p.x&&wx<=p.x+p.width&&wy>=p.y&&wy<=p.y+p.height)return{type:'platform',index:i};}
+    for(let i=edJumpPads.length-1; i>=0;i--){const j=edJumpPads[i];  if(wx>=j.x&&wx<=j.x+50&&wy>=j.y&&wy<=j.y+10)return{type:'jumppad',index:i};}
+    return null;
+}
+
+function edGetSel(){ if(!edSelected)return null; return edSelected.type==='platform'?edPlatforms[edSelected.index]:edJumpPads[edSelected.index]; }
+
+function edDeleteSelected(){
+    if(!edSelected)return;
+    if(edSelected.type==='platform')edPlatforms.splice(edSelected.index,1);
+    if(edSelected.type==='jumppad') edJumpPads.splice(edSelected.index,1);
+    edSelected=null;
+}
+
+// ── Canvas mouse events (editor mode only) ─────────────
+canvas.addEventListener('mousedown', e=>{
+    if(!editorOpen||edMode!=='edit')return;
+    const sx=e.offsetX,sy=e.offsetY;
+
+    if(edSpaceHeld||e.button===1){ edPanning=true; edPanStart={x:e.clientX,y:e.clientY}; edPanOrigin={x:edCamX,y:edCamY}; return; }
+    if(e.button!==0)return;
+
+    if(edTool==='select'){
+        if(edSelected){ const obj=edGetSel(); if(obj){ const ww=edSelected.type==='jumppad'?50:obj.width, wh=edSelected.type==='jumppad'?10:obj.height; const h=edGetHandleName(sx,sy,obj.x,obj.y,ww,wh); if(h){edDragging=true;edDragHandle=h;edDragStart=edSW(sx,sy);edDragOriginal={x:obj.x,y:obj.y,width:ww,height:wh};return;} } }
+        const hit=edHitTest(sx,sy); edSelected=hit;
+        if(hit){edDragging=true;edDragHandle='move';edDragStart=edSW(sx,sy);const o=edGetSel();edDragOriginal={x:o.x,y:o.y};}
     }
 
-    if(edTool === 'jumppad'){
-        const wp = screenToWorld(sx, sy);
-        edJumpPads.push({x: snapV(wp.x), y: snapV(wp.y), strength: 25});
-        edSelected = {type:'jumppad', index: edJumpPads.length-1};
-        updateEdInfo();
+    if(edTool==='platform'){
+        const{x,y}=edSW(sx,sy); edDrawing=true; edDrawStart={wx:snapV(x),wy:snapV(y)};
+        edGhostRect={x:edDrawStart.wx,y:edDrawStart.wy,width:SNAP,height:SNAP};
     }
 
-    if(edTool === 'spawn'){
-        const wp = screenToWorld(sx, sy);
-        edSpawn = {x: snapV(wp.x), y: snapV(wp.y)};
+    if(edTool==='jumppad'){const{x,y}=edSW(sx,sy); edJumpPads.push({x:snapV(x-25),y:snapV(y-5),strength:25}); edSelected={type:'jumppad',index:edJumpPads.length-1};}
+
+    if(edTool==='spawn'){const{x,y}=edSW(sx,sy); edSpawn={x:snapV(x-25),y:snapV(y-25)};}
+
+    if(edTool==='delete'){const hit=edHitTest(sx,sy);if(hit){if(hit.type==='platform')edPlatforms.splice(hit.index,1);if(hit.type==='jumppad')edJumpPads.splice(hit.index,1);edSelected=null;}}
+});
+
+canvas.addEventListener('mousemove', e=>{
+    if(!editorOpen||edMode!=='edit')return;
+    const sx=e.offsetX,sy=e.offsetY;
+    edCursorWorld=edSW(sx,sy);
+    document.getElementById('edCoordsInfo').textContent=`x:${Math.round(edCursorWorld.x)}  y:${Math.round(edCursorWorld.y)}`;
+
+    if(edPanning){edCamX=edPanOrigin.x+(e.clientX-edPanStart.x); edCamY=edPanOrigin.y+(e.clientY-edPanStart.y);return;}
+
+    if(edDrawing&&edTool==='platform'){
+        const snx=snapV(edCursorWorld.x),sny=snapV(edCursorWorld.y);
+        edGhostRect={x:Math.min(snx,edDrawStart.wx),y:Math.min(sny,edDrawStart.wy),width:Math.max(SNAP,Math.abs(snx-edDrawStart.wx)),height:Math.max(SNAP,Math.abs(sny-edDrawStart.wy))};
     }
 
-    if(edTool === 'delete'){
-        const hit = hitTestElements(sx, sy);
-        if(hit){
-            if(hit.type === 'platform') edPlatforms.splice(hit.index, 1);
-            if(hit.type === 'jumppad')  edJumpPads.splice(hit.index, 1);
-            edSelected = null;
-            updateEdInfo();
+    if(edDragging&&edSelected){
+        const obj=edGetSel(); if(!obj)return;
+        const{x:cwx,y:cwy}=edSW(sx,sy);
+        const dx=cwx-edDragStart.wx, dy=cwy-edDragStart.wy;
+        if(edDragHandle==='move'){obj.x=snapV(edDragOriginal.x+dx);obj.y=snapV(edDragOriginal.y+dy);}
+        else if(edSelected.type==='platform'){
+            const o=edDragOriginal;let nx=o.x,ny=o.y,nw=o.width,nh=o.height;
+            if(edDragHandle.includes('e')){nw=Math.max(SNAP,snapV(o.width+dx));}
+            if(edDragHandle.includes('s')){nh=Math.max(SNAP,snapV(o.height+dy));}
+            if(edDragHandle.includes('w')){const d=snapV(dx);nx=o.x+d;nw=Math.max(SNAP,o.width-d);}
+            if(edDragHandle.includes('n')){const d=snapV(dy);ny=o.y+d;nh=Math.max(SNAP,o.height-d);}
+            obj.x=nx;obj.y=ny;obj.width=nw;obj.height=nh;
         }
     }
 });
 
-edCanvas.addEventListener('mousemove', e => {
-    const sx = e.offsetX, sy = e.offsetY;
-    const wp = screenToWorld(sx, sy);
-
-    // Update coord display
-    document.getElementById('edCoordsInfo').textContent = `x:${Math.round(wp.x)}  y:${Math.round(wp.y)}`;
-
-    if(edPanning){
-        edPanX = edPanOrigin.x + (e.clientX - edPanStart.x);
-        edPanY = edPanOrigin.y + (e.clientY - edPanStart.y);
-        return;
+canvas.addEventListener('mouseup', e=>{
+    if(!editorOpen||edMode!=='edit')return;
+    edPanning=false;
+    if(edDrawing&&edGhostRect&&edTool==='platform'){
+        if(edGhostRect.width>=SNAP&&edGhostRect.height>=SNAP){edPlatforms.push({...edGhostRect});edSelected={type:'platform',index:edPlatforms.length-1};}
+        edGhostRect=null; edDrawing=false;
     }
-
-    if(edDrawing && edTool === 'platform'){
-        const wx = snapV(wp.x), wy = snapV(wp.y);
-        const x = Math.min(wx, edDrawStart.wx);
-        const y = Math.min(wy, edDrawStart.wy);
-        const w = Math.max(SNAP, Math.abs(wx - edDrawStart.wx));
-        const h = Math.max(SNAP, Math.abs(wy - edDrawStart.wy));
-        edGhostRect = {x, y, width:w, height:h};
-    }
-
-    if(edDragging && edSelected){
-        const obj = getSelectedObj();
-        if(!obj) return;
-        const dx = wp.x - edDragStart.wx, dy = wp.y - edDragStart.wy;
-
-        if(edDragHandle === 'move'){
-            obj.x = snapV(edDragOriginal.x + dx);
-            obj.y = snapV(edDragOriginal.y + dy);
-        } else if(edSelected.type === 'platform'){
-            const orig = edDragOriginal;
-            let nx = orig.x, ny = orig.y, nw = orig.width, nh = orig.height;
-            if(edDragHandle.includes('e')){ nw = snapV(Math.max(SNAP, orig.width  + dx)); }
-            if(edDragHandle.includes('s')){ nh = snapV(Math.max(SNAP, orig.height + dy)); }
-            if(edDragHandle.includes('w')){ const d = snapV(dx); nx = orig.x + d; nw = Math.max(SNAP, orig.width - d); }
-            if(edDragHandle.includes('n')){ const d = snapV(dy); ny = orig.y + d; nh = Math.max(SNAP, orig.height - d); }
-            obj.x = nx; obj.y = ny; obj.width = nw; obj.height = nh;
-        }
-        updateEdInfo();
-    }
+    if(edDragging){edDragging=false;edDragHandle=null;edDragOriginal=null;}
 });
 
-edCanvas.addEventListener('mouseup', e => {
-    if(edPanning){ edPanning = false; return; }
+canvas.addEventListener('contextmenu',e=>{if(editorOpen&&edMode==='edit')e.preventDefault();});
 
-    if(edDrawing && edGhostRect && edTool === 'platform'){
-        if(edGhostRect.width >= SNAP && edGhostRect.height >= SNAP){
-            edPlatforms.push({x: edGhostRect.x, y: edGhostRect.y, width: edGhostRect.width, height: edGhostRect.height});
-            edSelected = {type:'platform', index: edPlatforms.length-1};
-            updateEdInfo();
-        }
-        edGhostRect = null;
-        edDrawing   = false;
-    }
-
-    if(edDragging){ edDragging = false; edDragHandle = null; edDragOriginal = null; }
-});
-
-edCanvas.addEventListener('wheel', e => {
+canvas.addEventListener('wheel',e=>{
+    if(!editorOpen||edMode!=='edit')return;
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    const sx = e.offsetX, sy = e.offsetY;
-    edPanX = sx - (sx - edPanX) * factor;
-    edPanY = sy - (sy - edPanY) * factor;
-    edZoom = Math.max(0.05, Math.min(3, edZoom * factor));
-}, {passive: false});
+    const f=e.deltaY<0?1.12:1/1.12, sx=e.offsetX, sy=e.offsetY;
+    edCamX=sx-(sx-edCamX)*f; edCamY=sy-(sy-edCamY)*f;
+    edZoom=Math.max(0.04,Math.min(3,edZoom*f));
+},{passive:false});
 
-document.addEventListener('keydown', e => {
-    if(e.code === 'Space' && !editorOverlay.classList.contains('hidden')){ e.preventDefault(); edSpaceHeld = true; edCanvas.style.cursor = 'grab'; }
-    if(e.key === 'Delete' && edSelected && !editorOverlay.classList.contains('hidden')){
-        if(edSelected.type === 'platform') edPlatforms.splice(edSelected.index, 1);
-        if(edSelected.type === 'jumppad')  edJumpPads.splice(edSelected.index, 1);
-        edSelected = null; updateEdInfo();
-    }
-});
-document.addEventListener('keyup', e => {
-    if(e.code === 'Space'){ edSpaceHeld = false; edCanvas.style.cursor = 'crosshair'; }
+canvas.addEventListener('dblclick',e=>{
+    if(!editorOpen||edMode!=='edit'||edTool!=='select'||!edSelected||edSelected.type!=='jumppad')return;
+    const j=edJumpPads[edSelected.index];
+    const v=prompt('Jump strength (default 25):',j.strength);
+    if(v!==null&&!isNaN(+v))j.strength=+v;
 });
 
-// Tool buttons
-document.querySelectorAll('.tool-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        edTool = btn.dataset.tool;
-        edSelected = null;
-        edGhostRect = null;
-        updateEdInfo();
-    });
-});
+// ── Tool buttons ───────────────────────────────────────
+function setTool(name){
+    edTool=name; edSelected=null; edGhostRect=null;
+    document.querySelectorAll('.tool-btn').forEach(b=>b.classList.toggle('active',b.dataset.tool===name));
+    canvas.style.cursor=name==='select'?'default':name==='delete'?'not-allowed':'crosshair';
+}
+document.querySelectorAll('.tool-btn').forEach(btn=>btn.addEventListener('click',()=>setTool(btn.dataset.tool)));
 
-function updateEdInfo(){
-    const obj = getSelectedObj();
-    const info = document.getElementById('edSelectedInfo');
-    if(!obj){ info.textContent = ''; return; }
-    if(edSelected.type === 'platform'){
-        info.textContent = `x:${obj.x}  y:${obj.y}\nw:${obj.width}  h:${obj.height}`;
-    } else if(edSelected.type === 'jumppad'){
-        info.textContent = `x:${obj.x}  y:${obj.y}\nstr:${obj.strength}`;
-    }
+// ── Open / close editor ────────────────────────────────
+function openEditor(levelData=null){
+    editorOpen=true; edMode='edit';
+    if(backgroundRects.length===0)createBackground();
+
+    if(levelData){
+        edCurrentId=String(levelData._id);
+        edPlatforms=(levelData.platforms||[]).map(p=>({...p}));
+        edJumpPads =(levelData.jumpPads ||[]).map(j=>({...j}));
+        edSpawn    =levelData.startPos?{...levelData.startPos}:{x:250,y:4500};
+        document.getElementById('edLevelName').value =levelData.name||'';
+        document.getElementById('edLevelOrder').value=levelData.order||1;
+        document.getElementById('edDeleteBtn').style.display='inline-block';
+    } else { edClearState(); }
+
+    const cx=edSpawn.x+25, cy=edSpawn.y+25;
+    edZoom=0.22;
+    edCamX=canvas.width/2  - cx*edZoom;
+    edCamY=canvas.height/2 - cy*edZoom;
+
+    menu.classList.add('hidden');
+    document.getElementById('editorHUD').classList.remove('hidden');
+    canvas.style.cursor='default';
+    populateEdDropdown();
+    edRaf=requestAnimationFrame(edLoop);
 }
 
-// JumpPad strength input via prompt on double-click
-edCanvas.addEventListener('dblclick', e => {
-    if(edTool !== 'select' || !edSelected || edSelected.type !== 'jumppad') return;
-    const j = edJumpPads[edSelected.index];
-    const val = prompt('Jump pad strength (default 25):', j.strength);
-    if(val !== null && !isNaN(Number(val))) j.strength = Number(val);
-    updateEdInfo();
-});
+function edLoop(){ editorDrawFrame(); edRaf=requestAnimationFrame(edLoop); }
 
-// ── Editor level management ────────────────────────────
-async function populateEdLevelDropdown(){
+function closeEditor(){
+    cancelAnimationFrame(edRaf); edRaf=null;
+    editorOpen=false;
+    document.getElementById('editorHUD').classList.add('hidden');
+    canvas.style.cursor='';
+    menu.classList.remove('hidden');
+}
+
+// ── Play test ──────────────────────────────────────────
+function enterPlayTest(){
+    platforms=(edPlatforms).map(p=>new Platform(p.x,p.y,p.width,p.height));
+    jumpPads =(edJumpPads ).map(j=>new JumpPad(j.x,j.y,j.strength));
+    startPos ={...edSpawn};
+    player   =new Player(edSpawn.x,edSpawn.y);
+    platformParticles=[]; boostParticles=[]; jumpParticles=[];
+    classifiersInUse={platform:[],boost:[],jump:[]};
+    grounded=false; wasGrounded=[false,false,false,false]; gravity=0.5; speed=5;
+
+    cancelAnimationFrame(edRaf); edRaf=null;
+    edMode='playtest';
+    document.getElementById('editorHUD').classList.add('hidden');
+    document.getElementById('playTestHUD').classList.remove('hidden');
+    canvas.style.cursor='';
+    gameStarted=true;
+    animFrameId=requestAnimationFrame(gameLoop);
+}
+
+function exitPlayTest(){
+    cancelAnimationFrame(animFrameId); animFrameId=null;
+    gameStarted=false; edMode='edit';
+    document.getElementById('playTestHUD').classList.add('hidden');
+    document.getElementById('editorHUD').classList.remove('hidden');
+    canvas.style.cursor='default';
+    edRaf=requestAnimationFrame(edLoop);
+}
+
+document.getElementById('edPlayTestBtn').addEventListener('click',enterPlayTest);
+document.getElementById('backToEditorBtn').addEventListener('click',exitPlayTest);
+document.getElementById('edQuitBtn').addEventListener('click',closeEditor);
+
+// ── Level management ───────────────────────────────────
+function edClearState(){
+    edPlatforms=[]; edJumpPads=[]; edSpawn={x:250,y:4500};
+    edSelected=null; edCurrentId=null; edGhostRect=null;
+    document.getElementById('edLevelName').value='';
+    document.getElementById('edLevelOrder').value=(allLevels.length+1)||1;
+    document.getElementById('edDeleteBtn').style.display='none';
+}
+
+document.getElementById('edClearBtn').addEventListener('click',()=>{ if(!confirm('Clear canvas?'))return; edClearState(); document.getElementById('edLevelSelect').value=''; });
+
+async function populateEdDropdown(){
     await loadLevels();
-    const sel = document.getElementById('edLevelSelect');
-    sel.innerHTML = '<option value="">— New Level —</option>';
+    const sel=document.getElementById('edLevelSelect');
+    sel.innerHTML='<option value="">— New Level —</option>';
     for(const lvl of allLevels){
-        const opt = document.createElement('option');
-        opt.value = lvl._id;
-        opt.textContent = `${lvl.order}. ${lvl.name || 'Untitled'}`;
-        sel.appendChild(opt);
+        const o=document.createElement('option'); o.value=String(lvl._id); o.textContent=`${lvl.order}. ${lvl.name||'Untitled'}`;
+        if(String(lvl._id)===edCurrentId)o.selected=true;
+        sel.appendChild(o);
     }
 }
 
-document.getElementById('edLevelSelect').addEventListener('change', async e => {
-    const id = e.target.value;
-    if(!id){ edClearCanvas(); edCurrentId = null; document.getElementById('edDeleteBtn').style.display = 'none'; return; }
-    const lvl = allLevels.find(l => l._id === id || l._id?.toString() === id);
-    if(!lvl) return;
-    edCurrentId = id;
-    document.getElementById('edLevelName').value  = lvl.name  || '';
-    document.getElementById('edLevelOrder').value = lvl.order || 1;
-    edSpawn     = lvl.startPos ? {...lvl.startPos} : {x:250, y:4500};
-    edPlatforms = (lvl.platforms || []).map(p => ({...p}));
-    edJumpPads  = (lvl.jumpPads  || []).map(j => ({...j}));
-    edSelected  = null;
-    document.getElementById('edDeleteBtn').style.display = 'inline-block';
-    // Center view on spawn
-    edPanX = edCanvas.width/2  - edSpawn.x * edZoom;
-    edPanY = edCanvas.height/2 - edSpawn.y * edZoom;
-    setEdStatus('Level loaded.');
+document.getElementById('edLevelSelect').addEventListener('change',async e=>{
+    const id=e.target.value;
+    if(!id){edClearState();return;}
+    const lvl=allLevels.find(l=>String(l._id)===id); if(!lvl)return;
+    edCurrentId=id;
+    edPlatforms=(lvl.platforms||[]).map(p=>({...p}));
+    edJumpPads =(lvl.jumpPads ||[]).map(j=>({...j}));
+    edSpawn    =lvl.startPos?{...lvl.startPos}:{x:250,y:4500};
+    document.getElementById('edLevelName').value =lvl.name||'';
+    document.getElementById('edLevelOrder').value=lvl.order||1;
+    document.getElementById('edDeleteBtn').style.display='inline-block';
+    edSelected=null;
+    edCamX=canvas.width/2 -(edSpawn.x+25)*edZoom;
+    edCamY=canvas.height/2-(edSpawn.y+25)*edZoom;
+    setEdStatus('Loaded.');
 });
 
-function edClearCanvas(){
-    edPlatforms = []; edJumpPads = []; edSpawn = {x:250, y:4500};
-    edSelected  = null;
-    document.getElementById('edLevelName').value  = '';
-    document.getElementById('edLevelOrder').value = (allLevels.length + 1) || 1;
-    document.getElementById('edDeleteBtn').style.display = 'none';
-}
-
-document.getElementById('edClearBtn').addEventListener('click', () => {
-    if(!confirm('Clear the canvas? This won\'t delete the saved level.')) return;
-    edClearCanvas(); edCurrentId = null;
-    document.getElementById('edLevelSelect').value = '';
+document.getElementById('edSaveBtn').addEventListener('click',async()=>{
+    const name =document.getElementById('edLevelName').value.trim()||'Untitled';
+    const order=parseInt(document.getElementById('edLevelOrder').value)||1;
+    if(edPlatforms.length===0)return setEdStatus('Add at least one platform.');
+    const body={name,order,startPos:edSpawn,platforms:edPlatforms,jumpPads:edJumpPads};
+    const isNew=!edCurrentId;
+    try{
+        const r=await fetch(isNew?'/api/ollie/levels':`/api/ollie/levels/${edCurrentId}`,{method:isNew?'POST':'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${authToken}`},body:JSON.stringify(body)});
+        if(!r.ok)throw new Error(await r.text());
+        if(isNew){const d=await r.json();edCurrentId=String(d._id);document.getElementById('edDeleteBtn').style.display='inline-block';}
+        await populateEdDropdown(); setEdStatus('Saved!');
+    }catch(err){setEdStatus('Error: '+err.message);}
 });
 
-document.getElementById('edSaveBtn').addEventListener('click', async () => {
-    const name  = document.getElementById('edLevelName').value.trim() || 'Untitled';
-    const order = parseInt(document.getElementById('edLevelOrder').value) || 1;
-    if(edPlatforms.length === 0) return setEdStatus('Add at least one platform.');
-
-    const body = { name, order, startPos: edSpawn, platforms: edPlatforms, jumpPads: edJumpPads };
-    const isNew = !edCurrentId;
-    const url    = isNew ? '/api/ollie/levels' : `/api/ollie/levels/${edCurrentId}`;
-    const method = isNew ? 'POST' : 'PUT';
-
-    try {
-        const r = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-            body: JSON.stringify(body)
-        });
-        if(!r.ok) throw new Error(await r.text());
-        if(isNew){
-            const d = await r.json();
-            edCurrentId = d._id;
-            document.getElementById('edDeleteBtn').style.display = 'inline-block';
-        }
-        await populateEdLevelDropdown();
-        document.getElementById('edLevelSelect').value = edCurrentId;
-        setEdStatus('Saved!');
-    } catch(err){ setEdStatus('Error: ' + err.message); }
+document.getElementById('edDeleteBtn').addEventListener('click',async()=>{
+    if(!edCurrentId||!confirm('Delete this level permanently?'))return;
+    try{
+        await fetch(`/api/ollie/levels/${edCurrentId}`,{method:'DELETE',headers:{Authorization:`Bearer ${authToken}`}});
+        edClearState(); document.getElementById('edLevelSelect').value='';
+        await populateEdDropdown(); setEdStatus('Deleted.');
+    }catch(err){setEdStatus('Error: '+err.message);}
 });
 
-document.getElementById('edDeleteBtn').addEventListener('click', async () => {
-    if(!edCurrentId || !confirm('Delete this level permanently?')) return;
-    try {
-        await fetch(`/api/ollie/levels/${edCurrentId}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${authToken}` }
-        });
-        edClearCanvas(); edCurrentId = null;
-        document.getElementById('edLevelSelect').value = '';
-        await populateEdLevelDropdown();
-        setEdStatus('Level deleted.');
-    } catch(err){ setEdStatus('Error: ' + err.message); }
-});
-
-document.getElementById('edQuitBtn').addEventListener('click', closeEditor);
-
-function setEdStatus(msg){ const el = document.getElementById('edStatus'); el.textContent = msg; setTimeout(() => { if(el.textContent === msg) el.textContent = ''; }, 3000); }
+function setEdStatus(msg){ const el=document.getElementById('edStatus'); el.textContent=msg; setTimeout(()=>{if(el.textContent===msg)el.textContent='';},3000); }
 
 // ── Init ───────────────────────────────────────────────
 checkAdmin();
