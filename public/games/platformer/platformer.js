@@ -105,7 +105,7 @@ let animFrameId=null, gameStarted=false;
 function gameLoop(){
     camera.width=canvas.width; camera.height=canvas.height;
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    if(!levelCompleted) movePlayer(); moveCamera();
+    movePlayer(); moveCamera();
     wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
     checkJumpPad(); checkCollision(); updateStretch(); updateEyePos();
     if(grounded){resetGravity(); jumped=false;}
