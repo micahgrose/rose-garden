@@ -596,7 +596,13 @@ function buildLevelGrid(){
         const done=completedOrders.includes(lvl.order), unlocked=lvl.order<=maxUnlocked;
         if(done)      btn.classList.add('completed');
         if(!unlocked) btn.classList.add('locked');
-        btn.innerHTML=unlocked?`<span class="level-num">${lvl.order}</span>${lvl.name?`<span class="level-name">${lvl.name}</span>`:''}`:`<span style="font-size:1.1rem;">🔒</span>`;
+        const lockSvg=`<svg width="18" height="22" viewBox="0 0 18 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M4 10V7a5 5 0 0 1 10 0v3" stroke="#6a9ab8" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+  <rect x="1" y="10" width="16" height="12" rx="3" fill="#2a5a7a" stroke="#4a8aaa" stroke-width="1.2"/>
+  <circle cx="9" cy="16" r="2.2" fill="#1a3a55"/>
+  <rect x="8.1" y="16.5" width="1.8" height="3" rx="0.9" fill="#1a3a55"/>
+</svg>`;
+        btn.innerHTML=unlocked?`<span class="level-num">${lvl.order}</span>${lvl.name?`<span class="level-name">${lvl.name}</span>`:''}`:`${lockSvg}`;
         if(unlocked){ btn.addEventListener('click',()=>{ levelSelect.classList.add('hidden'); cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false; startLevel(lvl); }); }
         grid.appendChild(btn);
     }
