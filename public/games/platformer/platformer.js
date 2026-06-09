@@ -165,7 +165,7 @@ document.addEventListener("keydown", e => {
     // Escape
     if(e.key==='Escape'){
         if(editorOpen && edMode==='playtest'){ exitPlayTest(); return; }
-        if(gameStarted && !editorOpen){ cancelAnimationFrame(animFrameId); animFrameId=null; menu.classList.remove('hidden'); }
+        if(gameStarted && !editorOpen){ cancelAnimationFrame(animFrameId); animFrameId=null; document.getElementById('gameHUD').classList.add('hidden'); menu.classList.remove('hidden'); }
     }
 
     // Editor tool hotkeys
@@ -191,21 +191,23 @@ document.addEventListener("keyup", e => {
 
 // ── Movement ───────────────────────────────────────────
 function movePlayer(){
-    GORIGHT: if(keys.includes("ArrowRight")||keys.includes("d")){ player.pupilPadding.x=5; player.eyePaddingR.x=15; player.eyePaddingL.x=35; if(clampRight)break GORIGHT; player.velocity.x+=speed; }
-    GOLEFT:  if(keys.includes("ArrowLeft") ||keys.includes("a")){ player.pupilPadding.x=0; player.eyePaddingR.x=5;  player.eyePaddingL.x=25; if(clampLeft) break GOLEFT;  player.velocity.x-=speed; }
-    if((keys.includes("ArrowUp")||keys.includes("w"))&&(grounded||wasGrounded.includes(true))){ player.velocity.y=-jumpStrength; jumped=true; }
-    else if(!keys.includes("ArrowUp")&&!keys.includes("w")&&!grounded&&player.velocity.y<0&&jumped){ player.velocity.y*=0.9; }
+    if(!levelCompleted){
+        GORIGHT: if(keys.includes("ArrowRight")||keys.includes("d")){ player.pupilPadding.x=5; player.eyePaddingR.x=15; player.eyePaddingL.x=35; if(clampRight)break GORIGHT; player.velocity.x+=speed; }
+        GOLEFT:  if(keys.includes("ArrowLeft") ||keys.includes("a")){ player.pupilPadding.x=0; player.eyePaddingR.x=5;  player.eyePaddingL.x=25; if(clampLeft) break GOLEFT;  player.velocity.x-=speed; }
+        if((keys.includes("ArrowUp")||keys.includes("w"))&&(grounded||wasGrounded.includes(true))){ player.velocity.y=-jumpStrength; jumped=true; }
+        else if(!keys.includes("ArrowUp")&&!keys.includes("w")&&!grounded&&player.velocity.y<0&&jumped){ player.velocity.y*=0.9; }
+        if(keys.includes(" ")&&(keys.includes("ArrowRight")||keys.includes("d")||keys.includes("ArrowLeft")||keys.includes("a"))&&!boosting&&boostReady){
+            if(clampRight&&(keys.includes("ArrowRight")||keys.includes("d")))return;
+            if(clampLeft &&(keys.includes("ArrowLeft") ||keys.includes("a")))return;
+            maxVelocity.x=30; player.velocity.x*=1.75; boosting=true; boostReady=false; doBoostParticle=true;
+            setTimeout(()=>{ maxVelocity.x=10; boosting=false; setTimeout(()=>{boostReady=true;},boostResetTime); },150);
+        }
+    }
     if(!grounded){ player.velocity.y+=gravity; if(gravity<gravityFloor){gravity*=gravityMult;}else{gravity=gravityFloor;} }
     if(player.velocity.y>maxVelocity.y)  player.velocity.y=maxVelocity.y;
     if(player.velocity.x>maxVelocity.x)  player.velocity.x=maxVelocity.x;
     if(player.velocity.x<-maxVelocity.x) player.velocity.x=-maxVelocity.x;
     if(!boosting) player.velocity.x*=friction;
-    if(keys.includes(" ")&&(keys.includes("ArrowRight")||keys.includes("d")||keys.includes("ArrowLeft")||keys.includes("a"))&&!boosting&&boostReady){
-        if(clampRight&&(keys.includes("ArrowRight")||keys.includes("d")))return;
-        if(clampLeft &&(keys.includes("ArrowLeft") ||keys.includes("a")))return;
-        maxVelocity.x=30; player.velocity.x*=1.75; boosting=true; boostReady=false; doBoostParticle=true;
-        setTimeout(()=>{ maxVelocity.x=10; boosting=false; setTimeout(()=>{boostReady=true;},boostResetTime); },150);
-    }
     player.x+=player.velocity.x; player.y+=player.velocity.y;
     if(player.y>world.height+500){ player.x=startPos.x; player.y=startPos.y; player.velocity={x:0,y:0}; gravity=0.5; speed=5;}
 }
@@ -483,7 +485,14 @@ function checkFinish(){
     if(!finish||levelCompleted)return;
     if(player.x+player.width>finish.x-10&&player.x<finish.x+55&&player.y+player.height>finish.y&&player.y<finish.y+75){
         levelCompleted=true; markLevelComplete(currentLevelOrder);
-        spawnFinishParticles(); setTimeout(showLevelComplete, 950);
+        spawnFinishParticles();
+        setTimeout(()=>{
+            cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false;
+            document.getElementById('gameHUD').classList.add('hidden');
+            const nextLvl=allLevels.find(l=>l.order===currentLevelOrder+1);
+            if(nextLvl){ startLevel(nextLvl); }
+            else{ menu.classList.remove('hidden'); }
+        }, 600);
     }
 }
 
@@ -506,15 +515,6 @@ function drawFinishParticles(){
         ctx.restore();
     }
     ctx.globalAlpha=1;
-}
-
-function showLevelComplete(){
-    cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false;
-    const lvl=allLevels.find(l=>l.order===currentLevelOrder);
-    document.getElementById('lcLevelName').textContent=lvl?(lvl.name||''):'';
-    const nextLvl=allLevels.find(l=>l.order===currentLevelOrder+1);
-    document.getElementById('lcNextBtn').style.display=nextLvl?'':'none';
-    document.getElementById('levelCompleteOverlay').classList.remove('hidden');
 }
 
 // ── Particles ──────────────────────────────────────────
@@ -565,6 +565,7 @@ function startLevel(levelData){
     grounded=false; wasGrounded=[false,false,false,false];
     finish=levelData.finish?{...levelData.finish}:null; levelCompleted=false;
     if(backgroundRects.length===0) createBackground();
+    document.getElementById('gameHUD').classList.remove('hidden');
     gameStarted=true;
     gameLoop();
 }
@@ -598,16 +599,17 @@ document.getElementById('backFromSelect').addEventListener('click',()=>{ levelSe
 document.getElementById('controlsBtn').addEventListener('click',()=>controlsOverlay.classList.remove('hidden'));
 document.getElementById('closeControlsBtn').addEventListener('click',()=>controlsOverlay.classList.add('hidden'));
 document.getElementById('quitBtn').addEventListener('click',()=>{ window.location.href='/'; });
-document.getElementById('lcNextBtn').addEventListener('click',()=>{
-    const nextLvl=allLevels.find(l=>l.order===currentLevelOrder+1); if(!nextLvl)return;
-    document.getElementById('levelCompleteOverlay').classList.add('hidden'); levelCompleted=false; gameStarted=false; startLevel(nextLvl);
+document.getElementById('pauseBtn').addEventListener('click',()=>{
+    if(!gameStarted||editorOpen)return;
+    cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false;
+    document.getElementById('gameHUD').classList.add('hidden');
+    menu.classList.remove('hidden');
 });
-document.getElementById('lcAgainBtn').addEventListener('click',()=>{
-    const lvl=allLevels.find(l=>l.order===currentLevelOrder);
-    document.getElementById('levelCompleteOverlay').classList.add('hidden'); levelCompleted=false; gameStarted=false; if(lvl)startLevel(lvl);
-});
-document.getElementById('lcMenuBtn').addEventListener('click',()=>{
-    document.getElementById('levelCompleteOverlay').classList.add('hidden'); levelCompleted=false; gameStarted=false; menu.classList.remove('hidden');
+document.getElementById('restartBtn').addEventListener('click',()=>{
+    if(!gameStarted||editorOpen)return;
+    const lvl=allLevels.find(l=>l.order===currentLevelOrder); if(!lvl)return;
+    cancelAnimationFrame(animFrameId); animFrameId=null; gameStarted=false;
+    startLevel(lvl);
 });
 document.getElementById('editorBtn').addEventListener('click',()=>openEditor());
 
