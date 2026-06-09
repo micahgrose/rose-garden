@@ -367,17 +367,14 @@ function drawSwitchParticles(){
 function drawSpikes(){
     ctx.fillStyle='#777'; ctx.strokeStyle='#444'; ctx.lineWidth=1;
     for(const sp of spikes){
-        const n=Math.max(1,Math.round(sp.width/25));
-        const tw=sp.width/n, th=sp.height||25;
-        for(let i=0;i<n;i++){
-            const bx=sp.x+i*tw-camera.x, by=sp.y-camera.y;
-            ctx.beginPath();
-            if(sp.dir==='up'||!sp.dir){    ctx.moveTo(bx,by);ctx.lineTo(bx+tw/2,sp.y-th-camera.y);ctx.lineTo(bx+tw,by); }
-            else if(sp.dir==='down'){       ctx.moveTo(bx,sp.y-camera.y);ctx.lineTo(bx+tw/2,sp.y+th-camera.y);ctx.lineTo(bx+tw,sp.y-camera.y); }
-            else if(sp.dir==='right'){      const rx=sp.x-camera.x;ctx.moveTo(rx,sp.y+i*tw-camera.y);ctx.lineTo(rx+th,sp.y+i*tw+tw/2-camera.y);ctx.lineTo(rx,sp.y+i*tw+tw-camera.y); }
-            else if(sp.dir==='left'){       const rx=sp.x+th-camera.x;ctx.moveTo(rx,sp.y+i*tw-camera.y);ctx.lineTo(rx-th,sp.y+i*tw+tw/2-camera.y);ctx.lineTo(rx,sp.y+i*tw+tw-camera.y); }
-            ctx.closePath(); ctx.fill(); ctx.stroke();
-        }
+        const tw=sp.width, th=sp.height||25;
+        const bx=sp.x-camera.x, by=sp.y-camera.y;
+        ctx.beginPath();
+        if(sp.dir==='up'||!sp.dir){    ctx.moveTo(bx,by);ctx.lineTo(bx+tw/2,by-th);ctx.lineTo(bx+tw,by); }
+        else if(sp.dir==='down'){       ctx.moveTo(bx,by);ctx.lineTo(bx+tw/2,by+th);ctx.lineTo(bx+tw,by); }
+        else if(sp.dir==='right'){      ctx.moveTo(bx,by);ctx.lineTo(bx+th,by+tw/2);ctx.lineTo(bx,by+tw); }
+        else if(sp.dir==='left'){       ctx.moveTo(bx+th,by);ctx.lineTo(bx,by+tw/2);ctx.lineTo(bx+th,by+tw); }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
     }
 }
 function checkSpikes(){
@@ -782,13 +779,13 @@ function editorDrawFrame(){
     for(let i=0;i<edSpikes.length;i++){
         const sp=edSpikes[i], sel=edSelected?.type==='spike'&&edSelected.index===i;
         ctx.fillStyle=sel?'#aaa':'#777'; ctx.strokeStyle=sel?'#fff':'#444';
-        const n=Math.max(1,Math.round(sp.width/25)), tw=sp.width/n, th=sp.height||25;
-        for(let j=0;j<n;j++){
-            const bx=sp.x+j*tw, by=sp.y;
-            ctx.beginPath();
-            if(sp.dir==='up'||!sp.dir){ctx.moveTo(bx,by);ctx.lineTo(bx+tw/2,sp.y-th);ctx.lineTo(bx+tw,by);}
-            ctx.closePath(); ctx.fill(); ctx.stroke();
-        }
+        const tw=sp.width, th=sp.height||25, bx=sp.x, by=sp.y;
+        ctx.beginPath();
+        if(sp.dir==='up'||!sp.dir){    ctx.moveTo(bx,by);ctx.lineTo(bx+tw/2,by-th);ctx.lineTo(bx+tw,by); }
+        else if(sp.dir==='down'){       ctx.moveTo(bx,by);ctx.lineTo(bx+tw/2,by+th);ctx.lineTo(bx+tw,by); }
+        else if(sp.dir==='right'){      ctx.moveTo(bx,by);ctx.lineTo(bx+th,by+tw/2);ctx.lineTo(bx,by+tw); }
+        else if(sp.dir==='left'){       ctx.moveTo(bx+th,by);ctx.lineTo(bx,by+tw/2);ctx.lineTo(bx+th,by+tw); }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
     }
 
     // Sawblades (editor — animated)
@@ -809,12 +806,9 @@ function editorDrawFrame(){
 
     // Ghost spike preview
     if(edTool==='spike'&&edGhostRect){
-        const n=Math.max(1,Math.round(edGhostRect.width/25)), tw=edGhostRect.width/n, th=25;
+        const tw=edGhostRect.width, th=25, bx=edGhostRect.x, by=edGhostRect.y;
         ctx.fillStyle='rgba(120,120,180,0.4)'; ctx.strokeStyle='rgba(150,150,220,0.8)'; ctx.lineWidth=1.5/edZoom;
-        for(let j=0;j<n;j++){
-            const bx=edGhostRect.x+j*tw, by=edGhostRect.y;
-            ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+tw/2,edGhostRect.y-th); ctx.lineTo(bx+tw,by); ctx.closePath(); ctx.fill(); ctx.stroke();
-        }
+        ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+tw/2,by-th); ctx.lineTo(bx+tw,by); ctx.closePath(); ctx.fill(); ctx.stroke();
     }
     // Ghost mplatform preview
     if(edTool==='mplatform'&&edGhostRect){
@@ -1177,18 +1171,21 @@ function rotateSelected(){
     if(edSelected.type==='spike'){
         const sp=edSpikes[edSelected.index];
         const dirs=['up','right','down','left'];
-        sp.dir=dirs[(dirs.indexOf(sp.dir||'up')+1)%4];
+        const oldDir=sp.dir||'up', newDir=dirs[(dirs.indexOf(oldDir)+1)%4];
+        const wasUpDown=oldDir==='up'||oldDir==='down', isUpDown=newDir==='up'||newDir==='down';
+        if(wasUpDown!==isUpDown){const tmp=sp.width;sp.width=sp.height||25;sp.height=tmp;}
+        sp.dir=newDir;
         return;
     }
     const obj=edGetSel(); if(!obj||!obj.width||!obj.height)return;
-    const cx=snapV(obj.x+obj.width/2), cy=snapV(obj.y+obj.height/2);
-    const nw=snapV(obj.height), nh=snapV(obj.width);
+    const cx=obj.x+obj.width/2, cy=obj.y+obj.height/2;
+    const nw=obj.height, nh=obj.width;
     if(edSelected.type==='mplatform'){
-        const tdx=snapV(obj.tx+obj.width/2)-cx, tdy=snapV(obj.ty+obj.height/2)-cy;
-        obj.x=snapV(cx-nw/2); obj.y=snapV(cy-nh/2); obj.width=nw; obj.height=nh;
-        obj.tx=snapV(cx+tdy-nw/2); obj.ty=snapV(cy-tdx-nh/2);
+        const ex=obj.tx+obj.width/2, ey=obj.ty+obj.height/2;
+        obj.x=cx-nw/2; obj.y=cy-nh/2; obj.width=nw; obj.height=nh;
+        obj.tx=(cx+(ey-cy))-nw/2; obj.ty=(cy-(ex-cx))-nh/2;
     } else {
-        obj.x=snapV(cx-nw/2); obj.y=snapV(cy-nh/2); obj.width=nw; obj.height=nh;
+        obj.x=cx-nw/2; obj.y=cy-nh/2; obj.width=nw; obj.height=nh;
     }
 }
 
