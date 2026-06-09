@@ -45,9 +45,9 @@ MongoClient.connect(process.env.MONGODB_URI)
             { $set: { created_at: migrationDate.toISOString() } }
         );
 
-        // Migration: add admin field — true only for Mr.Rose, false for everyone else
+        // Migration: add admin field — true only for Mr. Rose, false for everyone else
         await db.collection('users').updateOne(
-            { username: 'Mr.Rose' },
+            { username: 'Mr. Rose' },
             { $set: { admin: true } }
         );
         await db.collection('users').updateMany(
