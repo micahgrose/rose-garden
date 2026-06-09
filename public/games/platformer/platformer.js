@@ -191,7 +191,8 @@ document.addEventListener("keyup", e => {
 
 // ── Movement ───────────────────────────────────────────
 function movePlayer(){
-    if(!levelCompleted && deathCooldown===0){
+    if(deathCooldown>0){ player.velocity={x:0,y:0}; gravity=0.5; return; }
+    if(!levelCompleted){
         GORIGHT: if(keys.includes("ArrowRight")||keys.includes("d")){ player.pupilPadding.x=5; player.eyePaddingR.x=15; player.eyePaddingL.x=35; if(clampRight)break GORIGHT; player.velocity.x+=speed; }
         GOLEFT:  if(keys.includes("ArrowLeft") ||keys.includes("a")){ player.pupilPadding.x=0; player.eyePaddingR.x=5;  player.eyePaddingL.x=25; if(clampLeft) break GOLEFT;  player.velocity.x-=speed; }
         if((keys.includes("ArrowUp")||keys.includes("w"))&&(grounded||wasGrounded.includes(true))){ player.velocity.y=-jumpStrength; jumped=true; }
