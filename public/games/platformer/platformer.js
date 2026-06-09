@@ -88,7 +88,7 @@ let currentLevelOrder = null;
 let gravity = 0.5;
 const gravityMult=1.065, gravityFloor=5;
 let speed=5;
-const jumpStrength=15, friction=0.85;
+const jumpStrength=15, friction=0.925;
 const maxVelocity={x:10,y:30};
 
 let grounded=false, wasGrounded=[false,false,false,false];
