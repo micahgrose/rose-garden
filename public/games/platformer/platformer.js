@@ -485,7 +485,7 @@ canvas.addEventListener('mousedown', e=>{
     if(!editorOpen||edMode!=='edit')return;
     const sx=e.offsetX,sy=e.offsetY;
 
-    if(edSpaceHeld||e.button===1){ edPanning=true; edPanStart={x:e.clientX,y:e.clientY}; edPanOrigin={x:edCamX,y:edCamY}; return; }
+    if(edSpaceHeld||e.button===1||e.button===2){ edPanning=true; edPanStart={x:e.clientX,y:e.clientY}; edPanOrigin={x:edCamX,y:edCamY}; canvas.style.cursor='grabbing'; return; }
     if(e.button!==0)return;
 
     if(edTool==='select'){
@@ -537,6 +537,7 @@ canvas.addEventListener('mousemove', e=>{
 
 canvas.addEventListener('mouseup', e=>{
     if(!editorOpen||edMode!=='edit')return;
+    if(edPanning){ edPanning=false; canvas.style.cursor=edSpaceHeld?'grab':'default'; return; }
     edPanning=false;
     if(edDrawing&&edGhostRect&&edTool==='platform'){
         if(edGhostRect.width>=SNAP&&edGhostRect.height>=SNAP){edPlatforms.push({...edGhostRect});edSelected={type:'platform',index:edPlatforms.length-1};}
