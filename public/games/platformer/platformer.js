@@ -365,7 +365,7 @@ function drawSpikes(){
     ctx.fillStyle='#777'; ctx.strokeStyle='#444'; ctx.lineWidth=1;
     for(const sp of spikes){
         const n=Math.max(1,Math.round(sp.width/25));
-        const tw=sp.width/n, th=18;
+        const tw=sp.width/n, th=sp.th||25;
         for(let i=0;i<n;i++){
             const bx=sp.x+i*tw-camera.x, by=sp.y-camera.y;
             ctx.beginPath();
@@ -380,7 +380,7 @@ function drawSpikes(){
 function checkSpikes(){
     if(deathCooldown>0)return;
     for(const sp of spikes){
-        const th=18;
+        const th=sp.th||25;
         let hx=sp.x,hy=sp.y-th,hw=sp.width,hh=th;
         if(sp.dir==='right'||sp.dir==='left'){hw=th;hh=sp.width;hy=sp.y;}
         if(player.x+player.width>hx&&player.x<hx+hw&&player.y+player.height>hy&&player.y<hy+hh) killPlayer();
@@ -780,13 +780,14 @@ function editorDrawFrame(){
     for(let i=0;i<edSpikes.length;i++){
         const sp=edSpikes[i], sel=edSelected?.type==='spike'&&edSelected.index===i;
         ctx.fillStyle=sel?'#aaa':'#777'; ctx.strokeStyle=sel?'#fff':'#444';
-        const n=Math.max(1,Math.round(sp.width/25)), tw=sp.width/n, th=18;
+        const n=Math.max(1,Math.round(sp.width/25)), tw=sp.width/n, th=sp.th||25;
         for(let j=0;j<n;j++){
             const bx=sp.x+j*tw, by=sp.y;
             ctx.beginPath();
             if(sp.dir==='up'||!sp.dir){ctx.moveTo(bx,by);ctx.lineTo(bx+tw/2,sp.y-th);ctx.lineTo(bx+tw,by);}
             ctx.closePath(); ctx.fill(); ctx.stroke();
         }
+        if(sel){ ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font=`${10/edZoom}px monospace`; ctx.fillText(`${sp.th===50?'2':'1'}h`,sp.x+2/edZoom,sp.y-th-4/edZoom); }
     }
 
     // Sawblades (editor — animated)
@@ -807,7 +808,7 @@ function editorDrawFrame(){
 
     // Ghost spike preview
     if(edTool==='spike'&&edGhostRect){
-        const n=Math.max(1,Math.round(edGhostRect.width/25)), tw=edGhostRect.width/n, th=18;
+        const n=Math.max(1,Math.round(edGhostRect.width/25)), tw=edGhostRect.width/n, th=25;
         ctx.fillStyle='rgba(120,120,180,0.4)'; ctx.strokeStyle='rgba(150,150,220,0.8)'; ctx.lineWidth=1.5/edZoom;
         for(let j=0;j<n;j++){
             const bx=edGhostRect.x+j*tw, by=edGhostRect.y;
@@ -947,7 +948,7 @@ function edHitTest(sx,sy){
         const dx=wx-(mp.tx+mp.width/2), dy=wy-(mp.ty+mp.height/2);
         if(Math.abs(dx)<14/edZoom&&Math.abs(dy)<14/edZoom)return{type:'mplatform_end',index:i};
     }
-    for(let i=edSpikes.length-1;i>=0;i--){const sp=edSpikes[i];if(wx>=sp.x&&wx<=sp.x+sp.width&&wy>=sp.y-18&&wy<=sp.y)return{type:'spike',index:i};}
+    for(let i=edSpikes.length-1;i>=0;i--){const sp=edSpikes[i];const th=sp.th||25;if(wx>=sp.x&&wx<=sp.x+sp.width&&wy>=sp.y-th&&wy<=sp.y)return{type:'spike',index:i};}
     for(let i=edSawblades.length-1;i>=0;i--){const s=edSawblades[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=(s.radius||25))return{type:'saw',index:i};}
     for(let i=edOrbitSaws.length-1;i>=0;i--){const s=edOrbitSaws[i];const dx=wx-s.x,dy=wy-s.y;if(Math.sqrt(dx*dx+dy*dy)<=14/edZoom)return{type:'orbitsaw',index:i};}
     for(let i=edMovingPlatforms.length-1;i>=0;i--){const mp=edMovingPlatforms[i];if(wx>=mp.x&&wx<=mp.x+mp.width&&wy>=mp.y&&wy<=mp.y+mp.height)return{type:'mplatform',index:i};}
@@ -1095,7 +1096,7 @@ canvas.addEventListener('mouseup', e=>{
             edPlatforms.push({...edGhostRect}); edSelected={type:'platform',index:edPlatforms.length-1};
         }
         if(edTool==='spike'&&edGhostRect.width>=SNAP){
-            edSpikes.push({x:edGhostRect.x,y:edGhostRect.y,width:edGhostRect.width,dir:'up'}); edSelected={type:'spike',index:edSpikes.length-1};
+            edSpikes.push({x:edGhostRect.x,y:edGhostRect.y,width:edGhostRect.width,dir:'up',th:25}); edSelected={type:'spike',index:edSpikes.length-1};
         }
         if(edTool==='mplatform'&&edGhostRect.width>=SNAP&&edGhostRect.height>=SNAP){
             const mp={x:edGhostRect.x,y:edGhostRect.y,width:edGhostRect.width,height:edGhostRect.height,tx:edGhostRect.x+200,ty:edGhostRect.y,speed:1};
@@ -1135,6 +1136,10 @@ canvas.addEventListener('dblclick',e=>{
         const mp=edMovingPlatforms[edSelected.index];
         const v=prompt('Move speed (default 1):',mp.speed||1);
         if(v!==null&&!isNaN(+v))mp.speed=Math.max(0.1,+v);
+    }
+    if(edSelected.type==='spike'){
+        const sp=edSpikes[edSelected.index];
+        sp.th = (sp.th||25)===25 ? 50 : 25;
     }
     if(edSelected.type==='onoff'){
         const b=edOnOffBlocks[edSelected.index];
