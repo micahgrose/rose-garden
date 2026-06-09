@@ -497,9 +497,6 @@ document.getElementById('automataCard').addEventListener('click', () => {
 document.getElementById('marbleRunCard').addEventListener('click', () => {
     window.location.href = '/marble-run';
 });
-document.getElementById('amoebaCard').addEventListener('click', () => {
-    window.location.href = '/amoeba';
-});
 document.getElementById('labyrinthRunCard').addEventListener('click', () => {
     window.location.href = '/games/Labyrinth Run/';
 });
