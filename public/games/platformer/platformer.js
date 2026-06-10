@@ -325,10 +325,10 @@ function drawJumpPads(){
     for(let pad of jumpPads){
         if(pad.animate){ pad.y+=(pad.targetY-pad.y)*pad.speed; pad.stickHeight+=(pad.stickTargetHeight-pad.stickHeight)*pad.speed; if(Math.abs(pad.y-pad.targetY)<1){pad.animate=false;pad.y=pad.targetY;pad.stickHeight=pad.stickTargetHeight;} }
         else{ pad.speed=0.5; pad.y+=((pad.targetY+10)-pad.y)*pad.speed; pad.stickHeight+=(20-pad.stickHeight)*pad.speed; if(Math.abs(pad.y-pad.targetY)<1){pad.y=pad.targetY+10;pad.stickHeight=20;pad.speed=0.9;} }
-        ctx.beginPath(); ctx.roundRect(pad.x-camera.x,pad.y-camera.y,pad.width,pad.height,[10]); ctx.stroke();
-        ctx.strokeRect(pad.x+20-camera.x,pad.y-camera.y,10,pad.stickHeight);
-        ctx.beginPath(); ctx.roundRect(pad.x-camera.x,pad.y-camera.y,pad.width,pad.height,[10]); ctx.fill();
-        ctx.fillRect(pad.x+20-camera.x,pad.y-camera.y,10,pad.stickHeight);
+        const by=pad.y+pad.height-camera.y;
+        ctx.strokeRect(pad.x+20-camera.x,by,10,pad.stickHeight);
+        ctx.fillRect(pad.x+20-camera.x,by,10,pad.stickHeight);
+        ctx.beginPath(); ctx.roundRect(pad.x-camera.x,pad.y-camera.y,pad.width,pad.height,[10]); ctx.fill(); ctx.stroke();
     }
 }
 
@@ -1102,8 +1102,10 @@ function editorDrawFrame(){
 
     // Ghost jumppad (while tool is selected, show one under cursor)
     if(edTool==='jumppad'&&edCursorWorld){
+        const gpy=snapV(edCursorWorld.y-30);
         ctx.fillStyle='rgba(255,246,113,0.35)'; ctx.strokeStyle='rgba(255,246,113,0.6)'; ctx.lineWidth=1.5/edZoom;
-        ctx.beginPath(); ctx.roundRect(edCursorWorld.x-25,edCursorWorld.y-5,50,10,[10/edZoom]); ctx.fill(); ctx.stroke();
+        ctx.fillRect(edCursorWorld.x-5,gpy+10,10,20); ctx.strokeRect(edCursorWorld.x-5,gpy+10,10,20);
+        ctx.beginPath(); ctx.roundRect(edCursorWorld.x-25,gpy,50,10,[10/edZoom]); ctx.fill(); ctx.stroke();
     }
 
     // Resize handles / selection highlight
@@ -1263,7 +1265,7 @@ canvas.addEventListener('mousedown', e=>{
         edGhostRect={x:edDrawStart.wx,y:edDrawStart.wy,width:SNAP,height:SNAP};
     }
 
-    if(edTool==='jumppad'){const{x,y}=edSW(sx,sy); edJumpPads.push({x:snapV(x-25),y:snapV(y-5),strength:25}); edSelected={type:'jumppad',index:edJumpPads.length-1};}
+    if(edTool==='jumppad'){const{x,y}=edSW(sx,sy); edJumpPads.push({x:snapV(x-25),y:snapV(y-30),strength:25}); edSelected={type:'jumppad',index:edJumpPads.length-1};}
 
     if(edTool==='spawn'){const{x,y}=edSW(sx,sy); edSpawn={x:snapV(x-25),y:snapV(y-25)};}
 
