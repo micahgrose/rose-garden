@@ -138,7 +138,7 @@ function gameLoop(){
     preMovePlatformRide();
     movePlayer(); moveCamera();
     wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
-    checkJumpPad(); checkCollision(); updateStretch(); updateEyePos();
+    checkJumpPad(); checkCollision(); checkCrush(); updateStretch(); updateEyePos();
     if(grounded){resetGravity(); jumped=false;}
     if(ceiling){player.velocity.y=0;}
     updatePlatformRideState();
@@ -259,6 +259,19 @@ function checkCollision(){
     for(const mp of movingPlatforms) resolveAABB({x:mp._cx,y:mp._cy,width:mp.width,height:mp.height});
     for(const op of orbitPlatforms) resolveAABB({x:op._cx,y:op._cy,width:op.width,height:op.height});
     for(const b of onOffBlocks) if(blockIsOn(b)) resolveAABB(b);
+}
+function checkCrush(){
+    if(deathCooldown>0)return;
+    const BUFFER=4;
+    const sq=(ax,ay,aw,ah)=>{
+        const ox=Math.min(player.x+player.width,ax+aw)-Math.max(player.x,ax);
+        const oy=Math.min(player.y+player.height,ay+ah)-Math.max(player.y,ay);
+        return ox>BUFFER&&oy>BUFFER;
+    };
+    for(const p of platforms)        if(sq(p.x,p.y,p.width,p.height))                     {killPlayer();return;}
+    for(const mp of movingPlatforms) if(sq(mp._cx,mp._cy,mp.width,mp.height))               {killPlayer();return;}
+    for(const op of orbitPlatforms)  if(sq(op._cx,op._cy,op.width,op.height))               {killPlayer();return;}
+    for(const b of onOffBlocks)      if(blockIsOn(b)&&sq(b.x,b.y,b.width,b.height))        {killPlayer();return;}
 }
 function blockIsOn(b){ return (b.startsOn!==false) ? !onOffState : onOffState; }
 
