@@ -416,14 +416,24 @@ function preMovePlatformRide(){
 }
 function updatePlatformRideState(){
     for(const mp of movingPlatforms){
+        const wasRiding=mp._playerRiding;
         const onTop=player.y+player.height>=mp._cy-2&&player.y+player.height<=mp._cy+2;
         const hOverlap=player.x+player.width>mp._cx&&player.x<mp._cx+mp.width;
         mp._playerRiding=onTop&&hOverlap;
+        if(wasRiding&&!mp._playerRiding&&deathCooldown===0){
+            player.velocity.x=Math.max(-maxVelocity.x,Math.min(maxVelocity.x,player.velocity.x+mp._vx));
+            player.velocity.y+=mp._vy;
+        }
     }
     for(const op of orbitPlatforms){
+        const wasRiding=op._playerRiding;
         const onTop=player.y+player.height>=op._cy-2&&player.y+player.height<=op._cy+2;
         const hOverlap=player.x+player.width>op._cx&&player.x<op._cx+op.width;
         op._playerRiding=onTop&&hOverlap;
+        if(wasRiding&&!op._playerRiding&&deathCooldown===0){
+            player.velocity.x=Math.max(-maxVelocity.x,Math.min(maxVelocity.x,player.velocity.x+op._vx));
+            player.velocity.y+=op._vy;
+        }
     }
 }
 
@@ -684,7 +694,8 @@ function startLevel(levelData){
     onOffSwitches  =(levelData.onOffSwitches  ||[]).map(s=>({...s,_triggered:false}));
     orbitSaws      =(levelData.orbitSaws      ||[]).map(s=>({...s,_angle:Math.random()*Math.PI*2}));
     orbitPlatforms =(levelData.orbitPlatforms ||[]).map(op=>{
-        return {...op,_angle:0,_cx:op.cx+op.radius-op.width/2,_cy:op.cy-op.height/2,_vx:0,_vy:0,_playerRiding:false};
+        const angle=Math.random()*Math.PI*2;
+        return {...op,_angle:angle,_cx:op.cx+Math.cos(angle)*op.radius-op.width/2,_cy:op.cy+Math.sin(angle)*op.radius-op.height/2,_vx:0,_vy:0,_playerRiding:false};
     });
     onOffState=false; deathCooldown=0;
     platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[]; deathParticles=[]; switchParticles=[];
@@ -854,8 +865,8 @@ function editorDrawFrame(){
         ctx.fillStyle  ='rgb(255,246,113)';
         ctx.strokeStyle=sel?'#fff':'rgb(57,57,57)';
         ctx.lineWidth=(sel?3:2)/edZoom;
-        ctx.beginPath(); ctx.roundRect(j.x,j.y,50,10,[10/edZoom]); ctx.fill(); ctx.stroke();
-        ctx.fillRect(j.x+20,j.y,10,20); ctx.strokeRect(j.x+20,j.y,10,20);
+        ctx.beginPath(); ctx.roundRect(j.x,j.y+5,50,10,[10/edZoom]); ctx.fill(); ctx.stroke();
+        ctx.fillRect(j.x+20,j.y+5,10,20); ctx.strokeRect(j.x+20,j.y+5,10,20);
     }
 
     // Spawn — draw as a ghost Ollie
@@ -1632,7 +1643,8 @@ function enterPlayTest(){
     onOffSwitches  =edOnOffSwitches.map(s=>({...s,_triggered:false}));
     orbitSaws      =edOrbitSaws.map(s=>({...s,_angle:Math.random()*Math.PI*2}));
     orbitPlatforms =edOrbitPlatforms.map(op=>{
-        return {...op,_angle:0,_cx:op.cx+op.radius-op.width/2,_cy:op.cy-op.height/2,_vx:0,_vy:0,_playerRiding:false};
+        const angle=Math.random()*Math.PI*2;
+        return {...op,_angle:angle,_cx:op.cx+Math.cos(angle)*op.radius-op.width/2,_cy:op.cy+Math.sin(angle)*op.radius-op.height/2,_vx:0,_vy:0,_playerRiding:false};
     });
     onOffState=false; deathCooldown=0;
     startPos ={...edSpawn};
