@@ -563,6 +563,12 @@ function killPlayer(){
     player.x=startPos.x; player.y=startPos.y;
     player.velocity={x:0,y:0}; gravity=0.5;
     deathCooldown=27;
+    for(const mp of movingPlatforms){
+        if(!mp.resetOnDeath)continue;
+        mp._fromPt=0; mp._toPt=1; mp._t=0; mp._pause=0;
+        mp._cx=mp.points[0].x; mp._cy=mp.points[0].y;
+        mp._vx=0; mp._vy=0; mp._playerRiding=false;
+    }
 }
 function spawnDeathParticles(){
     const cx=player.x+player.width/2, cy=player.y+player.height/2;
@@ -1429,6 +1435,7 @@ canvas.addEventListener('dblclick',e=>{
         const mp=edMovingPlatforms[edSelected.index];
         const v=prompt('Move speed (default 1):',mp.speed||1);
         if(v!==null&&!isNaN(+v))mp.speed=Math.max(0.1,+v);
+        mp.resetOnDeath=confirm(`Reset to start on player death?\nCurrently: ${mp.resetOnDeath?'YES — resets':'NO — continues'}`);
     }
     if(edSelected.type==='mplatform_pt'){
         const pt=edMovingPlatforms[edSelected.index].points[edSelected.ptIdx];
