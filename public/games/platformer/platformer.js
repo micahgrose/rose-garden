@@ -368,10 +368,15 @@ function drawMovingPlatforms(){
 function updateAttachedObjects(){
     const update=(arr,useXY)=>{
         for(const obj of arr){
-            if(obj.attachPlatIdx==null)continue;
-            const mp=movingPlatforms[obj.attachPlatIdx]; if(!mp)continue;
-            if(useXY==='cx'){ obj.cx=mp._cx+obj.attachOffX; obj.cy=mp._cy+obj.attachOffY; }
-            else             { obj.x =mp._cx+obj.attachOffX; obj.y =mp._cy+obj.attachOffY; }
+            if(obj.attachPlatIdx!=null){
+                const mp=movingPlatforms[obj.attachPlatIdx]; if(!mp)continue;
+                if(useXY==='cx'){ obj.cx=mp._cx+obj.attachOffX; obj.cy=mp._cy+obj.attachOffY; }
+                else             { obj.x =mp._cx+obj.attachOffX; obj.y =mp._cy+obj.attachOffY; }
+            } else if(obj.attachOrbitIdx!=null){
+                const op=orbitPlatforms[obj.attachOrbitIdx]; if(!op)continue;
+                if(useXY==='cx'){ obj.cx=op._cx+obj.attachOrbitOffX; obj.cy=op._cy+obj.attachOrbitOffY; }
+                else             { obj.x =op._cx+obj.attachOrbitOffX; obj.y =op._cy+obj.attachOrbitOffY; }
+            }
         }
     };
     update(spikes,    'xy');
@@ -673,8 +678,7 @@ function startLevel(levelData){
     onOffSwitches  =(levelData.onOffSwitches  ||[]).map(s=>({...s,_triggered:false}));
     orbitSaws      =(levelData.orbitSaws      ||[]).map(s=>({...s,_angle:Math.random()*Math.PI*2}));
     orbitPlatforms =(levelData.orbitPlatforms ||[]).map(op=>{
-        const angle=Math.random()*Math.PI*2;
-        return {...op,_angle:angle,_cx:op.cx+Math.cos(angle)*op.radius-op.width/2,_cy:op.cy+Math.sin(angle)*op.radius-op.height/2,_vx:0,_vy:0,_playerRiding:false};
+        return {...op,_angle:0,_cx:op.cx+op.radius-op.width/2,_cy:op.cy-op.height/2,_vx:0,_vy:0,_playerRiding:false};
     });
     onOffState=false; deathCooldown=0;
     platformParticles=[]; boostParticles=[]; jumpParticles=[]; finishParticles=[]; deathParticles=[]; switchParticles=[];
@@ -958,10 +962,16 @@ function editorDrawFrame(){
         ctx.strokeStyle='rgba(255,160,60,0.6)';
         ctx.beginPath(); ctx.moveTo(ox,oy); ctx.lineTo(p0.x+mp.width/2,p0.y+mp.height/2); ctx.stroke();
     };
-    for(const sp of edSpikes)        if(sp.attachPlatIdx!=null) drawAttachLine(sp.x,sp.y,sp.attachPlatIdx);
-    for(const s  of edSawblades)     if(s.attachPlatIdx!=null)  drawAttachLine(s.x,s.y,s.attachPlatIdx);
-    for(const s  of edOrbitSaws)     if(s.attachPlatIdx!=null)  drawAttachLine(s.x,s.y,s.attachPlatIdx);
-    for(const op of edOrbitPlatforms)if(op.attachPlatIdx!=null) drawAttachLine(op.cx,op.cy,op.attachPlatIdx);
+    const drawOrbitAttachLine=(ox,oy,orbitIdx)=>{
+        const op=edOrbitPlatforms[orbitIdx]; if(!op)return;
+        const b=edOrbitBodyPos(op);
+        ctx.strokeStyle='rgba(80,220,160,0.6)';
+        ctx.beginPath(); ctx.moveTo(ox,oy); ctx.lineTo(b.x+op.width/2,b.y+op.height/2); ctx.stroke();
+    };
+    for(const sp of edSpikes){if(sp.attachPlatIdx!=null) drawAttachLine(sp.x,sp.y,sp.attachPlatIdx); else if(sp.attachOrbitIdx!=null) drawOrbitAttachLine(sp.x,sp.y,sp.attachOrbitIdx);}
+    for(const s of edSawblades){if(s.attachPlatIdx!=null) drawAttachLine(s.x,s.y,s.attachPlatIdx); else if(s.attachOrbitIdx!=null) drawOrbitAttachLine(s.x,s.y,s.attachOrbitIdx);}
+    for(const s of edOrbitSaws){if(s.attachPlatIdx!=null) drawAttachLine(s.x,s.y,s.attachPlatIdx); else if(s.attachOrbitIdx!=null) drawOrbitAttachLine(s.x,s.y,s.attachOrbitIdx);}
+    for(const op of edOrbitPlatforms){if(op.attachPlatIdx!=null) drawAttachLine(op.cx,op.cy,op.attachPlatIdx); else if(op.attachOrbitIdx!=null) drawOrbitAttachLine(op.cx,op.cy,op.attachOrbitIdx);}
     ctx.setLineDash([]);
 
     // Sawblades (editor — animated)
@@ -1204,7 +1214,7 @@ function edDeleteSelected(){
     if(edSelected.type==='onoff')     edOnOffBlocks.splice(edSelected.index,1);
     if(edSelected.type==='switch')    edOnOffSwitches.splice(edSelected.index,1);
     if(edSelected.type==='orbitsaw')  edOrbitSaws.splice(edSelected.index,1);
-    if(edSelected.type==='orbitplat') edOrbitPlatforms.splice(edSelected.index,1);
+    if(edSelected.type==='orbitplat'){ cleanupOrbitAttachments(edSelected.index); edOrbitPlatforms.splice(edSelected.index,1); }
     edSelected=null;
 }
 
@@ -1286,7 +1296,7 @@ canvas.addEventListener('mousedown', e=>{
             if(hit.type==='onoff')     edOnOffBlocks.splice(hit.index,1);
             if(hit.type==='switch')    edOnOffSwitches.splice(hit.index,1);
             if(hit.type==='orbitsaw')  edOrbitSaws.splice(hit.index,1);
-            if(hit.type==='orbitplat') edOrbitPlatforms.splice(hit.index,1);
+            if(hit.type==='orbitplat'){ cleanupOrbitAttachments(hit.index); edOrbitPlatforms.splice(hit.index,1); }
             edSelected=null;
         }
     }
@@ -1332,9 +1342,11 @@ canvas.addEventListener('mousemove', e=>{
             } else if(edSelected.type==='orbitplat'){
                 obj.cx=snapV(edDragOriginal.x+dx); obj.cy=snapV(edDragOriginal.y+dy);
                 if(obj.attachPlatIdx!=null){const mp=edMovingPlatforms[obj.attachPlatIdx];if(mp){const p0=mp.points[0];obj.attachOffX=obj.cx-p0.x;obj.attachOffY=obj.cy-p0.y;}}
+                else if(obj.attachOrbitIdx!=null){const op=edOrbitPlatforms[obj.attachOrbitIdx];if(op){const b=edOrbitBodyPos(op);obj.attachOrbitOffX=obj.cx-b.x;obj.attachOrbitOffY=obj.cy-b.y;}}
             } else {
                 obj.x=snapV(edDragOriginal.x+dx); obj.y=snapV(edDragOriginal.y+dy);
                 if(obj.attachPlatIdx!=null){const mp=edMovingPlatforms[obj.attachPlatIdx];if(mp){const p0=mp.points[0];obj.attachOffX=obj.x-p0.x;obj.attachOffY=obj.y-p0.y;}}
+                else if(obj.attachOrbitIdx!=null){const op=edOrbitPlatforms[obj.attachOrbitIdx];if(op){const b=edOrbitBodyPos(op);obj.attachOrbitOffX=obj.x-b.x;obj.attachOrbitOffY=obj.y-b.y;}}
             }
         }
         else if(edSelected.type==='spike'){
@@ -1454,27 +1466,56 @@ function cleanupPlatformAttachments(deletedIdx){
         }
     }
 }
+function cleanupOrbitAttachments(deletedIdx){
+    const arrs=[edSpikes,edSawblades,edOrbitSaws,edOrbitPlatforms];
+    for(const arr of arrs){
+        for(const obj of arr){
+            if(obj.attachOrbitIdx===deletedIdx){ obj.attachOrbitIdx=null; obj.attachOrbitOffX=0; obj.attachOrbitOffY=0; }
+            else if(obj.attachOrbitIdx!=null&&obj.attachOrbitIdx>deletedIdx) obj.attachOrbitIdx--;
+        }
+    }
+}
 
-// ── Attach / detach selected to moving platform ────────
+// ── Attach / detach selected to nearest platform ───────
+function edOrbitBodyPos(op){ return {x:op.cx+op.radius-op.width/2, y:op.cy-op.height/2}; }
 function attachOrDetachSelected(){
     const attachable=new Set(['spike','saw','orbitsaw','orbitplat']);
     if(!attachable.has(edSelected.type))return;
     const obj=edGetSel(); if(!obj)return;
     if(obj.attachPlatIdx!=null){ obj.attachPlatIdx=null; obj.attachOffX=0; obj.attachOffY=0; setEdStatus('Detached.'); return; }
-    if(!edMovingPlatforms.length){ setEdStatus('No moving platform to attach to.'); return; }
+    if(obj.attachOrbitIdx!=null){ obj.attachOrbitIdx=null; obj.attachOrbitOffX=0; obj.attachOrbitOffY=0; setEdStatus('Detached.'); return; }
+    if(!edMovingPlatforms.length&&!edOrbitPlatforms.length){ setEdStatus('No platform to attach to.'); return; }
     const ox=edSelected.type==='orbitplat'?obj.cx:obj.x;
     const oy=edSelected.type==='orbitplat'?obj.cy:obj.y;
-    let best=-1, bestD=Infinity;
+    let bestMP=-1, bestMPD=Infinity;
     for(let i=0;i<edMovingPlatforms.length;i++){
         const p0=edMovingPlatforms[i].points[0], mp=edMovingPlatforms[i];
         const d=Math.hypot(ox-(p0.x+mp.width/2), oy-(p0.y+mp.height/2));
-        if(d<bestD){bestD=d;best=i;}
+        if(d<bestMPD){bestMPD=d;bestMP=i;}
     }
-    const p0=edMovingPlatforms[best].points[0];
-    obj.attachPlatIdx=best;
-    if(edSelected.type==='orbitplat'){ obj.attachOffX=obj.cx-p0.x; obj.attachOffY=obj.cy-p0.y; }
-    else                              { obj.attachOffX=obj.x -p0.x; obj.attachOffY=obj.y -p0.y; }
-    setEdStatus('Attached to platform '+best+'.');
+    let bestOP=-1, bestOPD=Infinity;
+    for(let i=0;i<edOrbitPlatforms.length;i++){
+        if(edSelected.type==='orbitplat'&&edSelected.index===i)continue;
+        const b=edOrbitBodyPos(edOrbitPlatforms[i]);
+        const op=edOrbitPlatforms[i];
+        const d=Math.hypot(ox-(b.x+op.width/2), oy-(b.y+op.height/2));
+        if(d<bestOPD){bestOPD=d;bestOP=i;}
+    }
+    if(bestMPD<=bestOPD&&bestMP>=0){
+        const p0=edMovingPlatforms[bestMP].points[0];
+        obj.attachPlatIdx=bestMP;
+        if(edSelected.type==='orbitplat'){ obj.attachOffX=obj.cx-p0.x; obj.attachOffY=obj.cy-p0.y; }
+        else                              { obj.attachOffX=obj.x -p0.x; obj.attachOffY=obj.y -p0.y; }
+        setEdStatus('Attached to mover '+bestMP+'.');
+    } else if(bestOP>=0){
+        const b=edOrbitBodyPos(edOrbitPlatforms[bestOP]);
+        obj.attachOrbitIdx=bestOP;
+        if(edSelected.type==='orbitplat'){ obj.attachOrbitOffX=obj.cx-b.x; obj.attachOrbitOffY=obj.cy-b.y; }
+        else                              { obj.attachOrbitOffX=obj.x -b.x; obj.attachOrbitOffY=obj.y -b.y; }
+        setEdStatus('Attached to orbit '+bestOP+'.');
+    } else {
+        setEdStatus('No platform to attach to.');
+    }
 }
 
 // ── Rotate selected ────────────────────────────────────
@@ -1584,8 +1625,7 @@ function enterPlayTest(){
     onOffSwitches  =edOnOffSwitches.map(s=>({...s,_triggered:false}));
     orbitSaws      =edOrbitSaws.map(s=>({...s,_angle:Math.random()*Math.PI*2}));
     orbitPlatforms =edOrbitPlatforms.map(op=>{
-        const angle=Math.random()*Math.PI*2;
-        return {...op,_angle:angle,_cx:op.cx+Math.cos(angle)*op.radius-op.width/2,_cy:op.cy+Math.sin(angle)*op.radius-op.height/2,_vx:0,_vy:0,_playerRiding:false};
+        return {...op,_angle:0,_cx:op.cx+op.radius-op.width/2,_cy:op.cy-op.height/2,_vx:0,_vy:0,_playerRiding:false};
     });
     onOffState=false; deathCooldown=0;
     startPos ={...edSpawn};
