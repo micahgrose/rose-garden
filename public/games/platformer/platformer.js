@@ -859,8 +859,17 @@ function editorDrawFrame(){
         // Body at pts[0]
         ctx.fillStyle=sel?'#6699dd':'#5588cc'; ctx.strokeStyle=sel?'#aaccff':'#3366aa'; ctx.lineWidth=(sel?3:2)/edZoom;
         ctx.fillRect(pts[0].x,pts[0].y,mp.width,mp.height); ctx.strokeRect(pts[0].x,pts[0].y,mp.width,mp.height);
-        // Waypoint ghosts + handles
+        // Start node dot at pts[0]
         const hs2=HS*1.5/edZoom;
+        const pt0Sel=edSelected?.type==='mplatform_pt'&&edSelected.index===i&&edSelected.ptIdx===0;
+        ctx.fillStyle=pt0Sel?'#fff':(pts[0].stop!==false?'#ffcc44':'#5599ff');
+        ctx.strokeStyle='#112233'; ctx.lineWidth=1/edZoom;
+        ctx.beginPath(); ctx.arc(pts[0].x+mp.width/2,pts[0].y+mp.height/2,hs2,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        if(pts[0].stop!==false){
+            ctx.fillStyle='#332200'; ctx.font=`bold ${10/edZoom}px sans-serif`; ctx.textAlign='center';
+            ctx.fillText('||',pts[0].x+mp.width/2,pts[0].y+mp.height/2+4/edZoom); ctx.textAlign='left';
+        }
+        // Waypoint ghosts + handles
         for(let j=1;j<pts.length;j++){
             const pt=pts[j], ptSel=edSelected?.type==='mplatform_pt'&&edSelected.index===i&&edSelected.ptIdx===j;
             ctx.fillStyle='rgba(85,136,204,0.2)';
@@ -1119,10 +1128,10 @@ function edGetHandleName(sx,sy,wx,wy,ww,wh){
 function edHitTest(sx,sy){
     const{x:wx,y:wy}=edSW(sx,sy);
     if(edFinish&&wx>=edFinish.x-8&&wx<=edFinish.x+55&&wy>=edFinish.y&&wy<=edFinish.y+78)return{type:'finish'};
-    // mplatform waypoint handles (j>=1)
+    // mplatform waypoint handles (all points including pt[0])
     for(let i=edMovingPlatforms.length-1;i>=0;i--){
         const mp=edMovingPlatforms[i],pts=mp.points;
-        for(let j=pts.length-1;j>=1;j--){
+        for(let j=pts.length-1;j>=0;j--){
             const dx=wx-(pts[j].x+mp.width/2),dy=wy-(pts[j].y+mp.height/2);
             if(Math.sqrt(dx*dx+dy*dy)<14/edZoom)return{type:'mplatform_pt',index:i,ptIdx:j};
         }
@@ -1211,7 +1220,10 @@ canvas.addEventListener('mousedown', e=>{
             const{x,y}=edSW(sx,sy); edDragStart={x,y};
             const o=edGetSel();
             if(hit.type==='mplatform') edDragOriginal={x:o.points[0].x,y:o.points[0].y,points:o.points.map(p=>({...p}))};
-            else if(hit.type==='mplatform_pt'){const pt=o.points[hit.ptIdx];edDragOriginal={x:pt.x,y:pt.y};}
+            else if(hit.type==='mplatform_pt'){
+                if(hit.ptIdx===0) edDragOriginal={x:o.points[0].x,y:o.points[0].y,points:o.points.map(p=>({...p}))};
+                else{const pt=o.points[hit.ptIdx];edDragOriginal={x:pt.x,y:pt.y};}
+            }
             else if(hit.type==='orbitplat') edDragOriginal={x:o.cx,y:o.cy};
             else edDragOriginal={x:o.x,y:o.y};
         }
@@ -1292,8 +1304,13 @@ canvas.addEventListener('mousemove', e=>{
         const dx=cwx-edDragStart.x, dy=cwy-edDragStart.y;
         if(edDragHandle==='move_pt'){
             const mp=edMovingPlatforms[edSelected.index];
-            const pt=mp.points[edSelected.ptIdx];
-            pt.x=snapV(edDragOriginal.x+dx); pt.y=snapV(edDragOriginal.y+dy);
+            if(edSelected.ptIdx===0){
+                const base=edDragOriginal.points[0];const nx=snapV(base.x+dx),ny=snapV(base.y+dy);const ddx=nx-base.x,ddy=ny-base.y;
+                for(let j=0;j<mp.points.length;j++){mp.points[j].x=edDragOriginal.points[j].x+ddx;mp.points[j].y=edDragOriginal.points[j].y+ddy;}
+            } else {
+                const pt=mp.points[edSelected.ptIdx];
+                pt.x=snapV(edDragOriginal.x+dx); pt.y=snapV(edDragOriginal.y+dy);
+            }
         }
         else if(edDragHandle==='move'){
             if(edSelected.type==='mplatform'){
