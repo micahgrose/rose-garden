@@ -133,7 +133,8 @@ function gameLoop(){
     camera.width=canvas.width; camera.height=canvas.height;
     ctx.clearRect(0,0,canvas.width,canvas.height);
     if(deathCooldown>0) deathCooldown--;
-    updateMovingPlatforms(); updateSaws(); updateOrbitSaws(); updateOrbitPlatforms();
+    updateMovingPlatforms(); updateSaws(); updateOrbitSaws();
+    updateAttachedObjects(); updateOrbitPlatforms();
     preMovePlatformRide();
     movePlayer(); moveCamera();
     wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
@@ -186,6 +187,7 @@ document.addEventListener("keydown", e => {
         if(e.key==='h'||e.key==='H') setTool('switch');
         if(e.key==='b'||e.key==='B') setTool('orbitsaw');
         if(e.key==='o'||e.key==='O') setTool('orbitplat');
+        if(e.key==='l'||e.key==='L'){ if(edSelected) attachOrDetachSelected(); }
         if((e.key==='+'||e.key==='=')&&!inInput){
             if(edSelected&&(edSelected.type==='mplatform'||edSelected.type==='mplatform_pt')){
                 const mp=edMovingPlatforms[edSelected.index];const last=mp.points[mp.points.length-1];
@@ -347,6 +349,22 @@ function drawMovingPlatforms(){
         ctx.fillRect(mp._cx-camera.x,mp._cy-camera.y,mp.width,mp.height);
         ctx.strokeRect(mp._cx-camera.x,mp._cy-camera.y,mp.width,mp.height);
     }
+}
+
+// ── Attached objects ───────────────────────────────────
+function updateAttachedObjects(){
+    const update=(arr,useXY)=>{
+        for(const obj of arr){
+            if(obj.attachPlatIdx==null)continue;
+            const mp=movingPlatforms[obj.attachPlatIdx]; if(!mp)continue;
+            if(useXY==='cx'){ obj.cx=mp._cx+obj.attachOffX; obj.cy=mp._cy+obj.attachOffY; }
+            else             { obj.x =mp._cx+obj.attachOffX; obj.y =mp._cy+obj.attachOffY; }
+        }
+    };
+    update(spikes,    'xy');
+    update(sawblades, 'xy');
+    update(orbitSaws, 'xy');
+    update(orbitPlatforms, 'cx');
 }
 
 // ── Orbit platforms ────────────────────────────────────
@@ -545,22 +563,24 @@ function drawDeathParticles(){
 
 function drawFinish(){
     if(!finish)return;
-    const px=finish.x-camera.x, py=finish.y-camera.y;
     const poleH=65, flagW=45, flagH=28;
-    // Pole
+    const cx=finish.x+flagW/2-camera.x, cy=finish.y+poleH/2-camera.y;
+    const rot={right:0,down:Math.PI/2,left:Math.PI,up:-Math.PI/2}[finish.dir||'right']||0;
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(rot);
     ctx.strokeStyle='#c8c8c8'; ctx.lineWidth=4;
-    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px,py+poleH); ctx.stroke();
-    // Flag
+    ctx.beginPath(); ctx.moveTo(-flagW/2,-poleH/2); ctx.lineTo(-flagW/2,poleH/2); ctx.stroke();
     ctx.fillStyle='#c0394b';
-    ctx.fillRect(px,py,flagW,flagH);
-    // Base circle
+    ctx.fillRect(-flagW/2,-poleH/2,flagW,flagH);
     ctx.fillStyle='rgba(255,255,255,0.3)';
-    ctx.beginPath(); ctx.arc(px,py+poleH,5,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-flagW/2,poleH/2,5,0,Math.PI*2); ctx.fill();
+    ctx.restore();
 }
 
 function checkFinish(){
     if(!finish||levelCompleted)return;
-    if(player.x+player.width>finish.x-10&&player.x<finish.x+55&&player.y+player.height>finish.y&&player.y<finish.y+75){
+    const fcx=finish.x+22, fcy=finish.y+32;
+    const pcx=player.x+player.width/2, pcy=player.y+player.height/2;
+    if(Math.abs(pcx-fcx)<55&&Math.abs(pcy-fcy)<55){
         levelCompleted=true; markLevelComplete(currentLevelOrder);
         spawnFinishParticles();
         setTimeout(()=>{
@@ -574,7 +594,7 @@ function checkFinish(){
 }
 
 function spawnFinishParticles(){
-    const cx=finish.x, cy=finish.y+65;
+    const cx=finish.x+22, cy=finish.y+32;
     for(let i=0;i<70;i++) finishParticles.push(new FinishParticle(cx,cy));
 }
 
@@ -908,6 +928,20 @@ function editorDrawFrame(){
         ctx.closePath(); ctx.fill(); ctx.stroke();
     }
 
+    // Attachment lines
+    ctx.setLineDash([4/edZoom,3/edZoom]); ctx.lineWidth=1/edZoom;
+    const drawAttachLine=(ox,oy,platIdx)=>{
+        const mp=edMovingPlatforms[platIdx]; if(!mp)return;
+        const p0=mp.points[0];
+        ctx.strokeStyle='rgba(255,160,60,0.6)';
+        ctx.beginPath(); ctx.moveTo(ox,oy); ctx.lineTo(p0.x+mp.width/2,p0.y+mp.height/2); ctx.stroke();
+    };
+    for(const sp of edSpikes)        if(sp.attachPlatIdx!=null) drawAttachLine(sp.x,sp.y,sp.attachPlatIdx);
+    for(const s  of edSawblades)     if(s.attachPlatIdx!=null)  drawAttachLine(s.x,s.y,s.attachPlatIdx);
+    for(const s  of edOrbitSaws)     if(s.attachPlatIdx!=null)  drawAttachLine(s.x,s.y,s.attachPlatIdx);
+    for(const op of edOrbitPlatforms)if(op.attachPlatIdx!=null) drawAttachLine(op.cx,op.cy,op.attachPlatIdx);
+    ctx.setLineDash([]);
+
     // Sawblades (editor — animated)
     for(let i=0;i<edSawblades.length;i++){
         const s=edSawblades[i], sel=edSelected?.type==='saw'&&edSelected.index===i;
@@ -996,12 +1030,16 @@ function editorDrawFrame(){
 
     // Finish flag
     if(edFinish){
-        const fx=edFinish.x, fy=edFinish.y, poleH=65, flagW=45, flagH=28;
+        const poleH=65, flagW=45, flagH=28;
+        const fx=edFinish.x+flagW/2, fy=edFinish.y+poleH/2;
+        const rot={right:0,down:Math.PI/2,left:Math.PI,up:-Math.PI/2}[edFinish.dir||'right']||0;
+        ctx.save(); ctx.translate(fx,fy); ctx.rotate(rot);
         ctx.strokeStyle='#c8c8c8'; ctx.lineWidth=4/edZoom;
-        ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx,fy+poleH); ctx.stroke();
-        ctx.fillStyle='#c0394b'; ctx.fillRect(fx,fy,flagW,flagH);
+        ctx.beginPath(); ctx.moveTo(-flagW/2,-poleH/2); ctx.lineTo(-flagW/2,poleH/2); ctx.stroke();
+        ctx.fillStyle='#c0394b'; ctx.fillRect(-flagW/2,-poleH/2,flagW,flagH);
+        ctx.restore();
         ctx.fillStyle='rgba(192,57,75,0.8)'; ctx.font=`${12/edZoom}px monospace`;
-        ctx.fillText('FINISH',fx-15/edZoom,fy-8/edZoom);
+        ctx.fillText('FINISH',edFinish.x-15/edZoom,edFinish.y-8/edZoom);
     }
 
     // Ghost finish preview
@@ -1036,7 +1074,7 @@ function editorDrawFrame(){
         if(obj){
             if(edSelected.type==='finish'){
                 ctx.strokeStyle='rgba(192,57,75,0.85)'; ctx.lineWidth=2/edZoom;
-                ctx.strokeRect(obj.x-8,obj.y-8,63,90);
+                ctx.strokeRect(obj.x-4,obj.y-4,53,73);
             } else if(edSelected.type==='spike'){
                 const b=spikeBBoxEd(obj);
                 edDrawHandles(b.x, b.y, b.w, b.h);
@@ -1135,11 +1173,11 @@ function edDeleteSelected(){
     if(edSelected.type==='finish')    edFinish=null;
     if(edSelected.type==='spike')     edSpikes.splice(edSelected.index,1);
     if(edSelected.type==='saw')       edSawblades.splice(edSelected.index,1);
-    if(edSelected.type==='mplatform') edMovingPlatforms.splice(edSelected.index,1);
+    if(edSelected.type==='mplatform'){ cleanupPlatformAttachments(edSelected.index); edMovingPlatforms.splice(edSelected.index,1); }
     if(edSelected.type==='mplatform_pt'){
         const mp=edMovingPlatforms[edSelected.index];
         if(mp.points.length>2)mp.points.splice(edSelected.ptIdx,1);
-        else edMovingPlatforms.splice(edSelected.index,1);
+        else{ cleanupPlatformAttachments(edSelected.index); edMovingPlatforms.splice(edSelected.index,1); }
     }
     if(edSelected.type==='onoff')     edOnOffBlocks.splice(edSelected.index,1);
     if(edSelected.type==='switch')    edOnOffSwitches.splice(edSelected.index,1);
@@ -1214,11 +1252,11 @@ canvas.addEventListener('mousedown', e=>{
             if(hit.type==='finish')    edFinish=null;
             if(hit.type==='spike')     edSpikes.splice(hit.index,1);
             if(hit.type==='saw')       edSawblades.splice(hit.index,1);
-            if(hit.type==='mplatform') edMovingPlatforms.splice(hit.index,1);
+            if(hit.type==='mplatform'){ cleanupPlatformAttachments(hit.index); edMovingPlatforms.splice(hit.index,1); }
             if(hit.type==='mplatform_pt'){
                 const mp=edMovingPlatforms[hit.index];
                 if(mp.points.length>2)mp.points.splice(hit.ptIdx,1);
-                else edMovingPlatforms.splice(hit.index,1);
+                else{ cleanupPlatformAttachments(hit.index); edMovingPlatforms.splice(hit.index,1); }
             }
             if(hit.type==='onoff')     edOnOffBlocks.splice(hit.index,1);
             if(hit.type==='switch')    edOnOffSwitches.splice(hit.index,1);
@@ -1263,8 +1301,10 @@ canvas.addEventListener('mousemove', e=>{
                 for(let j=0;j<obj.points.length;j++){obj.points[j].x=edDragOriginal.points[j].x+ddx;obj.points[j].y=edDragOriginal.points[j].y+ddy;}
             } else if(edSelected.type==='orbitplat'){
                 obj.cx=snapV(edDragOriginal.x+dx); obj.cy=snapV(edDragOriginal.y+dy);
+                if(obj.attachPlatIdx!=null){const mp=edMovingPlatforms[obj.attachPlatIdx];if(mp){const p0=mp.points[0];obj.attachOffX=obj.cx-p0.x;obj.attachOffY=obj.cy-p0.y;}}
             } else {
                 obj.x=snapV(edDragOriginal.x+dx); obj.y=snapV(edDragOriginal.y+dy);
+                if(obj.attachPlatIdx!=null){const mp=edMovingPlatforms[obj.attachPlatIdx];if(mp){const p0=mp.points[0];obj.attachOffX=obj.x-p0.x;obj.attachOffY=obj.y-p0.y;}}
             }
         }
         else if(edSelected.type==='spike'){
@@ -1374,9 +1414,48 @@ canvas.addEventListener('dblclick',e=>{
     }
 });
 
+// ── Moving platform attachment cleanup ────────────────
+function cleanupPlatformAttachments(deletedIdx){
+    const arrs=[edSpikes,edSawblades,edOrbitSaws,edOrbitPlatforms];
+    for(const arr of arrs){
+        for(const obj of arr){
+            if(obj.attachPlatIdx===deletedIdx){ obj.attachPlatIdx=null; obj.attachOffX=0; obj.attachOffY=0; }
+            else if(obj.attachPlatIdx!=null&&obj.attachPlatIdx>deletedIdx) obj.attachPlatIdx--;
+        }
+    }
+}
+
+// ── Attach / detach selected to moving platform ────────
+function attachOrDetachSelected(){
+    const attachable=new Set(['spike','saw','orbitsaw','orbitplat']);
+    if(!attachable.has(edSelected.type))return;
+    const obj=edGetSel(); if(!obj)return;
+    if(obj.attachPlatIdx!=null){ obj.attachPlatIdx=null; obj.attachOffX=0; obj.attachOffY=0; setEdStatus('Detached.'); return; }
+    if(!edMovingPlatforms.length){ setEdStatus('No moving platform to attach to.'); return; }
+    const ox=edSelected.type==='orbitplat'?obj.cx:obj.x;
+    const oy=edSelected.type==='orbitplat'?obj.cy:obj.y;
+    let best=-1, bestD=Infinity;
+    for(let i=0;i<edMovingPlatforms.length;i++){
+        const p0=edMovingPlatforms[i].points[0], mp=edMovingPlatforms[i];
+        const d=Math.hypot(ox-(p0.x+mp.width/2), oy-(p0.y+mp.height/2));
+        if(d<bestD){bestD=d;best=i;}
+    }
+    const p0=edMovingPlatforms[best].points[0];
+    obj.attachPlatIdx=best;
+    if(edSelected.type==='orbitplat'){ obj.attachOffX=obj.cx-p0.x; obj.attachOffY=obj.cy-p0.y; }
+    else                              { obj.attachOffX=obj.x -p0.x; obj.attachOffY=obj.y -p0.y; }
+    setEdStatus('Attached to platform '+best+'.');
+}
+
 // ── Rotate selected ────────────────────────────────────
 function rotateSelected(){
     if(!edSelected)return;
+    if(edSelected.type==='finish'){
+        const dirs=['right','down','left','up'];
+        const cur=edFinish.dir||'right';
+        edFinish.dir=dirs[(dirs.indexOf(cur)+1)%4];
+        return;
+    }
     if(edSelected.type==='spike'){
         const sp=edSpikes[edSelected.index];
         const dirs=['up','right','down','left'];
