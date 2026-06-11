@@ -396,8 +396,15 @@ function updateOrbitPlatforms(){
     }
 }
 function drawOrbitPlatforms(){
-    ctx.lineWidth=2;
     for(const op of orbitPlatforms){
+        const pivotX=op.cx-camera.x, pivotY=op.cy-camera.y;
+        const bodyX=op._cx+op.width/2-camera.x, bodyY=op._cy+op.height/2-camera.y;
+        ctx.strokeStyle='#888'; ctx.lineWidth=4;
+        ctx.beginPath(); ctx.moveTo(pivotX,pivotY); ctx.lineTo(bodyX,bodyY); ctx.stroke();
+        ctx.fillStyle='#aaa'; ctx.strokeStyle='#666'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.arc(pivotX,pivotY,5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+
+        ctx.lineWidth=2;
         ctx.fillStyle='#44aa66'; ctx.strokeStyle='#226644';
         ctx.fillRect(op._cx-camera.x,op._cy-camera.y,op.width,op.height);
         ctx.strokeRect(op._cx-camera.x,op._cy-camera.y,op.width,op.height);
