@@ -220,7 +220,7 @@ function movePlayer(){
     if(player.velocity.y>maxVelocity.y)  player.velocity.y=maxVelocity.y;
     if(player.velocity.x>maxVelocity.x)  player.velocity.x=maxVelocity.x;
     if(player.velocity.x<-maxVelocity.x) player.velocity.x=-maxVelocity.x;
-    if(!boosting) player.velocity.x*=friction;
+    if(!boosting) player.velocity.x *= grounded ? friction : 0.98;
     player.x+=player.velocity.x; player.y+=player.velocity.y;
     if(player.y>world.height+500){ player.x=startPos.x; player.y=startPos.y; player.velocity={x:0,y:0}; gravity=0.5; speed=5;}
 }
@@ -406,34 +406,38 @@ function drawOrbitPlatforms(){
 
 // ── Platform ride physics ──────────────────────────────
 function preMovePlatformRide(){
-    if(deathCooldown>0) return;
+    if(deathCooldown>0){
+        for(const mp of movingPlatforms) mp._wasRiding=false;
+        for(const op of orbitPlatforms)  op._wasRiding=false;
+        return;
+    }
     for(const mp of movingPlatforms){
-        if(mp._playerRiding){ player.x+=mp._vx; player.y+=mp._vy; }
+        if(mp._playerRiding){
+            player.x+=mp._vx; player.y+=mp._vy; mp._wasRiding=true;
+        } else if(mp._wasRiding){
+            player.velocity.x=Math.max(-maxVelocity.x,Math.min(maxVelocity.x,player.velocity.x+mp._vx));
+            player.velocity.y+=mp._vy; mp._wasRiding=false;
+        }
     }
     for(const op of orbitPlatforms){
-        if(op._playerRiding){ player.x+=op._vx; player.y+=op._vy; }
+        if(op._playerRiding){
+            player.x+=op._vx; player.y+=op._vy; op._wasRiding=true;
+        } else if(op._wasRiding){
+            player.velocity.x=Math.max(-maxVelocity.x,Math.min(maxVelocity.x,player.velocity.x+op._vx));
+            player.velocity.y+=op._vy; op._wasRiding=false;
+        }
     }
 }
 function updatePlatformRideState(){
     for(const mp of movingPlatforms){
-        const wasRiding=mp._playerRiding;
         const onTop=player.y+player.height>=mp._cy-2&&player.y+player.height<=mp._cy+2;
         const hOverlap=player.x+player.width>mp._cx&&player.x<mp._cx+mp.width;
         mp._playerRiding=onTop&&hOverlap;
-        if(wasRiding&&!mp._playerRiding&&deathCooldown===0){
-            player.velocity.x=Math.max(-maxVelocity.x,Math.min(maxVelocity.x,player.velocity.x+mp._vx));
-            player.velocity.y+=mp._vy;
-        }
     }
     for(const op of orbitPlatforms){
-        const wasRiding=op._playerRiding;
         const onTop=player.y+player.height>=op._cy-2&&player.y+player.height<=op._cy+2;
         const hOverlap=player.x+player.width>op._cx&&player.x<op._cx+op.width;
         op._playerRiding=onTop&&hOverlap;
-        if(wasRiding&&!op._playerRiding&&deathCooldown===0){
-            player.velocity.x=Math.max(-maxVelocity.x,Math.min(maxVelocity.x,player.velocity.x+op._vx));
-            player.velocity.y+=op._vy;
-        }
     }
 }
 
@@ -574,11 +578,13 @@ function killPlayer(){
     player.velocity={x:0,y:0}; gravity=0.5;
     deathCooldown=27;
     for(const mp of movingPlatforms){
+        mp._playerRiding=false; mp._wasRiding=false;
         if(!mp.resetOnDeath)continue;
         mp._fromPt=0; mp._toPt=1; mp._t=0; mp._pause=0;
         mp._cx=mp.points[0].x; mp._cy=mp.points[0].y;
-        mp._vx=0; mp._vy=0; mp._playerRiding=false;
+        mp._vx=0; mp._vy=0;
     }
+    for(const op of orbitPlatforms){ op._playerRiding=false; op._wasRiding=false; }
 }
 function spawnDeathParticles(){
     const cx=player.x+player.width/2, cy=player.y+player.height/2;
