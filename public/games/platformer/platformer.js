@@ -414,6 +414,7 @@ function preMovePlatformRide(){
     for(const mp of movingPlatforms){
         if(mp._playerRiding){
             player.x+=mp._vx; player.y+=mp._vy; mp._wasRiding=true;
+            player.velocity.x=0; player.velocity.y=0;
         } else if(mp._wasRiding){
             player.velocity.x=Math.max(-maxVelocity.x,Math.min(maxVelocity.x,player.velocity.x+mp._vx));
             player.velocity.y+=mp._vy; mp._wasRiding=false;
@@ -422,6 +423,7 @@ function preMovePlatformRide(){
     for(const op of orbitPlatforms){
         if(op._playerRiding){
             player.x+=op._vx; player.y+=op._vy; op._wasRiding=true;
+            player.velocity.x=0; player.velocity.y=0;
         } else if(op._wasRiding){
             player.velocity.x=Math.max(-maxVelocity.x,Math.min(maxVelocity.x,player.velocity.x+op._vx));
             player.velocity.y+=op._vy; op._wasRiding=false;
