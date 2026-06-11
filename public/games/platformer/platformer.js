@@ -12,15 +12,14 @@ window.addEventListener('resize', () => {
 class Player {
     constructor(x, y){
         this.x = x; this.y = y;
-        this.width = 50; this.height = 50;
+        this.width = 26; this.height = 50;
         this.velocity = {x:0, y:0};
-        this.stretchTarget = {width:45, height:60};
-        this.stretchSpeed  = 0.2;
-        this.eyeSize       = {width:10, height:15};
-        this.eyePaddingR   = {x:10, y:10};
-        this.eyePaddingL   = {x:30, y:10};
-        this.pupilSize     = {width:5, height:5};
-        this.pupilPadding  = {x:2.5, y:5};
+        // animation state
+        this._facing   = 1;     // 1 = right, -1 = left
+        this._runPhase = 0;     // running cycle angle
+        this._sx = 1; this._sy = 1;   // visual squash / stretch
+        this._squash = 0;       // landing-impact squash impulse (decays)
+        this._blink = 0;        // blink timer
     }
 }
 class Platform { constructor(x,y,w,h){ this.x=x; this.y=y; this.width=w; this.height=h; } }
@@ -33,7 +32,7 @@ class JumpPad {
 }
 
 class PlatformParticle {
-    constructor(c){ this.x=player.x+(Math.random()*(player.height+15)-7.5); this.y=player.y+player.height; this.size=Math.random()*5+5; this.direction=(this.x>player.x+player.width/2)?1:-1; this.classifier=c; this.lifeSpan=Math.random()*300+200; this.dead=false; }
+    constructor(c){ this.x=player.x+(Math.random()*(player.width+14)-7); this.y=player.y+player.height; this.size=Math.random()*5+5; this.direction=(this.x>player.x+player.width/2)?1:-1; this.classifier=c; this.lifeSpan=Math.random()*300+200; this.dead=false; }
 }
 class BoostParticle {
     constructor(c){ this.x=player.x+player.width+(Math.random()*10)-5; this.y=player.y+player.height+(Math.random()*10)-5; this.size=Math.random()*5+5; this.speed=Math.random()*2+1; this.direction=Math.sign(player.velocity.x); this.classifier=c; this.lifeSpan=Math.random()*1500+500; this.dead=false; this.rising=true; }
@@ -138,7 +137,7 @@ function gameLoop(){
     preMovePlatformRide();
     movePlayer(); moveCamera();
     wasGrounded[3]=wasGrounded[2]; wasGrounded[2]=wasGrounded[1]; wasGrounded[1]=wasGrounded[0]; wasGrounded[0]=grounded;
-    checkJumpPad(); checkCollision(); checkCrush(); updateStretch(); updateEyePos();
+    checkJumpPad(); checkCollision(); checkCrush(); updatePlayerAnim();
     if(grounded){resetGravity(); jumped=false;}
     if(ceiling){player.velocity.y=0;}
     updatePlatformRideState();
@@ -205,8 +204,8 @@ document.addEventListener("keyup", e => {
 function movePlayer(){
     if(deathCooldown>0){ player.velocity={x:0,y:0}; gravity=0.5; return; }
     if(!levelCompleted){
-        GORIGHT: if(keys.includes("ArrowRight")||keys.includes("d")){ player.pupilPadding.x=5; player.eyePaddingR.x=15; player.eyePaddingL.x=35; if(clampRight)break GORIGHT; player.velocity.x+=speed; }
-        GOLEFT:  if(keys.includes("ArrowLeft") ||keys.includes("a")){ player.pupilPadding.x=0; player.eyePaddingR.x=5;  player.eyePaddingL.x=25; if(clampLeft) break GOLEFT;  player.velocity.x-=speed; }
+        GORIGHT: if(keys.includes("ArrowRight")||keys.includes("d")){ player._facing=1;  if(clampRight)break GORIGHT; player.velocity.x+=speed; }
+        GOLEFT:  if(keys.includes("ArrowLeft") ||keys.includes("a")){ player._facing=-1; if(clampLeft) break GOLEFT;  player.velocity.x-=speed; }
         if((keys.includes("ArrowUp")||keys.includes("w"))&&(grounded||wasGrounded.includes(true))){ player.velocity.y=-jumpStrength; jumped=true; }
         else if(!keys.includes("ArrowUp")&&!keys.includes("w")&&!grounded&&player.velocity.y<0&&jumped){ player.velocity.y*=0.72; }
         if(keys.includes(" ")&&(keys.includes("ArrowRight")||keys.includes("d")||keys.includes("ArrowLeft")||keys.includes("a"))&&!boosting&&boostReady){
@@ -295,25 +294,113 @@ function drawBackground(){
     ctx.globalAlpha=1;
 }
 
+// ── Humanoid figure ────────────────────────────────────
+// Ollie palette
+const OLLIE = { body:'#3a7bd5', head:'#5b9be8', limb:'#2f63b0', back:'#244c87', line:'#16315c' };
+
+// Compute limb pose (angles in radians, measured from straight-down) for the
+// current motion state. Returns hip/shoulder leg & arm angles plus a body bob.
+function olliePose(){
+    const onGround = grounded;
+    const running  = onGround && Math.abs(player.velocity.x) > 0.6;
+    let legR, legL, armR, armL, bob = 0;
+    if(running){
+        const s = Math.sin(player._runPhase);
+        const amp = Math.min(0.85, 0.45 + Math.abs(player.velocity.x)*0.04);
+        legR =  s*amp;      legL = -s*amp;
+        armR = -s*amp*0.9;  armL =  s*amp*0.9;
+        bob  = -Math.abs(Math.sin(player._runPhase))*2.5;
+    } else if(!onGround){
+        if(player.velocity.y < 0){            // rising / jump
+            legR = 0.55; legL = -0.20; armR = -2.5; armL = -2.7;   // arms thrown up
+        } else {                              // falling
+            legR = 0.30; legL = -0.55; armR = -1.6; armL = -2.0;   // arms out & up
+        }
+    } else {                                   // idle — gentle breathing sway
+        const b = Math.sin(player._runPhase*0.6)*0.05;
+        legR = 0.10+b; legL = -0.10-b; armR = 0.16; armL = -0.16;
+    }
+    return {legR, legL, armR, armL, bob};
+}
+
+// Draw the humanoid in LOCAL coordinates: origin at feet-center, +y is DOWN,
+// figure ~26 wide x 50 tall, facing right. Caller handles translate/scale/flip.
+function drawOllieLocal(pose, blink){
+    const hipY=-20, shoulderY=-37, headCY=-44.5, headR=7;
+    const legLen=20, armLen=14;
+    const footR = {x:Math.sin(pose.legR)*legLen, y:hipY+Math.cos(pose.legR)*legLen};
+    const footL = {x:Math.sin(pose.legL)*legLen, y:hipY+Math.cos(pose.legL)*legLen};
+    const handR = {x:Math.sin(pose.armR)*armLen, y:shoulderY+Math.cos(pose.armR)*armLen};
+    const handL = {x:Math.sin(pose.armL)*armLen, y:shoulderY+Math.cos(pose.armL)*armLen};
+
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    const seg=(ax,ay,bx,by,color,w)=>{ ctx.strokeStyle=color; ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); };
+
+    // Back limbs (left side) — darker, drawn first for depth
+    seg(0,shoulderY, handL.x,handL.y, OLLIE.back, 5);
+    seg(0,hipY,      footL.x,footL.y, OLLIE.back, 6.5);
+
+    // Torso (capsule)
+    seg(0,hipY+1, 0,shoulderY, OLLIE.body, 15);
+
+    // Front limbs (right side)
+    seg(0,hipY,      footR.x,footR.y, OLLIE.limb, 7);
+    seg(0,shoulderY, handR.x,handR.y, OLLIE.limb, 5.5);
+
+    // Head
+    ctx.fillStyle=OLLIE.head; ctx.strokeStyle=OLLIE.line; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(0,headCY,headR,0,Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // Face (eyes look forward = +x side)
+    if(blink){
+        ctx.strokeStyle=OLLIE.line; ctx.lineWidth=1.4;
+        ctx.beginPath(); ctx.moveTo(0.5,headCY-1); ctx.lineTo(5,headCY-1); ctx.stroke();
+    } else {
+        ctx.fillStyle='#ffffff';
+        ctx.beginPath(); ctx.arc(2.2,headCY-1.5,2.1,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(5.4,headCY-1.5,2.1,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=OLLIE.line;
+        ctx.beginPath(); ctx.arc(2.9,headCY-1.5,1,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(6.1,headCY-1.5,1,0,Math.PI*2); ctx.fill();
+    }
+}
+
 function drawPlayer(){
     if(deathCooldown>0) return;
-    ctx.fillStyle="blue"; ctx.strokeStyle="rgb(50,50,200)"; ctx.lineWidth=1;
-    ctx.fillRect(player.x-camera.x,player.y-camera.y,player.width,player.height);
-    ctx.strokeRect(player.x-camera.x,player.y-camera.y,player.width,player.height);
-    ctx.fillStyle="white";
-    ctx.fillRect(player.x+player.eyePaddingR.x-camera.x,player.y+player.eyePaddingR.y-camera.y,player.eyeSize.width,player.eyeSize.height);
-    ctx.fillRect(player.x+player.eyePaddingL.x-camera.x,player.y+player.eyePaddingL.y-camera.y,player.eyeSize.width,player.eyeSize.height);
-    ctx.fillStyle="black";
-    ctx.fillRect(player.x+player.eyePaddingR.x+player.pupilPadding.x-camera.x,player.y+player.eyePaddingR.y+player.pupilPadding.y-camera.y,player.pupilSize.width,player.pupilSize.height);
-    ctx.fillRect(player.x+player.eyePaddingL.x+player.pupilPadding.x-camera.x,player.y+player.eyePaddingL.y+player.pupilPadding.y-camera.y,player.pupilSize.width,player.pupilSize.height);
+    const cx    = player.x + player.width/2 - camera.x;   // horizontal center
+    const baseY = player.y + player.height   - camera.y;  // feet (bottom of box)
+    const pose  = olliePose();
+    ctx.save();
+    ctx.translate(cx, baseY + pose.bob);
+    ctx.scale(player._facing*player._sx, player._sy);     // flip + squash, around feet
+    drawOllieLocal(pose, player._blink>0);
+    ctx.restore();
     ctx.globalAlpha=1;
 }
 
-function updateStretch(){
-    if(!grounded&&!wasGrounded[0]&&!wasGrounded[1]){ player.width+=(player.stretchTarget.width-player.width)*player.stretchSpeed; player.height+=(player.stretchTarget.height-player.height)*player.stretchSpeed; }
-    else{ const b=player.y+player.height; player.width+=(50-player.width)*player.stretchSpeed; player.height+=(50-player.height)*player.stretchSpeed; player.y=b-player.height; if(Math.abs(player.width-50)<1)player.width=50; if(Math.abs(player.height-50)<1)player.height=50; }
+function updatePlayerAnim(){
+    const onGround = grounded;
+    // run cycle: advance with horizontal speed when grounded, gentle idle drift otherwise
+    if(onGround && Math.abs(player.velocity.x) > 0.6)
+        player._runPhase += Math.min(0.5, 0.16 + Math.abs(player.velocity.x)*0.035);
+    else
+        player._runPhase += 0.05;
+
+    // landing-impact squash
+    if(onGround && !wasGrounded[0]) player._squash = Math.min(1, Math.abs(player.velocity.y)/24 + 0.5);
+    player._squash *= 0.80;
+
+    // squash / stretch targets
+    let tsx=1, tsy=1;
+    if(!onGround){ tsy = 1 + (player.velocity.y<0 ? 0.16 : 0.12); tsx = 1 - (tsy-1)*0.8; }
+    tsy -= player._squash*0.30; tsx += player._squash*0.28;
+    player._sx += (tsx - player._sx)*0.35;
+    player._sy += (tsy - player._sy)*0.35;
+
+    // occasional blink
+    if(player._blink > 0) player._blink--;
+    else if(Math.random() < 0.006) player._blink = 7;
 }
-function updateEyePos(){ const t=player.velocity.y>0?10:player.velocity.y<0?0:5; player.pupilPadding.y+=(t-player.pupilPadding.y)*0.1; }
 
 function drawPlatforms(){
     ctx.fillStyle="gray"; ctx.strokeStyle="gray"; ctx.lineWidth=2;
@@ -884,17 +971,17 @@ function editorDrawFrame(){
         ctx.fillRect(j.x+20,j.y+5,10,20); ctx.strokeRect(j.x+20,j.y+5,10,20);
     }
 
-    // Spawn — draw as a ghost Ollie
-    ctx.fillStyle  ='rgba(50,50,200,0.25)';
-    ctx.strokeStyle='#4caf50'; ctx.lineWidth=3/edZoom;
-    ctx.fillRect(edSpawn.x,edSpawn.y,50,50);
-    ctx.strokeRect(edSpawn.x,edSpawn.y,50,50);
-    ctx.fillStyle='rgba(255,255,255,0.5)';
-    ctx.fillRect(edSpawn.x+10,edSpawn.y+10,10,15);
-    ctx.fillRect(edSpawn.x+30,edSpawn.y+10,10,15);
-    ctx.fillStyle='rgba(0,0,0,0.5)';
-    ctx.fillRect(edSpawn.x+13,edSpawn.y+15,5,5);
-    ctx.fillRect(edSpawn.x+33,edSpawn.y+15,5,5);
+    // Spawn — draw as a ghost Ollie inside its 26x50 hitbox
+    ctx.fillStyle  ='rgba(60,123,213,0.12)';
+    ctx.strokeStyle='#4caf50'; ctx.lineWidth=2/edZoom; ctx.setLineDash([6/edZoom,4/edZoom]);
+    ctx.fillRect(edSpawn.x,edSpawn.y,26,50);
+    ctx.strokeRect(edSpawn.x,edSpawn.y,26,50);
+    ctx.setLineDash([]);
+    ctx.save();
+    ctx.globalAlpha=0.6;
+    ctx.translate(edSpawn.x+13, edSpawn.y+50);
+    drawOllieLocal({legR:0.12, legL:-0.12, armR:0.16, armL:-0.16, bob:0}, false);
+    ctx.restore();
 
     // Moving platforms (editor)
     for(let i=0;i<edMovingPlatforms.length;i++){
@@ -1291,7 +1378,7 @@ canvas.addEventListener('mousedown', e=>{
 
     if(edTool==='jumppad'){const{x,y}=edSW(sx,sy); edJumpPads.push({x:snapV(x-25),y:snapV(y-5),strength:25}); edSelected={type:'jumppad',index:edJumpPads.length-1};}
 
-    if(edTool==='spawn'){const{x,y}=edSW(sx,sy); edSpawn={x:snapV(x-25),y:snapV(y-25)};}
+    if(edTool==='spawn'){const{x,y}=edSW(sx,sy); edSpawn={x:snapV(x-13),y:snapV(y-25)};}
 
     if(edTool==='finish'){const{x,y}=edSW(sx,sy); edFinish={x:snapV(x),y:snapV(y)-SNAP/2}; edSelected=null;}
 
@@ -1622,7 +1709,7 @@ function openEditor(levelData=null){
         document.getElementById('edDeleteBtn').style.display='inline-block';
     } else { edClearState(); }
 
-    const cx=edSpawn.x+25, cy=edSpawn.y+25;
+    const cx=edSpawn.x+13, cy=edSpawn.y+25;
     edZoom=0.22;
     edCamX=canvas.width/2  - cx*edZoom;
     edCamY=canvas.height/2 - cy*edZoom;
@@ -1738,7 +1825,7 @@ document.getElementById('edLevelSelect').addEventListener('change',async e=>{
     document.getElementById('edLevelOrder').value=lvl.order||1;
     document.getElementById('edDeleteBtn').style.display='inline-block';
     edSelected=null;
-    edCamX=canvas.width/2 -(edSpawn.x+25)*edZoom;
+    edCamX=canvas.width/2 -(edSpawn.x+13)*edZoom;
     edCamY=canvas.height/2-(edSpawn.y+25)*edZoom;
     setEdStatus('Loaded.');
 });
