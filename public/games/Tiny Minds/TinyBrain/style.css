@@ -1,0 +1,50 @@
+:root { --bg:#0e1116; --panel:#161b22; --ink:#e6edf3; --mut:#8b949e; --acc:#58a6ff; --good:#3fb950; --amber:#d29922; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  display:flex; flex-direction:column; align-items:center; padding:24px; }
+h1 { font-size:20px; margin:0 0 4px; letter-spacing:.5px; }
+.sub { color:var(--mut); font-size:13px; margin-bottom:20px; max-width:640px; text-align:center; line-height:1.5; }
+.stage { display:flex; gap:28px; flex-wrap:wrap; justify-content:center; }
+.card { background:var(--panel); border:1px solid #21262d; border-radius:10px; padding:14px; }
+.card h2 { font-size:12px; margin:0 0 10px; color:var(--mut); text-transform:uppercase; letter-spacing:1px; font-weight:600; }
+canvas { display:block; image-rendering:pixelated; border-radius:4px; background:#000; cursor:crosshair; }
+.controls { background:var(--panel); border:1px solid #21262d; border-radius:10px; padding:16px; margin-top:22px; width:min(720px,100%); }
+.row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+button { background:#21262d; color:var(--ink); border:1px solid #30363d; border-radius:6px;
+  padding:8px 14px; font-family:inherit; font-size:13px; cursor:pointer; transition:.15s; }
+button:hover { background:#30363d; border-color:var(--acc); }
+button.primary { background:var(--acc); color:#04101f; border-color:var(--acc); font-weight:600; }
+label { font-size:13px; color:var(--mut); }
+select, input[type=range] { font-family:inherit; }
+select { background:#21262d; color:var(--ink); border:1px solid #30363d; border-radius:6px; padding:6px; }
+select:disabled { opacity:.65; cursor:not-allowed; }
+.stats { display:flex; gap:24px; flex-wrap:wrap; font-size:13px; margin-top:4px; }
+.stat b { color:var(--acc); font-variant-numeric:tabular-nums; }
+.note { color:var(--mut); font-size:12px; line-height:1.5; margin-top:10px; border-top:1px solid #21262d; padding-top:10px; }
+.swatch { width:46px; height:46px; border-radius:6px; border:1px solid #30363d; }
+.lessonnav { width:min(760px,100%); display:flex; justify-content:space-between; align-items:center; gap:10px;
+  font-size:12px; margin-bottom:18px; flex-wrap:wrap; }
+.lessonnav a { color:var(--acc); text-decoration:none; } .lessonnav a:hover { text-decoration:underline; }
+.lessonnav .mid { color:var(--mut); }
+.lessonbox { background:var(--panel); border:1px solid #21262d; border-left:4px solid var(--acc);
+  border-radius:10px; padding:16px 18px; width:min(760px,100%); margin:0 0 20px; font-size:13px; line-height:1.65; }
+.lessonbox h3 { margin:0 0 8px; font-size:14px; }
+.lessonbox p { margin:8px 0; color:var(--mut); }
+.lessonbox b { color:var(--ink); } .lessonbox .hl { color:var(--acc); }
+.mythbox { background:var(--panel); border:1px solid #21262d; border-left:4px solid var(--amber);
+  border-radius:10px; padding:16px 18px; width:min(760px,100%); margin:0 0 20px; font-size:13px; line-height:1.65; text-align:left; }
+.mythbox h3 { margin:0 0 10px; font-size:15px; }
+.mythbox .r { margin:9px 0; padding-left:24px; position:relative; }
+.mythbox .r .ic { position:absolute; left:0; }
+.mythbox .false { color:#f06b6b; } .mythbox .true b { color:var(--good); } .mythbox .watch { color:var(--amber); }
+.lockbox { background:#0b0f14; border:1px solid #21262d; border-radius:8px; padding:11px 13px; width:min(760px,100%);
+  margin:0 0 18px; font-size:12.5px; color:var(--mut); line-height:1.6; }
+.lockbox b { color:var(--ink); } .lockbox .pill { color:var(--acc); }
+a.def { color:var(--acc); text-decoration:none; border-bottom:1px dotted; }
+a.def:hover { border-bottom-style:solid; }
+details.sguide { margin-top:14px; background:#0b0f14; border:1px solid #21262d; border-radius:8px; padding:0 12px; }
+details.sguide[open] { padding-bottom:10px; }
+details.sguide summary { cursor:pointer; padding:10px 0; color:var(--acc); font-size:12.5px; outline:none; }
+details.sguide p { margin:7px 0; font-size:12.5px; color:var(--mut); line-height:1.6; }
+details.sguide b { color:var(--ink); }

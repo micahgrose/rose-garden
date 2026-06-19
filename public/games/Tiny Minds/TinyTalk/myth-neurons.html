@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TinyTalk myth — "more neurons = smarter"</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="lessonnav">
+    <a href="index.html">← TinyTalk demo</a>
+    <span class="mid">🔬 TinyTalk myth · <a href="../Lesson/index.html">home</a></span>
+    <a href="../TinyChat/index.html">Next chapter: TinyChat →</a>
+  </div>
+
+  <h1>Myth: "more neurons make it smarter"</h1>
+
+  <div class="layout">
+    <div class="main">
+      <div class="panel">
+        <h2>Train it &amp; watch the gap</h2>
+        <div class="row">
+          <button id="train" class="primary">▶ Train</button>
+          <button id="reset">↺ Reset</button>
+          <label>Speed <input id="speed" type="range" min="1" max="40" value="20" /></label>
+          <label>neurons <select id="hsize"><option value="16">16</option><option value="64">64</option><option value="128" selected>128</option></select></label>
+          <label>data <select id="dsize" disabled><option value="15" selected>small (15)</option></select></label>
+        </div>
+        <div id="autostop" style="color:var(--good); font-weight:600; font-size:13px; margin-top:10px; min-height:18px;"></div>
+        <div class="stats">
+          <span class="stat">steps <b id="steps">0</b></span>
+          <span class="stat">loss <b id="loss">—</b></span>
+          <span class="stat" id="split"></span>
+        </div>
+        <div class="meter"><span class="mlabel">memorized · training set</span><div class="bar"><i id="barfill"></i></div><b id="skill">0%</b></div>
+        <div class="meter"><span class="mlabel">generalized · unseen greetings</span><div class="bar"><i id="vbarfill"></i></div><b id="vskill">0%</b></div>
+        <div class="meter"><span class="mlabel">confidence · how sure it is</span><div class="bar"><i id="cbarfill"></i></div><b id="cskill">0%</b></div>
+        <div class="snaps">
+          <div class="snap"><div class="snaptitle">training input · sampled every 10 steps</div><div class="snapbody" id="snapIn">…</div></div>
+          <div class="snap"><div class="snaptitle">expected output</div><div class="snapbody" id="snapExp">…</div></div>
+          <div class="snap"><div class="snaptitle">ai reply</div><div class="snapbody" id="snapAi">…</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Greet it</h2>
+        <div class="chat" id="chat"></div>
+        <div class="row">
+          <input id="say" type="text" value="hello" placeholder="say hi…" />
+          <button id="send">Send</button>
+          <button id="newchat">＋ New chat</button>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label>creativity <input id="temp" type="range" min="20" max="120" value="55" /></label>
+          <label>anti-repeat <input id="rep" type="range" min="0" max="100" value="40" /></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="sidehead">the myth</div>
+      <div class="mythbox">
+        <h3>"A bigger network is always better."</h3>
+        <div class="r false"><span class="ic">✗</span> The myth: pile on neurons and it gets smarter.</div>
+        <div class="r true"><span class="ic">✓</span> The truth: <b>capacity only helps up to what the data needs</b>.
+          Past that, extra neurons just <b>memorize</b> the training greetings.</div>
+        <div class="r"><span class="ic">👀</span> <b>Watch:</b> start at <b>neurons 128</b>. Train — auto-pauses at
+          1500 steps. <span class="watch">Memorized</span> races up, <span class="watch">generalized</span> lags far
+          behind — the gap is overfitting.</div>
+        <div class="r"><span class="ic">🔁</span> <b>Swap neurons</b> (the only unlocked dial): 64, then 16. Train to
+          1500 each time. Generalized doesn't get <i>worse</i> with fewer neurons. More neurons alone don't make it
+          smarter; only more varied <a class="def" href="../Lesson/index.html#g-overfitting">data</a> does.</div>
+      </div>
+      <div class="lockbox">
+        <b>Fixed for a fair test:</b> <span class="pill">data small (15)</span>.<br>
+        <b>You change:</b> <span class="pill">neurons</span> (16 / 64 / 128). Auto-pauses at 1500 steps so each run is
+        comparable.
+      </div>
+    </div>
+  </div>
+
+  <div class="lessonnav" style="margin:26px 0 0;">
+    <a href="index.html">← TinyTalk demo</a>
+    <span class="mid"><a href="../Lesson/index.html">home</a> · <a href="play.html">🎮 free play</a></span>
+    <a href="../TinyChat/index.html">Next chapter: TinyChat →</a>
+  </div>
+
+<script>window.STOP_AT=1500;</script>
+<script src="script.js"></script>
+</body>
+</html>

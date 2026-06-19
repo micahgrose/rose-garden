@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TinyBrain myth — "more training always helps"</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="lessonnav">
+    <a href="index.html">← TinyBrain demo</a>
+    <span class="mid">🔬 TinyBrain myth · <a href="../Lesson/index.html">home</a></span>
+    <a href="../TinyTalk/index.html">Next chapter: TinyTalk →</a>
+  </div>
+
+  <h1>Myth: "more training always makes it better"</h1>
+
+  <div class="mythbox">
+    <h3>"Just let it train longer and it keeps improving."</h3>
+    <div class="r false"><span class="ic">✗</span> The myth: more steps always means a better model.</div>
+    <div class="r true"><span class="ic">✓</span> The truth: every network has a
+      <a class="def" href="../Lesson/index.html#g-capacity"><b>ceiling</b></a>. Once it has learned what it
+      <i>can</i>, more steps do nothing — the limit is the network's size, not the amount of training.</div>
+    <div class="r"><span class="ic">👀</span> <b>Watch:</b> press Train and <b>leave it running as long as you like</b>.
+      The right square improves fast, then <span class="watch">stalls well short and never closes the gap</span> — no
+      matter how many epochs pass. A network this small simply can't <i>represent</i> a spiral, so more training does
+      nothing.</div>
+    <div class="r"><span class="ic">🔁</span> <b>For contrast,</b> the <a class="def" href="play.html">free-play
+      sandbox</a> lets you point this <i>same</i> network at <b>Gradient</b> — and it nails it almost perfectly. Same
+      training, different ceiling. Time can't buy what the network can't represent.</div>
+  </div>
+
+  <div class="lockbox">
+    <b>This page stays on the <span class="pill">Spiral</span></b> — the one pattern too complex for this tiny network
+    to represent. There's deliberately nothing to pause or swap here: the whole point is that you can train it
+    <i>forever</i> and it still won't close the gap. (Other patterns live in
+    <a href="play.html" style="color:var(--acc)">free play</a>.)
+  </div>
+
+  <div class="stage">
+    <div class="card"><h2>Target (the truth)</h2><canvas id="target" width="320" height="320"></canvas></div>
+    <div class="card"><h2>What the brain paints</h2><canvas id="brain" width="320" height="320"></canvas></div>
+  </div>
+
+  <div class="controls">
+    <div class="row">
+      <button id="run" class="primary">▶ Train</button>
+      <button id="reset">↺ Reset brain</button>
+      <label>Pattern
+        <select id="pattern" disabled>
+          <option value="spiral" selected>Spiral (hits the ceiling)</option>
+        </select>
+      </label>
+      <label>Speed <input id="speed" type="range" min="1" max="60" value="40" /></label>
+    </div>
+    <div class="stats">
+      <span class="stat">epoch <b id="epoch">0</b></span>
+      <span class="stat">accuracy <b id="acc">0%</b></span>
+      <span class="stat">loss <b id="loss">—</b></span>
+      <span class="stat" id="state">state: <b>fresh</b></span>
+      <span class="stat" style="display:flex;align-items:center;gap:8px;">cursor → <span id="sw" class="swatch"></span></span>
+    </div>
+    <p class="note">The accuracy plateaus and the picture stays blurry where the real spiral is sharp — that plateau
+    is the ceiling, and it never lifts no matter how long you train.</p>
+  </div>
+
+  <div class="lessonnav" style="margin:26px 0 0;">
+    <a href="index.html">← TinyBrain demo</a>
+    <span class="mid"><a href="../Lesson/index.html">home</a> · <a href="play.html">🎮 free play</a></span>
+    <a href="../TinyTalk/index.html">Next chapter: TinyTalk →</a>
+  </div>
+
+<script src="script.js"></script>
+</body>
+</html>

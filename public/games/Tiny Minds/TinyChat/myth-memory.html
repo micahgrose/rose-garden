@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TinyChat myth — "more memory is always better"</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="lessonnav">
+    <a href="index.html">← TinyChat demo</a>
+    <span class="mid">🔬 TinyChat myth · <a href="../Lesson/index.html">home</a></span>
+    <a href="../TinyGPT/index.html">Next chapter: TinyGPT →</a>
+  </div>
+
+  <h1>Myth: "more memory (context) is always better"</h1>
+
+  <div class="layout">
+    <div class="main">
+      <div class="panel">
+        <h2>Train it &amp; watch the cost</h2>
+        <div class="row">
+          <button id="train" class="primary">▶ Train</button>
+          <button id="reset">↺ Reset</button>
+          <label>Speed <input id="speed" type="range" min="1" max="20" value="8" /></label>
+          <label>memory <select id="ksize"><option value="16">16</option><option value="64">64</option><option value="128" selected>128</option></select></label>
+          <label>neurons <select id="hsize" disabled><option value="48" selected>48</option></select></label>
+          <label>data <select id="dsize" disabled><option value="120" selected>medium (120)</option></select></label>
+        </div>
+        <div id="autostop" style="color:var(--good); font-weight:600; font-size:13px; margin-top:10px; min-height:18px;"></div>
+        <div class="stats">
+          <span class="stat">steps <b id="steps">0</b></span>
+          <span class="stat">loss <b id="loss">—</b></span>
+          <span class="stat" id="split"></span>
+        </div>
+        <div class="meter"><span class="mlabel">memorized · training set</span><div class="bar"><i id="barfill"></i></div><b id="skill">0%</b></div>
+        <div class="meter"><span class="mlabel">generalized · unseen replies</span><div class="bar"><i id="vbarfill"></i></div><b id="vskill">0%</b></div>
+        <div class="meter"><span class="mlabel">confidence · how sure it is</span><div class="bar"><i id="cbarfill"></i></div><b id="cskill">0%</b></div>
+        <div class="snaps">
+          <div class="snap"><div class="snaptitle">training input · sampled every 10 steps</div><div class="snapbody" id="snapIn">…</div></div>
+          <div class="snap"><div class="snaptitle">expected output</div><div class="snapbody" id="snapExp">…</div></div>
+          <div class="snap"><div class="snaptitle">ai reply</div><div class="snapbody" id="snapAi">…</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Talk to it</h2>
+        <div class="chat" id="chat"></div>
+        <div class="row">
+          <input id="say" type="text" value="hello" placeholder="say something…" />
+          <button id="send">Send</button>
+          <button id="newchat">＋ New chat</button>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label>creativity <input id="temp" type="range" min="20" max="120" value="55" /></label>
+          <label>anti-repeat <input id="rep" type="range" min="0" max="100" value="40" /></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="sidehead">the myth</div>
+      <div class="mythbox">
+        <h3>"A bigger context window always makes it smarter."</h3>
+        <div class="r false"><span class="ic">✗</span> The myth: more memory = a better model.</div>
+        <div class="r true"><span class="ic">✓</span> The truth: long context only helps if the task <i>needs</i> it.
+          These replies depend mostly on your <b>last</b> turn, so extra memory has nothing to do — and it makes every
+          step <b>slower</b>.</div>
+        <div class="r"><span class="ic">👀</span> <b>Watch:</b> start at <b>memory 128</b>. Train — auto-pauses at
+          1500 steps. Notice how <span class="watch">slowly</span> it crawls there (Speed even drops to fractional),
+          and where <span class="watch">generalized</span> lands.</div>
+        <div class="r"><span class="ic">🔁</span> <b>Drop memory</b> (the only unlocked dial) to <b>16</b>, then 64.
+          Each change resets, so Train to 1500 each time. It reaches 1500 <i>much faster</i>, and generalized is about
+          the same. The bigger window bought nothing but slowness.</div>
+      </div>
+      <div class="lockbox">
+        <b>Fixed for a fair test:</b> <span class="pill">neurons 48</span> · <span class="pill">data 120</span>.<br>
+        <b>You change:</b> <span class="pill">memory</span> (16 / 64 / 128). Auto-pauses at 1500 steps so each run is
+        comparable — the difference you feel is the <i>time</i> it takes.
+      </div>
+    </div>
+  </div>
+
+  <div class="lessonnav" style="margin:26px 0 0;">
+    <a href="index.html">← TinyChat demo</a>
+    <span class="mid"><a href="../Lesson/index.html">home</a> · <a href="play.html">🎮 free play</a></span>
+    <a href="../TinyGPT/index.html">Next chapter: TinyGPT →</a>
+  </div>
+
+<script>window.STOP_AT=1500;</script>
+<script src="script.js"></script>
+</body>
+</html>

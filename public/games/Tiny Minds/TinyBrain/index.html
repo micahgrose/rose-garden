@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TinyBrain — Chapter 1 demo</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="lessonnav">
+    <a href="../Lesson/index.html">← Lesson home</a>
+    <span class="mid">Chapter 1 · TinyBrain — demo</span>
+    <a href="myth-training.html">Next: TinyBrain myth — "more training" →</a>
+  </div>
+
+  <h1>TinyBrain</h1>
+
+  <div class="lessonbox">
+    <h3>Chapter 1 — <span class="hl">a network learns to see</span></h3>
+    <p><b>What this is:</b> a real neural network (2 <a class="def" href="../Lesson/index.html#g-neuron">neurons</a>
+    — the "knobs" — → 16 → 16 → colour), built from scratch. Its only job: look at a pixel's <i>position</i> and
+    decide what colour it should be. The left picture is the <b>goal</b>; the right is <b>what the network has
+    learned</b> so far.</p>
+    <p><b>Why it matters:</b> this is learning in its purest form. The network starts random (right square = mess),
+    and each <a class="def" href="../Lesson/index.html#g-step">training step</a> nudges its knobs so its picture
+    looks a little more like the truth. The <b>accuracy</b> climbing is you literally watching it learn.</p>
+    <p><b>This page walks through one pattern</b> so you can watch it succeed. Try the rest in
+    <a href="play.html" style="color:var(--acc)">🎮 free play</a>, and see the famous failure case on the
+    <a href="myth-training.html" style="color:var(--acc)">myth page</a> (the next step) — where more training
+    <i>can't</i> help.</p>
+  </div>
+
+  <div class="lockbox">
+    <b>This demo runs one pattern:</b> <span class="pill">Rings</span>.
+    <br><b>Why this one?</b> it's complex enough to be interesting but well within this small network's
+    <a class="def" href="../Lesson/index.html#g-capacity">capacity</a> — so you watch it actually <i>get there</i>.
+    Press <b>Train</b> and watch the right square sharpen into the left. (Every pattern is in
+    <a href="play.html" style="color:var(--acc)">free play</a>.)
+  </div>
+
+  <div class="stage">
+    <div class="card"><h2>Target (the truth)</h2><canvas id="target" width="320" height="320"></canvas></div>
+    <div class="card"><h2>What the brain paints</h2><canvas id="brain" width="320" height="320"></canvas></div>
+  </div>
+
+  <div class="controls">
+    <div class="row">
+      <button id="run" class="primary">▶ Train</button>
+      <button id="reset">↺ Reset brain</button>
+      <label>Pattern
+        <select id="pattern" disabled>
+          <option value="gradient">Gradient (easy)</option>
+          <option value="quadrants">Quadrants</option>
+          <option value="circle">Circle</option>
+          <option value="rings" selected>Rings</option>
+          <option value="spiral">Spiral (hard — hits the ceiling)</option>
+        </select>
+      </label>
+      <label>Speed <input id="speed" type="range" min="1" max="60" value="20" /></label>
+    </div>
+    <div class="stats">
+      <span class="stat">epoch <b id="epoch">0</b></span>
+      <span class="stat">accuracy <b id="acc">0%</b></span>
+      <span class="stat">loss <b id="loss">—</b></span>
+      <span class="stat" id="state">state: <b>fresh</b></span>
+      <span class="stat" style="display:flex;align-items:center;gap:8px;">cursor → <span id="sw" class="swatch"></span></span>
+    </div>
+    <p class="note">Hover the right square to ask the live network what colour it would paint any exact spot —
+    including spots between the boxes it trained on. That's generalization.</p>
+  </div>
+
+  <div class="controls" style="border-left:4px solid var(--amber);">
+    <p style="margin:0 0 8px; color:var(--amber); font-weight:600; font-size:13px;">🔬 Now bust a myth about TinyBrain</p>
+    <p style="color:var(--mut); font-size:13px; margin:0 0 8px;">A dedicated page, set to the pattern that reveals
+    it, with what to watch:</p>
+    <a class="def" href="myth-training.html">"more training always helps" →</a>
+  </div>
+
+  <div class="lessonnav" style="margin:26px 0 0;">
+    <a href="../Lesson/index.html">← Lesson home</a>
+    <span class="mid"><a href="play.html">🎮 free play</a></span>
+    <a href="myth-training.html">Next: TinyBrain myth — "more training" →</a>
+  </div>
+
+<script src="script.js"></script>
+</body>
+</html>

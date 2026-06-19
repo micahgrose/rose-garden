@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TinyBrain — sandbox (free play)</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="lessonnav">
+    <a href="../Lesson/index.html">← Lesson home</a>
+    <span class="mid">TinyBrain · 🎮 sandbox</span>
+    <a href="index.html">Chapter 1 demo →</a>
+  </div>
+
+  <h1>TinyBrain — sandbox</h1>
+
+  <div class="lessonbox" style="border-left-color:var(--good)">
+    <h3 style="color:var(--good)">🎮 Free play — try any pattern</h3>
+    <p>Switch between every pattern and watch the network chase it. <b>Gradient</b> it nails almost perfectly;
+    <b>Spiral</b> it can't — that's the ceiling. Want the guided version? That's the
+    <a href="index.html" style="color:var(--good)">Chapter 1 demo</a>.</p>
+  </div>
+
+  <div class="stage">
+    <div class="card"><h2>Target (the truth)</h2><canvas id="target" width="320" height="320"></canvas></div>
+    <div class="card"><h2>What the brain paints</h2><canvas id="brain" width="320" height="320"></canvas></div>
+  </div>
+
+  <div class="controls">
+    <div class="row">
+      <button id="run" class="primary">▶ Train</button>
+      <button id="reset">↺ Reset brain</button>
+      <label>Pattern
+        <select id="pattern">
+          <option value="gradient">Gradient (easy)</option>
+          <option value="quadrants">Quadrants</option>
+          <option value="circle">Circle</option>
+          <option value="rings" selected>Rings</option>
+          <option value="spiral">Spiral (hard — hits the ceiling)</option>
+        </select>
+      </label>
+      <label>Speed <input id="speed" type="range" min="1" max="60" value="20" /></label>
+    </div>
+    <div class="stats">
+      <span class="stat">epoch <b id="epoch">0</b></span>
+      <span class="stat">accuracy <b id="acc">0%</b></span>
+      <span class="stat">loss <b id="loss">—</b></span>
+      <span class="stat" id="state">state: <b>fresh</b></span>
+      <span class="stat" style="display:flex;align-items:center;gap:8px;">cursor → <span id="sw" class="swatch"></span></span>
+    </div>
+    <p class="note">Hover the right square to ask the live network what colour it would paint any exact spot.</p>
+  </div>
+
+  <div class="lessonnav" style="margin:26px 0 0;">
+    <a href="index.html">← Chapter 1 demo</a>
+    <span class="mid"><a href="../Lesson/index.html">lesson home</a></span>
+    <a href="../Lesson/index.html#sandbox">other sandboxes →</a>
+  </div>
+
+<script src="script.js"></script>
+</body>
+</html>

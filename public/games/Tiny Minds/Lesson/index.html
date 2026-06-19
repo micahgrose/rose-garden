@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tiny Minds — Build an AI from Scratch, Step by Step</title>
+<style>
+  :root { --bg:#0e1116; --panel:#161b22; --ink:#e6edf3; --mut:#8b949e; --line:#21262d;
+          --blue:#58a6ff; --green:#3fb950; --amber:#d29922; --purple:#bc8cff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace; line-height:1.6;
+    display:flex; flex-direction:column; align-items:center; padding:32px 20px 80px; }
+  .wrap { width:min(760px,100%); }
+  h1 { font-size:30px; margin:0 0 6px; letter-spacing:.5px; }
+  h2 { font-size:18px; margin:34px 0 10px; letter-spacing:.3px; }
+  .lede { color:var(--mut); font-size:15px; margin:0 0 8px; }
+  p { font-size:14px; }
+  a { color:var(--blue); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:14px 0; }
+  .tag { display:inline-block; font-size:11px; color:var(--mut); border:1px solid var(--line);
+    border-radius:20px; padding:2px 10px; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px; }
+  details { background:#0b0f14; border:1px solid var(--line); border-radius:8px; padding:0 14px; margin:10px 0; }
+  details[open] { padding-bottom:12px; }
+  summary { cursor:pointer; padding:11px 0; color:var(--blue); font-size:13px; outline:none; }
+  details p { margin:6px 0; }
+  .chapter { display:block; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--c);
+    border-radius:10px; padding:16px 18px; margin:12px 0; color:var(--ink); transition:.15s; }
+  .chapter:hover { border-color:var(--c); text-decoration:none; transform:translateX(2px); }
+  .chapter .num { color:var(--c); font-size:12px; letter-spacing:1px; }
+  .chapter .name { font-size:18px; font-weight:600; margin:2px 0 6px; }
+  .chapter .name b { color:var(--c); }
+  .chapter .teaches { color:var(--mut); font-size:13px; margin:0 0 8px; }
+  .chapter .step { font-size:13px; }
+  .chapter .step b { color:var(--c); }
+  .chapter .go { color:var(--c); font-size:13px; margin-top:8px; display:inline-block; }
+  .b{--c:var(--blue);} .g{--c:var(--green);} .a{--c:var(--amber);} .p{--c:var(--purple);}
+  .kv { margin:4px 0; } .kv b { color:var(--ink); }
+  .foot { color:var(--mut); font-size:12px; margin-top:30px; border-top:1px solid var(--line); padding-top:14px; }
+  code { background:#0b0f14; border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-size:12px; }
+  a.def { color:var(--blue); text-decoration:none; border-bottom:1px dotted var(--blue); }
+  a.def:hover { border-bottom-style:solid; text-decoration:none; }
+  .kv:target { background:#1f6feb22; border-radius:5px; padding:5px 7px; }
+  .sandboxgrid { display:flex; gap:10px; flex-wrap:wrap; }
+  .sbx { flex:1; min-width:210px; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--c);
+    border-radius:9px; padding:13px 15px; color:var(--ink); font-size:13px; transition:.15s; }
+  .sbx:hover { border-color:var(--c); text-decoration:none; transform:translateX(2px); }
+  .sbx b { color:var(--c); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">a build-it-yourself lesson</span>
+  <h1>Tiny Minds</h1>
+  <p class="lede">Four little AIs you can train in your own browser — built from scratch, no libraries, no magic.
+  Together they walk you from "a network that colours a box" all the way to a working <b>miniature GPT</b>,
+  one honest step at a time.</p>
+
+  <div class="panel">
+    <b>Why bother with tiny ones?</b>
+    <p style="margin:8px 0 0">Modern AI feels like a black box. The trick to understanding it isn't a bigger
+    box — it's a <i>smaller</i> one. Each model here is small enough that <b>nothing is hidden</b>: you can watch
+    every weight learn, see exactly what it's trained on, and catch it making mistakes. The ideas inside these toys
+    are the <i>same</i> ideas inside the giant models — just shrunk until you can see them with your own eyes.</p>
+  </div>
+
+  <h2>First, the basics</h2>
+  <p>You don't need any background. Here's the whole vocabulary in plain language — open any box for a little more.</p>
+
+  <details>
+    <summary>What is a "neural network"?</summary>
+    <p>Imagine a giant mixing board with millions of little knobs. You feed something in at one end (a position, a
+    word) and a result comes out the other end (a colour, the next word). The knobs decide how the input gets turned
+    into the output. A neural network is exactly that: a big adjustable function made of simple math units
+    (<a class="def" href="#g-neuron">"neurons"</a>), wired together, with the knobs being numbers called
+    <a class="def" href="#g-weight"><b>weights</b></a>.</p>
+    <p>On its own it does nothing useful — the knobs start random, so the output is nonsense. The magic is in
+    <i>tuning</i> them.</p>
+  </details>
+  <details>
+    <summary>What is "training" (and a "training step")?</summary>
+    <p>Training is how the knobs get tuned. You show the network an example, compare what it produced to the right
+    answer, and measure how wrong it was — that number is the <a class="def" href="#g-loss"><b>loss</b></a>. Then you
+    nudge every knob a tiny bit in the direction that would have made the loss smaller. That single show-example →
+    measure → nudge cycle is one <a class="def" href="#g-step"><b>training step</b></a>. Repeat it thousands of times
+    and the network slowly gets good. That's <i>all</i> training
+    is: a patient hill-climb down the error.</p>
+  </details>
+  <details>
+    <summary>What is a "token", and what does "generating text" mean?</summary>
+    <p>A computer can't read words directly, so we chop text into pieces called <b>tokens</b> — sometimes single
+    letters, sometimes whole words. The model learns to predict the <i>next</i> <a class="def" href="#g-token">token</a>
+    given the ones so far. To
+    "generate", it predicts a token, adds it to the end, then predicts again, and again — building a reply one piece
+    at a time. (Yes, that's how the big chatbots write too.)</p>
+  </details>
+  <details>
+    <summary>Three words you'll see on every screen: loss, memorized, generalized</summary>
+    <p><b>Loss</b> — how wrong the model is right now (lower is better).</p>
+    <p><b>Memorized</b> — how well it does on the exact examples it studied. Easy to make high… by cheating
+    (just memorizing).</p>
+    <p><b>Generalized</b> — how well it does on examples it has <i>never seen</i>. This is the honest score — it
+    shows real understanding, not memorization. When "memorized" races ahead while "generalized" lags, the model is
+    <a class="def" href="#g-overfitting"><b>overfitting</b></a>: cramming instead of learning.</p>
+  </details>
+  <details>
+    <summary>How does the "nudging" actually work? (gradient descent)</summary>
+    <p>Picture standing on a foggy hill, trying to reach the bottom. You can't see far, but you can feel which way
+    the ground slopes under your feet — so you take a small step downhill, then feel again, and repeat. That's
+    <a class="def" href="#g-gradient-descent"><b>gradient descent</b></a>, and it's the entire engine of learning.
+    The "hill" is the loss (how wrong the model is); the "slope" is called the
+    <a class="def" href="#g-gradient"><b>gradient</b></a> — the math tells the model, for every single knob, which
+    way to turn it to make the loss a little smaller. The size of each step is the
+    <a class="def" href="#g-learning-rate"><b>learning rate</b></a>: too big and you
+    leap past the bottom; too small and you crawl forever.</p>
+    <p>That's it. No understanding, no intuition — just millions of tiny "which way is downhill?" steps. Do enough
+    of them and a pile of random knobs turns into something that can write.</p>
+  </details>
+  <details>
+    <summary>What is "attention"? (the idea behind modern AI)</summary>
+    <p>When you read "the dog chased its tail because <i>it</i> was bored", you instantly know "it" means the dog,
+    not the tail. You did that by paying <a class="def" href="#g-attention"><b>attention</b></a> to the right earlier word. That's exactly what attention
+    does in an AI: for each new word it writes, it decides <i>which earlier words matter</i> and leans on those.</p>
+    <p>Older models read through a small fixed window and forgot the rest. Attention lets a model reach back to
+    <i>any</i> earlier word that's relevant, however far back. That one trick — "look at what matters" — is what
+    made today's chatbots possible. You meet a simple version in Chapter 3 and the real thing in Chapter 4.</p>
+  </details>
+  <details>
+    <summary>What's a "transformer", and why is it called "GPT"?</summary>
+    <p>A <a class="def" href="#g-transformer"><b>transformer</b></a> is the modern design that stacks attention
+    together in layers. Almost every big AI today is one. <a class="def" href="#g-gpt"><b>GPT</b></a> stands for
+    <b>G</b>enerative (it makes new text) <b>P</b>re-trained (it's trained on a big
+    pile of data first, then used) <b>T</b>ransformer (that design). When you press <b>Train</b> in these toys,
+    you're doing the "pre-trained" part yourself; when you chat, you're using the finished model.</p>
+  </details>
+
+  <h2>The journey</h2>
+  <p>Four chapters. Each one keeps what worked, fixes what didn't, and tells you exactly why it's a step up.</p>
+
+  <a class="chapter b" href="../TinyBrain/index.html">
+    <div class="num">CHAPTER 1</div>
+    <div class="name">TinyBrain — <b>a network learns to see</b></div>
+    <div class="teaches">It learns to colour every point of a square based only on its position. The simplest
+    possible "learning": adjust weights until the picture matches.</div>
+    <div class="step"><b>The idea it plants:</b> learning = shrinking error, and every network has a
+    <b>ceiling</b> — try the spiral pattern and watch it get stuck no matter how long it trains.</div>
+    <div class="go">Open Chapter 1 →</div>
+  </a>
+
+  <a class="chapter g" href="../TinyTalk/index.html">
+    <div class="num">CHAPTER 2</div>
+    <div class="name">TinyTalk — <b>a network learns to write</b></div>
+    <div class="teaches">A greeter. Trained on many human greetings (typos and all), it replies with a clean one —
+    letter by letter.</div>
+    <div class="step"><b>Better than TinyBrain:</b> it produces <b>sequences</b> (language), not a single answer.
+    It also adds the honesty dashboard — memorized vs generalized vs confidence — so you can <i>catch</i> it
+    overfitting.</div>
+    <div class="go">Open Chapter 2 →</div>
+  </a>
+
+  <a class="chapter a" href="../TinyChat/index.html">
+    <div class="num">CHAPTER 3</div>
+    <div class="name">TinyChat — <b>a network learns to converse</b></div>
+    <div class="teaches">A small-talk bot. It reads whole <b>words</b> instead of letters, gets a first taste of
+    <b>attention</b> (looking back at what was said), and holds a short multi-turn chat.</div>
+    <div class="step"><b>Better than TinyTalk:</b> words carry more meaning than letters, attention lets it
+    <i>refer back</i> instead of guessing from a fixed window, and "phases" teach it to greet, chat, and say
+    goodbye differently.</div>
+    <div class="go">Open Chapter 3 →</div>
+  </a>
+
+  <a class="chapter p" href="../TinyGPT/index.html">
+    <div class="num">CHAPTER 4</div>
+    <div class="name">TinyGPT — <b>the real thing</b></div>
+    <div class="teaches">A genuine miniature <b>GPT</b>: multi-head attention computed at every position, stacked
+    in layers. The exact architecture behind today's chatbots, shrunk to fit a browser tab.</div>
+    <div class="step"><b>Better than TinyChat:</b> TinyChat's attention was a simplified taste; this is the full
+    recipe. It learns the same task in <i>far fewer steps</i> and stays coherent for longer — and it's where you
+    learn what <b>heads</b> and <b>layers</b> really do.</div>
+    <div class="go">Open Chapter 4 →</div>
+  </a>
+
+  <h2 id="sandbox">🎮 Sandbox — free play</h2>
+  <p>Each chapter walks you through fixed-setting demos and dedicated <b>myth-busting pages</b> (linked at the bottom
+  of each chapter). But sometimes you just want to poke at the dials yourself. These are the <b>open</b> versions of
+  every model — nothing locked, change anything, break it, compare:</p>
+  <div class="sandboxgrid">
+    <a class="sbx b" href="../TinyBrain/play.html">🟦 <b>TinyBrain</b><br><span style="color:var(--mut)">colour a box by position</span></a>
+    <a class="sbx g" href="../TinyTalk/play.html">🟩 <b>TinyTalk</b><br><span style="color:var(--mut)">the char-level greeter</span></a>
+    <a class="sbx a" href="../TinyChat/play.html">🟨 <b>TinyChat</b><br><span style="color:var(--mut)">word-level small talk</span></a>
+    <a class="sbx p" href="../TinyGPT/play.html">🟪 <b>TinyGPT</b><br><span style="color:var(--mut)">the real transformer</span></a>
+  </div>
+
+  <h2>Glossary</h2>
+  <details>
+    <summary>Open the glossary</summary>
+    <p class="kv" style="color:var(--mut)">Every term below has its own link — and definitions cross-link to each
+    other, so you can follow a thread. Words throughout the lesson point back here too.</p>
+    <p class="kv" id="g-weight"><b>weight</b> — one tunable knob inside the network. Same thing as a
+      <a class="def" href="#g-parameter">parameter</a>.</p>
+    <p class="kv" id="g-neuron"><b>neuron</b> — a tiny math unit that adds up its inputs and passes the result on.</p>
+    <p class="kv" id="g-loss"><b>loss</b> — a number for how wrong the model is; training pushes it down.</p>
+    <p class="kv" id="g-step"><b>step</b> — one round of: show example, measure <a class="def" href="#g-loss">loss</a>, nudge the knobs.</p>
+    <p class="kv" id="g-token"><b>token</b> — a chunk of text (a letter or a word) the model reads and writes.</p>
+    <p class="kv" id="g-overfitting"><b>overfitting</b> — memorizing the training examples instead of learning the
+      pattern, so <a class="def" href="#g-generalization">generalization</a> suffers.</p>
+    <p class="kv" id="g-confidence"><b>confidence</b> — how sure the model is of its own answer (high + wrong = a
+      <a class="def" href="#g-hallucination">hallucination</a>).</p>
+    <p class="kv" id="g-attention"><b>attention</b> — the model deciding which earlier words matter for the next one.</p>
+    <p class="kv" id="g-head"><b>head</b> — one "spotlight" of <a class="def" href="#g-attention">attention</a>,
+      tracking one kind of relationship (Chapter 4).</p>
+    <p class="kv" id="g-layer"><b>layer</b> — one stacked stage of processing; more layers = deeper understanding (Chapter 4).</p>
+    <p class="kv" style="color:var(--mut); margin-top:12px">— the training words —</p>
+    <p class="kv" id="g-parameter"><b>parameter</b> — another word for a <a class="def" href="#g-weight">weight</a>;
+      the millions of numbers a model learns.</p>
+    <p class="kv" id="g-gradient"><b>gradient</b> — the "downhill" direction that would reduce the
+      <a class="def" href="#g-loss">loss</a>; training follows it.</p>
+    <p class="kv" id="g-gradient-descent"><b>gradient descent</b> — the whole learning method: keep stepping downhill
+      on the loss, following the <a class="def" href="#g-gradient">gradient</a>.</p>
+    <p class="kv" id="g-learning-rate"><b>learning rate</b> — how big each nudge is. Too big overshoots, too small crawls.</p>
+    <p class="kv" id="g-batch"><b>batch</b> — a handful of examples shown together before the knobs are nudged once.</p>
+    <p class="kv" id="g-epoch"><b>epoch</b> — one full pass over all of the training data.</p>
+    <p class="kv" id="g-capacity"><b>capacity / ceiling</b> — the most a given network can possibly learn; its size
+      sets the limit. Pushing past it just causes <a class="def" href="#g-overfitting">overfitting</a>.</p>
+    <p class="kv" style="color:var(--mut); margin-top:12px">— the language words —</p>
+    <p class="kv" id="g-vocabulary"><b>vocabulary</b> — the full set of <a class="def" href="#g-token">tokens</a> a
+      model knows; unknown words become a special "unknown" token.</p>
+    <p class="kv" id="g-embedding"><b>embedding</b> — turning a <a class="def" href="#g-token">token</a> into a list
+      of numbers the network can actually do math on.</p>
+    <p class="kv" id="g-context"><b>context window / memory</b> — how much recent text the model can look at while
+      writing the next word.</p>
+    <p class="kv" id="g-softmax"><b>softmax</b> — turns raw scores into probabilities that add up to 100%.</p>
+    <p class="kv" id="g-temperature"><b>temperature / creativity</b> — how randomly it picks the next
+      <a class="def" href="#g-token">token</a>; low = safe and repetitive, high = wild.</p>
+    <p class="kv" id="g-masking"><b>masking</b> — hiding parts of the data from the
+      <a class="def" href="#g-loss">loss</a>, so the model only learns to write the right parts.</p>
+    <p class="kv" id="g-phase"><b>phase</b> — the opening, middle, or ending of a chat; the bots learn each one separately.</p>
+    <p class="kv" style="color:var(--mut); margin-top:12px">— the big-picture words —</p>
+    <p class="kv" id="g-transformer"><b>transformer</b> — the modern architecture built on
+      <a class="def" href="#g-attention">attention</a>; the "T" in <a class="def" href="#g-gpt">GPT</a>.</p>
+    <p class="kv" id="g-gpt"><b>GPT</b> — Generative Pre-trained <a class="def" href="#g-transformer">Transformer</a> (Chapter 4).</p>
+    <p class="kv" id="g-pretraining"><b>pre-training</b> — the long training done before a model is used. Pressing
+      "Train" here is your pre-training.</p>
+    <p class="kv" id="g-inference"><b>inference</b> — using a trained model to produce output (chatting), rather than training it.</p>
+    <p class="kv" id="g-generalization"><b>generalization</b> — doing well on examples never seen in training; the real test of learning.</p>
+    <p class="kv" id="g-hallucination"><b>hallucination</b> — a confident, fluent answer that happens to be wrong.</p>
+  </details>
+
+  <p class="foot">Everything runs locally in your browser — no internet, no servers, no installs. Start with
+  <a href="../TinyBrain/index.html">Chapter 1</a> and read the blue note at the top of each page before you press
+  Train. Take your time; the fun is in watching it learn.</p>
+
+</div>
+<script>
+  // jump to a glossary term (even inside a closed details) from any in-page or cross-page link
+  function openToHash(){
+    const id=location.hash.slice(1); if(!id) return;
+    const el=document.getElementById(id); if(!el) return;
+    let p=el.parentElement; while(p){ if(p.tagName==='DETAILS') p.open=true; p=p.parentElement; }
+    el.scrollIntoView({block:'center'});
+  }
+  addEventListener('load', openToHash);
+  addEventListener('hashchange', openToHash);
+</script>
+</body>
+</html>

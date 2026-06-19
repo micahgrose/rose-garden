@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TinyChat — Chapter 3 demo</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="lessonnav">
+    <a href="../TinyTalk/myth-neurons.html">← Prev: TinyTalk myth</a>
+    <span class="mid">Chapter 3 · TinyChat — demo · <a href="../Lesson/index.html">home</a></span>
+    <a href="myth-memory.html">Next: TinyChat myth — "more memory" →</a>
+  </div>
+
+  <h1>TinyChat</h1>
+
+  <div class="layout">
+    <div class="main">
+      <div class="panel">
+        <h2>1 · Train the transformer</h2>
+        <div class="row">
+          <button id="train" class="primary">▶ Train</button>
+          <button id="reset">↺ Reset</button>
+          <label>Speed <input id="speed" type="range" min="1" max="20" value="6" /></label>
+          <label>memory <select id="ksize" disabled>
+            <option value="12">12</option><option value="16" selected>16</option><option value="24">24</option>
+            <option value="32">32</option><option value="64">64</option><option value="96">96</option><option value="128">128</option>
+          </select></label>
+          <label>neurons <select id="hsize" disabled><option value="32">32</option><option value="48" selected>48</option><option value="64">64</option></select></label>
+          <label>data <select id="dsize" disabled>
+            <option value="40">small (40)</option><option value="120" selected>medium (120)</option>
+            <option value="300">large (300)</option><option value="600">huge (600)</option><option value="1500">massive (1500)</option>
+          </select></label>
+        </div>
+        <div class="stats">
+          <span class="stat">steps <b id="steps">0</b></span>
+          <span class="stat">loss <b id="loss">—</b></span>
+          <span class="stat" id="split"></span>
+        </div>
+        <div class="meter"><span class="mlabel">memorized · training set</span><div class="bar"><i id="barfill"></i></div><b id="skill">0%</b></div>
+        <div class="meter"><span class="mlabel">generalized · unseen replies</span><div class="bar"><i id="vbarfill"></i></div><b id="vskill">0%</b></div>
+        <div class="meter"><span class="mlabel">confidence · how sure it is</span><div class="bar"><i id="cbarfill"></i></div><b id="cskill">0%</b></div>
+        <div class="snaps">
+          <div class="snap"><div class="snaptitle">training input · sampled every 10 steps</div><div class="snapbody" id="snapIn">…</div></div>
+          <div class="snap"><div class="snaptitle">expected output (what the corpus says comes next)</div><div class="snapbody" id="snapExp">…</div></div>
+          <div class="snap"><div class="snaptitle">ai reply (what the model actually produces)</div><div class="snapbody" id="snapAi">…</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>2 · Talk to it</h2>
+        <div class="chat" id="chat"></div>
+        <div class="row">
+          <input id="say" type="text" value="hello" placeholder="say something…" />
+          <button id="send">Send</button>
+          <button id="newchat">＋ New chat</button>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label>creativity <input id="temp" type="range" min="20" max="120" value="55" /></label>
+          <label>anti-repeat <input id="rep" type="range" min="0" max="100" value="40" /></label>
+        </div>
+        <p class="note">Bot turns train in three <b>phases</b> (opening / mid / ending); the tag under each reply shows
+        which fired. Typos in your input become an unknown token — it still reads the rest.</p>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="sidehead">about this chapter</div>
+      <div class="lessonbox">
+        <h3>Chapter 3 — <span class="hl">a network learns to converse</span></h3>
+        <p><b>What this is:</b> a small-talk bot, and your first
+        <a class="def" href="../Lesson/index.html#g-transformer"><b>transformer</b></a>. It reads whole
+        <a class="def" href="../Lesson/index.html#g-token"><b>words</b></a>, gets a first taste of
+        <a class="def" href="../Lesson/index.html#g-attention"><b>attention</b></a> (looking <i>back</i> at earlier
+        words), and holds a short multi-turn chat with <a class="def" href="../Lesson/index.html#g-phase"><b>phases</b></a>.</p>
+        <p><b>Step up from TinyTalk:</b> words carry more meaning than letters; attention lets it refer back; phases
+        teach it to greet, chat and sign off differently.</p>
+        <p><b>An honest catch:</b> the attention is <i>simplified</i> (one head, last word only). Chapter 4 (TinyGPT)
+        builds the real thing.</p>
+      </div>
+      <div class="lockbox">
+        <b>This demo's settings:</b> <span class="pill">memory 16</span> · <span class="pill">neurons 48</span> ·
+        <span class="pill">data 120</span>.<br>
+        <b>Why these?</b> small context fits short turns, modest width avoids overfitting, medium data gives enough
+        variety to generalize. (Change them in <a href="play.html" style="color:var(--acc)">free play</a>.)
+      </div>
+      <div class="panel" style="border-left:4px solid var(--amber);">
+        <h2 style="color:var(--amber)">🔬 bust a myth</h2>
+        <p style="color:var(--mut); font-size:12.5px; margin:0 0 8px;">Set to the configuration that reveals it, with
+        what to watch:</p>
+        <a class="def" href="myth-memory.html">"a bigger memory is always better" →</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="lessonnav" style="margin:26px 0 0;">
+    <a href="../TinyTalk/myth-neurons.html">← Prev: TinyTalk myth</a>
+    <span class="mid"><a href="../Lesson/index.html">home</a> · <a href="play.html">🎮 free play</a></span>
+    <a href="myth-memory.html">Next: TinyChat myth — "more memory" →</a>
+  </div>
+
+<script src="script.js"></script>
+</body>
+</html>

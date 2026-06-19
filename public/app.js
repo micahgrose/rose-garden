@@ -503,3 +503,6 @@ document.getElementById('labyrinthRunCard').addEventListener('click', () => {
 document.getElementById('ollieCard').addEventListener('click', () => {
     window.location.href = '/games/platformer/';
 });
+document.getElementById('tinyMindsCard').addEventListener('click', () => {
+    window.location.href = '/games/Tiny Minds/';
+});

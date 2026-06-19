@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TinyGPT — sandbox (free play)</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="lessonnav">
+    <a href="../Lesson/index.html">← Lesson home</a>
+    <span class="mid">TinyGPT · 🎮 sandbox</span>
+    <a href="index.html">Chapter 4 demo →</a>
+  </div>
+
+  <h1>TinyGPT — sandbox</h1>
+
+  <div class="layout">
+    <div class="main">
+      <div class="panel">
+        <h2>Train the transformer</h2>
+        <div class="row">
+          <button id="train" class="primary">▶ Train</button>
+          <button id="reset">↺ Reset</button>
+          <label>Speed <input id="speed" type="range" min="1" max="20" value="4" /></label>
+          <label>memory <select id="ksize"><option>16</option><option value="24" selected>24</option><option>32</option><option>64</option><option>96</option><option>128</option></select></label>
+          <label>neurons <select id="hsize"><option>32</option><option value="48" selected>48</option><option>64</option></select></label>
+          <label>heads <select id="heads"><option>1</option><option value="2" selected>2</option><option>4</option></select></label>
+          <label>layers <select id="layers"><option>1</option><option value="2" selected>2</option><option>3</option></select></label>
+          <label>data <select id="dsize">
+            <option value="100">small (100)</option><option value="400" selected>medium (400)</option>
+            <option value="1000">large (1000)</option><option value="3000">gargantuan (3000)</option>
+          </select></label>
+        </div>
+        <div class="stats">
+          <span class="stat">steps <b id="steps">0</b></span>
+          <span class="stat">loss <b id="loss">—</b></span>
+          <span class="stat" id="split"></span>
+        </div>
+        <div class="meter"><span class="mlabel">memorized · training set</span><div class="bar"><i id="barfill"></i></div><b id="skill">0%</b></div>
+        <div class="meter"><span class="mlabel">generalized · unseen replies</span><div class="bar"><i id="vbarfill"></i></div><b id="vskill">0%</b></div>
+        <div class="meter"><span class="mlabel">confidence · how sure it is</span><div class="bar"><i id="cbarfill"></i></div><b id="cskill">0%</b></div>
+        <div class="snaps">
+          <div class="snap"><div class="snaptitle">training input · sampled every 10 steps</div><div class="snapbody" id="snapIn">…</div></div>
+          <div class="snap"><div class="snaptitle">expected output</div><div class="snapbody" id="snapExp">…</div></div>
+          <div class="snap"><div class="snaptitle">ai reply</div><div class="snapbody" id="snapAi">…</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Talk to it</h2>
+        <div class="chat" id="chat"></div>
+        <div class="row">
+          <input id="say" type="text" value="hello" placeholder="say something…" />
+          <button id="send">Send</button>
+          <button id="newchat">＋ New chat</button>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label>creativity <input id="temp" type="range" min="20" max="120" value="55" /></label>
+          <label>anti-repeat <input id="rep" type="range" min="0" max="100" value="40" /></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="sidehead">free play</div>
+      <div class="lessonbox" style="border-left-color:var(--good)">
+        <h3 style="color:var(--good)">🎮 Every dial unlocked</h3>
+        <p>Change <b>anything</b>, break it, compare. The guide below explains each setting. Want the guided version?
+        That's the <a href="index.html" style="color:var(--good)">Chapter 4 demo</a>.</p>
+      </div>
+      <div class="panel">
+        <h2>what each setting does</h2>
+        <details class="sguide" open>
+          <summary>speed · capacity · quality</summary>
+          <p><b>Speed</b> — steps per second. Pace, not smarts.</p>
+          <p><b>memory</b> — context window. More history, slower (attention cost grows with its square); wasted on short chats.</p>
+          <p><b>neurons</b> — width / <a class="def" href="../Lesson/index.html#g-capacity">capacity</a>. <b>More ≠ smarter</b>: on small data it <a class="def" href="../Lesson/index.html#g-overfitting">overfits</a>.</p>
+          <p><b>heads</b> — parallel attention spotlights; more relationships at once, more compute.</p>
+          <p><b>layers</b> — stacked stages of understanding; deeper, but slower and needs more training.</p>
+          <p><b>data</b> — <span class="up">the one knob where "more" usually helps</span>, if it's varied.</p>
+          <p><b>creativity / anti-repeat</b> — chat-time: randomness, and how hard it avoids repeating itself.</p>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <div class="lessonnav" style="margin:26px 0 0;">
+    <a href="index.html">← Chapter 4 demo</a>
+    <span class="mid"><a href="../Lesson/index.html">lesson home</a></span>
+    <a href="../Lesson/index.html#sandbox">other sandboxes →</a>
+  </div>
+
+<script src="script.js"></script>
+</body>
+</html>

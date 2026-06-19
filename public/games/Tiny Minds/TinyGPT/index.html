@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TinyGPT — Chapter 4 demo</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="lessonnav">
+    <a href="../TinyChat/myth-memory.html">← Prev: TinyChat myth</a>
+    <span class="mid">Chapter 4 · TinyGPT — demo · <a href="../Lesson/index.html">home</a></span>
+    <a href="myth-neurons.html">Next: TinyGPT myth — "more neurons" →</a>
+  </div>
+
+  <h1>TinyGPT</h1>
+
+  <div class="layout">
+    <div class="main">
+      <div class="panel">
+        <h2>1 · Train the transformer</h2>
+        <div class="row">
+          <button id="train" class="primary">▶ Train</button>
+          <button id="reset">↺ Reset</button>
+          <label>Speed <input id="speed" type="range" min="1" max="20" value="6" /></label>
+          <label>memory <select id="ksize" disabled><option>16</option><option value="24" selected>24</option><option>32</option><option>64</option><option>96</option><option>128</option></select></label>
+          <label>neurons <select id="hsize" disabled><option>32</option><option value="48" selected>48</option><option>64</option></select></label>
+          <label>heads <select id="heads" disabled><option>1</option><option value="2" selected>2</option><option>4</option></select></label>
+          <label>layers <select id="layers" disabled><option>1</option><option value="2" selected>2</option><option>3</option></select></label>
+          <label>data <select id="dsize" disabled>
+            <option value="100">small (100)</option><option value="400" selected>medium (400)</option>
+            <option value="1000">large (1000)</option><option value="3000">gargantuan (3000)</option>
+          </select></label>
+        </div>
+        <div class="stats">
+          <span class="stat">steps <b id="steps">0</b></span>
+          <span class="stat">loss <b id="loss">—</b></span>
+          <span class="stat" id="split"></span>
+        </div>
+        <div class="meter"><span class="mlabel">memorized · training set</span><div class="bar"><i id="barfill"></i></div><b id="skill">0%</b></div>
+        <div class="meter"><span class="mlabel">generalized · unseen replies</span><div class="bar"><i id="vbarfill"></i></div><b id="vskill">0%</b></div>
+        <div class="meter"><span class="mlabel">confidence · how sure it is</span><div class="bar"><i id="cbarfill"></i></div><b id="cskill">0%</b></div>
+        <div class="snaps">
+          <div class="snap"><div class="snaptitle">training input · sampled every 10 steps</div><div class="snapbody" id="snapIn">…</div></div>
+          <div class="snap"><div class="snaptitle">expected output (what the corpus says comes next)</div><div class="snapbody" id="snapExp">…</div></div>
+          <div class="snap"><div class="snaptitle">ai reply (what the model actually produces)</div><div class="snapbody" id="snapAi">…</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>2 · Talk to it</h2>
+        <div class="chat" id="chat"></div>
+        <div class="row">
+          <input id="say" type="text" value="hello" placeholder="say something…" />
+          <button id="send">Send</button>
+          <button id="newchat">＋ New chat</button>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label>creativity <input id="temp" type="range" min="20" max="120" value="55" /></label>
+          <label>anti-repeat <input id="rep" type="range" min="0" max="100" value="40" /></label>
+        </div>
+        <p class="note">Bot turns train in three <b>phases</b> (opening / mid / ending); the tag under each reply shows
+        which fired. Typos in your input become an unknown token; it still reads the rest.</p>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="sidehead">about this chapter</div>
+      <div class="lessonbox">
+        <h3>Chapter 4 — <span class="hl">the real thing</span></h3>
+        <p><b>What this is:</b> a genuine miniature <a class="def" href="../Lesson/index.html#g-gpt"><b>GPT</b></a>. It
+        runs <a class="def" href="../Lesson/index.html#g-attention"><b>multi-head self-attention at every position</b></a>,
+        stacked in <a class="def" href="../Lesson/index.html#g-layer"><b>layers</b></a> — the same architecture behind
+        today's chatbots, shrunk to a tab.</p>
+        <p><b>Step up from TinyChat:</b> its attention was a <i>simplification</i> (one head, last word only). This is
+        the full recipe, so it reaches coherent replies in <b>far fewer steps</b>, with crisper
+        <b>top-k/top-p sampling</b>.</p>
+        <p>Experiment freely in the <a href="play.html" style="color:var(--acc)">🎮 sandbox</a>, or break a belief on
+        the <b>myth pages</b> (the next steps).</p>
+      </div>
+
+      <div class="lockbox">
+        <b>This demo's settings:</b> <span class="pill">memory 24</span> · <span class="pill">neurons 48</span> ·
+        <span class="pill">heads 2</span> · <span class="pill">layers 2</span> · <span class="pill">data 400</span>.
+        <br><b>Why these?</b> the balanced "fastest-to-coherent" setup — enough capacity and depth to learn the task,
+        small enough to train in a minute or two. (Change them in <a href="play.html" style="color:var(--acc)">free play</a>.)
+      </div>
+
+      <div class="panel">
+        <h2>Heads &amp; layers</h2>
+        <div class="concepts">
+          <div class="concept">
+            <h4>🔦 Heads</h4>
+            <p>A <b>head</b> is one attention "spotlight" — it decides <i>which earlier words matter</i>. Each head
+            <b>specializes</b> (topic, question-ness, tone). <b>1 head</b> = one thread at a time (≈ TinyChat);
+            <b>2–4</b> track several at once.</p>
+          </div>
+          <div class="concept">
+            <h4>🧱 Layers</h4>
+            <p>A <b>layer</b> is one stage of refinement: words → phrases → intent, built up in steps. <b>1</b> is
+            shallow; <b>2–3</b> compose real meaning, at more math and more training.</p>
+          </div>
+        </div>
+        <div class="tryit">Feel the difference on the <a href="myth-depth.html" style="color:var(--acc)">depth myth
+          page</a>, or compare heads/layers in <a href="play.html" style="color:var(--acc)">free play</a>.</div>
+      </div>
+
+      <div class="panel" style="border-left:4px solid #d29922;">
+        <h2 style="color:#d29922">🔬 bust a myth</h2>
+        <p style="color:var(--mut); font-size:12.5px; margin:0 0 8px;">Each page sets the configuration that reveals
+        it, and lets you run the comparison yourself.</p>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <a class="def" href="myth-neurons.html">"more neurons = smarter" →</a>
+          <a class="def" href="myth-depth.html">"layers and neurons are the same" →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="lessonnav" style="margin:26px 0 0;">
+    <a href="../TinyChat/myth-memory.html">← Prev: TinyChat myth</a>
+    <span class="mid"><a href="../Lesson/index.html">home</a> · <a href="play.html">🎮 free play</a></span>
+    <a href="myth-neurons.html">Next: TinyGPT myth — "more neurons" →</a>
+  </div>
+
+<script src="script.js"></script>
+</body>
+</html>
