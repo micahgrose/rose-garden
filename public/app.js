@@ -506,3 +506,6 @@ document.getElementById('ollieCard').addEventListener('click', () => {
 document.getElementById('tinyMindsCard').addEventListener('click', () => {
     window.location.href = '/games/Tiny Minds/';
 });
+document.getElementById('wickCard').addEventListener('click', () => {
+    window.location.href = '/games/wick/';
+});

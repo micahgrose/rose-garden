@@ -950,6 +950,7 @@ app.delete('/api/account', requireAuth, async (req, res) => {
     await dbRemove({ _id: user._id });
     await svRemoveAll({ userId: user._id });
     await db.collection('labyrinth_stats').deleteOne({ userId: user._id });
+    await db.collection('wick_saves').deleteOne({ userId: user._id });
     res.json({ message: 'Account deleted.' });
 });
 
@@ -1101,6 +1102,26 @@ app.post('/api/ollie/progress/:order', requireAuth, async (req, res) => {
     await db.collection('ollie_progress').updateOne(
         { userId: uid(req.user.id) },
         { $addToSet: { completedOrders: order } },
+        { upsert: true }
+    );
+    res.json({ ok: true });
+});
+
+// ── Wick ───────────────────────────────────────────────
+// Per-user progress: longest night survived, dawns won, total runs.
+app.get('/api/wick/save', requireAuth, async (req, res) => {
+    const doc = await db.collection('wick_saves').findOne({ userId: uid(req.user.id) });
+    res.json({ best: doc?.best || 0, wins: doc?.wins || 0, runs: doc?.runs || 0 });
+});
+
+app.post('/api/wick/save', requireAuth, async (req, res) => {
+    const best = Math.max(0, Math.floor(Number(req.body.best) || 0));
+    const wins = Math.max(0, Math.floor(Number(req.body.wins) || 0));
+    const runs = Math.max(0, Math.floor(Number(req.body.runs) || 0));
+    // these stats are monotonic — $max makes writes idempotent and race-safe
+    await db.collection('wick_saves').updateOne(
+        { userId: uid(req.user.id) },
+        { $max: { best, wins, runs } },
         { upsert: true }
     );
     res.json({ ok: true });
