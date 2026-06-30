@@ -187,8 +187,13 @@
   /* ---------------- input ---------------- */
 
   const keys = new Set();
-  // no right-click menu — it only ever interrupts the night
-  window.addEventListener('contextmenu', e => e.preventDefault());
+  // no right-click menu — it only ever interrupts the night.
+  // escape hatch: hold the middle mouse button while right-clicking to let it through.
+  let middleHeld = false;
+  window.addEventListener('mousedown', e => { if (e.button === 1) middleHeld = true; });
+  window.addEventListener('mouseup',   e => { if (e.button === 1) middleHeld = false; });
+  window.addEventListener('blur', () => { middleHeld = false; });
+  window.addEventListener('contextmenu', e => { if (!middleHeld) e.preventDefault(); });
   window.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
