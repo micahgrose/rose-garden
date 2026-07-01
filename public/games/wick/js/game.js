@@ -94,6 +94,11 @@
     H = window.innerHeight;
     canvas.width = Math.floor(W * DPR);
     canvas.height = Math.floor(H * DPR);
+    // <canvas> is a replaced element: position:fixed;inset:0 does NOT stretch it,
+    // so pin the CSS display size to the window or the DPR-scaled buffer overflows
+    // (anchored top-left) and shoves the centered view down-and-right at any zoom != 100%.
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
     darkCv.width = canvas.width;
     darkCv.height = canvas.height;
   }
