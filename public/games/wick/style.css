@@ -1,5 +1,21 @@
 /* wick — interface styles */
 
+/* fonts bundled locally so the game never depends on the Google Fonts CDN */
+@font-face {
+  font-family: 'Grenze Gotisch';
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url('fonts/grenze-gotisch.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Mulish';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('fonts/mulish.woff2') format('woff2');
+}
+
 :root {
   --ink: #e8e2d4;
   --dim: #8d87a0;
@@ -118,12 +134,16 @@ html, body {
 }
 
 #announce {
-  position: absolute;
-  top: 26%;
+  position: fixed;
+  top: 31%;
   left: 0; right: 0;
+  z-index: 5;                    /* above the play field, independent of the hud */
+  pointer-events: none;
+  padding: 0 8vw;               /* long lines wrap within the margins, still centered */
   text-align: center;
   font-family: var(--display);
   font-size: 30px;
+  line-height: 1.3;
   letter-spacing: 3px;
   color: var(--ink);
   text-shadow: 0 0 18px rgba(0,0,0,0.9), 0 2px 4px #000;
@@ -132,6 +152,7 @@ html, body {
 }
 #announce.show { opacity: 1; }
 #announce.grim { color: #c9b5ff; font-size: 38px; }
+#announce.ital { font-style: italic; }
 
 #hint {
   position: absolute;
@@ -202,6 +223,15 @@ html, body {
   background: rgba(255,255,255,0.15);
 }
 .pip.on { background: var(--warm2); box-shadow: 0 0 4px var(--warm2); }
+
+/* an evolved weapon shows as a red box */
+.slot.evoSlot {
+  border-color: #ff5d43;
+  background: rgba(255, 70, 45, 0.16);
+  box-shadow: 0 0 12px rgba(255, 70, 45, 0.4);
+}
+.slot.evoSlot svg { color: #ff6a52; }
+.slot.evoSlot .pip.on { background: #ff5d43; box-shadow: 0 0 4px #ff5d43; }
 
 /* ---------- overlays ---------- */
 
@@ -322,6 +352,68 @@ button.ghost:hover { color: var(--ink); border-color: rgba(255,255,255,0.35); }
   letter-spacing: 2px;
 }
 
+/* ---------- logbook ---------- */
+
+#logTabs { display: flex; gap: 8px; margin-bottom: 4px; }
+.logTab {
+  font-size: 12px;
+  padding: 7px 18px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+.logTab:hover { color: var(--ink); border-color: rgba(255, 255, 255, 0.3); }
+.logTab.on {
+  color: #1a1208;
+  background: linear-gradient(180deg, var(--warm2), var(--warm));
+  border-color: transparent;
+  box-shadow: 0 0 16px rgba(255, 180, 70, 0.3);
+}
+
+.logIcon {
+  width: 76px; height: 76px;
+  flex: 0 0 76px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 44%, rgba(42, 38, 62, 0.95), rgba(9, 8, 16, 0.98));
+}
+.logIcon svg { width: 40px; height: 40px; color: var(--warm); }
+.logIcon.cool svg { color: #9fd8ff; }
+.logIcon.gold svg { color: var(--warm2); }
+.logReq { color: var(--dim); font-size: 10.5px; }
+.logReq b { color: var(--warm2); }
+
+#logGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  width: min(880px, 92vw);
+  max-height: 62vh;
+  overflow-y: auto;
+  padding: 4px 6px;
+}
+.logCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 179, 71, 0.16);
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.logCanvas {
+  width: 76px; height: 76px;
+  flex: 0 0 76px;
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 44%, rgba(42, 38, 62, 0.95), rgba(9, 8, 16, 0.98));
+}
+.logText { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.logName { font-family: var(--display); font-size: 16px; letter-spacing: 1px; color: var(--warm); }
+.logDesc { font-size: 11.5px; line-height: 1.4; color: var(--ink); }
+.logEmpty { color: var(--dim); font-size: 14px; padding: 40px 20px; text-align: center; }
+
 /* ---------- cards ---------- */
 
 #cards {
@@ -407,6 +499,7 @@ button.ghost:hover { color: var(--ink); border-color: rgba(255,255,255,0.35); }
 .ctier.new { color: #7ee08a; }
 .cdesc { font-size: 12.5px; line-height: 1.5; color: var(--ink); flex: 1; }
 .cdesc b { color: var(--warm2); }
+.upglist { display: inline-block; text-align: left; line-height: 1.7; }
 .cflav { font-size: 11px; font-style: italic; color: var(--dim); line-height: 1.4; }
 
 /* evolution cards — earned, and unmistakable */
@@ -472,6 +565,7 @@ button.ghost:hover { color: var(--ink); border-color: rgba(255,255,255,0.35); }
 #pauseStats { min-width: min(380px, 80vw); }
 #pauseStats .row { display: flex; justify-content: space-between; gap: 24px; }
 #pauseStats .row span:last-child { color: var(--warm2); font-weight: 800; }
+#pauseStats .row span.evoRow { color: #ff6a52; font-weight: 800; text-shadow: 0 0 10px rgba(255, 90, 60, 0.45); }
 #pauseStats hr { border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 9px 0; }
 
 #goStats .row, #vicStats .row { display: flex; justify-content: space-between; gap: 40px; }

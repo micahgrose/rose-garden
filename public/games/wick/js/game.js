@@ -34,14 +34,15 @@
 
   /* ---------------- save data ---------------- */
 
-  let SAVE = { best: 0, wins: 0, runs: 0, mute: false };
+  let SAVE = { best: 0, wins: 0, runs: 0, mute: false, seen: {} };
   try {
     const raw = localStorage.getItem('wick_save_v1');
     if (raw) SAVE = Object.assign(SAVE, JSON.parse(raw));
   } catch (e) { /* private mode, file://, whatever — play without saving */ }
+  if (!SAVE.seen) SAVE.seen = {};
 
   // RoseGarden account: if logged in, progress is tied to the user and
-  // syncs across devices. localStorage stays as an offline cache + mute store.
+  // syncs across devices. localStorage stays as an offline cache + mute/seen store.
   let RG_TOKEN = null;
   try { RG_TOKEN = localStorage.getItem('rg_token'); } catch (e) {}
 
@@ -187,11 +188,10 @@
   /* ---------------- input ---------------- */
 
   const keys = new Set();
-  // no right-click menu — it only ever interrupts the night.
-  // escape hatch: hold the middle mouse button while right-clicking to let it through.
+  // no right-click menu — unless the middle button is held down at the same time
   let middleHeld = false;
   window.addEventListener('mousedown', e => { if (e.button === 1) middleHeld = true; });
-  window.addEventListener('mouseup',   e => { if (e.button === 1) middleHeld = false; });
+  window.addEventListener('mouseup', e => { if (e.button === 1) middleHeld = false; });
   window.addEventListener('blur', () => { middleHeld = false; });
   window.addEventListener('contextmenu', e => { if (!middleHeld) e.preventDefault(); });
   window.addEventListener('keydown', e => {
@@ -205,7 +205,9 @@
       persist();
       return;
     }
+    if (k === 'escape' && !$('logbook').classList.contains('hidden')) { closeLogbook(); return; }
     if (state === 'title' && (k === 'enter' || k === ' ')) { startRun(); return; }
+    if (state === 'title' && k === 't') { testStart(); return; } // debug: jump to 14:00 with a full build
     if (state === 'gameover' && k === 'enter') { startRun(); return; }
     if (state === 'levelup' && ['1', '2', '3'].includes(k)) {
       const cards = $('cards').children;
@@ -261,10 +263,10 @@
       flavor: 'A dart of borrowed light.',
       blurb: 'throws darts at the nearest shadow',
       stats: {
-        dmg: [10, 13, 16, 21, 28],
-        cd: [0.85, 0.78, 0.72, 0.64, 0.5],
+        dmg: [10, 16, 16, 27, 27],
+        cd: [0.85, 0.85, 0.72, 0.72, 0.6],
         count: [1, 2, 2, 3, 4],
-        pierce: [0, 0, 1, 1, 2],
+        pierce: [0, 0, 1, 1, 1],
         spd: 470
       }
     },
@@ -273,9 +275,9 @@
       flavor: 'They only want to help.',
       blurb: 'small embers circle you and bite',
       stats: {
-        dmg: [11, 14, 17, 21, 27],
-        count: [1, 2, 3, 3, 4],
-        rad: [64, 68, 74, 82, 90],
+        dmg: [8, 22, 22, 22, 22],
+        count: [2, 2, 3, 3, 4],
+        rad: [64, 64, 64, 92, 92],
         spin: 2.7
       }
     },
@@ -284,9 +286,9 @@
       flavor: 'Molten wax forgives nothing.',
       blurb: 'scalds everything near you, sometimes',
       stats: {
-        dmg: [16, 22, 28, 36, 48],
-        cd: [4.0, 3.6, 3.2, 2.9, 2.3],
-        rad: [110, 122, 138, 152, 178]
+        dmg: [15, 22, 22, 48, 48],
+        cd: [4.0, 4.0, 2.9, 2.9, 2.3],
+        rad: [110, 122, 122, 152, 164]
       }
     },
     scatter: {
@@ -307,7 +309,7 @@
       blurb: 'seeking flames that burst on arrival',
       stats: {
         dmg: [18, 24, 31, 40, 52],
-        cd: [2.4, 2.2, 2.0, 1.75, 1.45],
+        cd: [2.9, 2.2, 2.0, 1.75, 1.45],
         count: [1, 1, 2, 2, 3],
         blast: 52
       }
@@ -363,11 +365,11 @@
     thief:   { hp: 150, spd: 138, dmg: 5,  r: 19, xp: 5, eye: '#ffe066', eyeS: 3.4, steals: true },
     snuffer: { hp: 380, spd: 62,  dmg: 16, r: 17, xp: 0, eye: '#cfe2ff', eyeS: 3.2, elite: true },
     // mourn — the unlit: a multi-phase melee charger; the FIRST boss wall
-    mourn:   { hp: 7500, spd: 48, dmg: 32, r: 46, xp: 0, eye: '#f4f0ff', eyeS: 6, boss: true },
+    mourn:   { hp: 3750, spd: 48, dmg: 32, r: 46, xp: 0, eye: '#f4f0ff', eyeS: 6, boss: true },
     // hush — the gaunt lantern: a ranged spiral-caster that summons wisps to drink your light; the SECOND wall
     hush:    { hp: 11000, spd: 40, dmg: 24, r: 38, xp: 0, eye: '#bfe0ff', eyeS: 5, boss: true, gaunt: true },
-    // gutter — the leaping dark: blinks, scatters bullets, then leaps and slams concentric waves; the DAWN finale
-    gutter:  { hp: 16000, spd: 70, dmg: 30, r: 30, xp: 0, eye: '#d6a8ff', eyeS: 5, boss: true, leaper: true }
+    // gutter — the leaping dark: a huge, glowing menace; blinks, scatters, leaps and slams; the DAWN finale
+    gutter:  { hp: 80000, spd: 70, dmg: 30, r: 60, xp: 0, eye: '#e5240d', eyeS: 7, boss: true, leaper: true }
   };
 
   const DEATH_LINES = [
@@ -400,6 +402,7 @@
   const DAWN = 900;       // first light at 15:00 — a long night
 
   function resetWorld() {
+    clearAnnounce();
     enemies = []; bullets = []; ebullets = []; gems = []; pickups = [];
     particles = []; floaters = []; rings = []; flames = []; waves = [];
     Object.assign(P, {
@@ -414,32 +417,41 @@
       spawnT: 1.2, boss: null, won: false, winT: 0, endless: false,
       surgeT: 55, eBossT: 175, eBossPow: 1, bossIdx: 0,
       choiceQueue: [], pulse: 0, flashV: 0, deathT: 0, shake: 0,
-      movedT: 0, noSpawn: false, thiefT: 150,
+      movedT: 0, noSpawn: false, bossAlert: null, finale: null,
+      thiefOn: false, thiefT: 0, mournDown: false,
+      lull: false, lmoth: 0, lskit: 0,
+      appear: { skitter: false, brute: false, spitter: false, blob: false, wisp: false, gloom: false },
       lightDrain: 0, taughtHurt: false, taughtEvo: false, taughtWisp: false
     });
-    // a long, escalating night — three boss walls before the dawn at 15:00
-    // (the clock freezes during each boss, so the real night runs longer still)
+    // a long, escalating night — three boss walls before the dawn at 15:00.
+    // enemies enter the ambient pool only once their "first appear" beat fires;
+    // the clock freezes during each boss, so beats after one wait until it dies.
     G.events = [
-      { t: 38,  f: () => announce('something stirs out there') },
+      { t: 55,  f: () => { announce('something stirs out there'); G.appear.skitter = true; } },
       { t: 76,  f: () => announce('they can see your light') },
-      { t: 132, f: () => { announce('the dark presses in'); spawnRing('moth', 22); } },
-      { t: 172, f: () => spawnElite() },
-      { t: 210, f: () => { announce('cold things, that drink the light'); spawnRing('wisp', 7); } },
-      { t: 258, f: () => { announce('something heavy wakes'); spawnRing('gloom', 3); spawnRing('skitter', 12); } },
-      { t: 300, f: () => spawnBoss('mourn') },
-      { t: 360, f: () => { announce('do not stop moving'); spawnRing('skitter', 18); spawnRing('blob', 9); } },
-      { t: 402, f: () => spawnElite() },
-      { t: 450, f: () => { announce('they hunger now'); spawnRing('brute', 8); spawnRing('gloom', 4); } },
-      { t: 510, f: () => { announce('the swarm thickens'); spawnRing('wisp', 8); spawnRing('skitter', 16); } },
-      { t: 552, f: () => spawnElite() },
-      { t: 600, f: () => spawnBoss('hush') },
-      { t: 660, f: () => { announce('no quarter now'); spawnRing('brute', 9); spawnRing('gloom', 5); } },
-      { t: 712, f: () => { announce('blind and beset'); spawnRing('wisp', 10); spawnRing('moth', 16); } },
-      { t: 754, f: () => spawnElite() },
-      { t: 800, f: () => { announce('the night throws everything it has'); spawnRing('brute', 7); spawnRing('skitter', 18); spawnRing('gloom', 5); } },
-      { t: 844, f: () => spawnElite() },
-      { t: 872, f: () => { announce('first light is close — hold'); spawnRing('wisp', 9); spawnRing('blob', 10); } },
-      { t: DAWN, f: () => spawnBoss('gutter') }
+      { t: 142, f: () => { announce('the dark presses in'); spawnRing('moth', 20); } },
+      { t: 180, f: () => spawnElite() },
+      { t: 242, f: () => { announce('something heavy wakes'); G.appear.brute = true; } },
+      { t: 270, f: () => { announce('the dark is after you'); spawnPack({ moth: 28, skitter: 17, brute: 17 }); } },
+      { t: 300, f: () => startBossAlert('mourn') },
+      { t: 309, f: () => { announce('the dark sends a thief to steal your sparks'); G.thiefOn = true; spawnEnemy('thief'); G.thiefT = rand(40, 48); } },
+      { t: 358, f: () => { announce('do not stop moving'); G.appear.spitter = true; spawnPack({ skitter: 21, spitter: 7 }); } },
+      { t: 462, f: () => { announce('the swarm thickens'); G.appear.blob = true; spawnPack({ moth: 26, skitter: 11, brute: 8, spitter: 5, blob: 6 }); } },
+      { t: 480, f: () => spawnElite() },
+      { t: 552, f: () => { announce('cold things, that drink the light'); G.appear.wisp = true; spawnPack({ wisp: 7, brute: 5, skitter: 10 }); } },
+      { t: 600, f: () => startBossAlert('hush') },
+      { t: 648, f: () => { announce('the elder brother comes'); G.appear.gloom = true; } },
+      { t: 662, f: () => spawnPack({ moth: 10, skitter: 10, brute: 10, spitter: 10, wisp: 10, gloom: 10 }) },
+      { t: 732, f: () => spawnPack({ wisp: 7, gloom: 16, brute: 22, moth: 100, skitter: 26, spitter: 12 }) },
+      { t: 780, f: () => spawnElite() },
+      { t: 816, f: () => { announce('the dark lies in wait'); G.lull = true; G.lmoth = 1; G.lskit = 2; } },
+      { t: 840, f: () => { announce('it reaches to you with all it can'); G.lull = false; spawnPack({ wisp: 10, gloom: 45 }); } },
+      { t: 852, f: () => spawnPack({ brute: 50, skitter: 45 }) },
+      { t: 868, f: () => spawnPack({ wisp: 6, skitter: 32, gloom: 18, spitter: 10 }) },
+      { t: 882, f: () => spawnPack({ wisp: 3, skitter: 28, gloom: 22, brute: 22, spitter: 12, moth: 302 }) },
+      { t: 885, f: () => spawnElite() },
+      { t: 892, f: () => announce('dawn is close — hold on') },
+      { t: DAWN, f: () => startBossAlert('gutter') }
     ];
   }
 
@@ -451,7 +463,7 @@
 
   function recalcStats() {
     P.maxHp = 100 + 25 * lvOf('wick');
-    P.speed = 175 * (1 + 0.10 * lvOf('brisk'));
+    P.speed = 182 * (1 + 0.10 * lvOf('brisk'));
     P.dmgMul = 1 + 0.12 * lvOf('bright');
     P.cdMul = Math.pow(0.92, lvOf('hands'));
     P.pickupR = 60 * (1 + 0.3 * lvOf('draft'));
@@ -483,14 +495,17 @@
 
   function spawnEnemy(type, ang, distMul) {
     const def = ETYPES[type];
+    if (!SAVE.seen[type]) { SAVE.seen[type] = true; persist(); } // for the logbook: you lived to see it
     if (ang === undefined) ang = Math.random() * TAU;
     const d = offR() * (distMul || 1) + rand(0, 60);
+    // skitters start slow (104) and ramp to their full speed (124) by 5:01
+    const baseSpd = type === 'skitter' ? lerp(104, def.spd, clamp(G.time / 301, 0, 1)) : def.spd;
     const e = {
       id: eid++, type, def,
       x: P.x + Math.cos(ang) * d,
       y: P.y + Math.sin(ang) * d,
       hp: def.hp * hpMul(), maxHp: def.hp * hpMul(),
-      spd: def.spd * rand(0.9, 1.1),
+      spd: baseSpd * rand(0.9, 1.1),
       r: def.r, dmg: def.dmg * dmgScale(), xpv: def.xp,
       arm: def.arm || 0, carry: 0,
       phase: Math.random() * TAU,
@@ -518,13 +533,39 @@
     spawnEnemy('snuffer');
   }
 
+  // spawn a labelled pack, e.g. spawnPack({ moth: 28, skitter: 17, brute: 17 })
+  function spawnPack(obj) {
+    for (const t in obj) spawnRing(t, obj[t]);
+  }
+
+  function evoCount() {
+    let n = 0;
+    for (const w of P.weapons) if (w.evo) n++;
+    return n;
+  }
+
   const BOSS_INFO = {
     hush:   { name: 'hush, the gaunt lantern', shout: 'HUSH, THE GAUNT LANTERN' },
     gutter: { name: 'gutter, the leaping dark', shout: 'GUTTER, THE LEAPING DARK' },
     mourn:  { name: 'mourn, the unlit',        shout: 'MOURN, THE UNLIT' }
   };
 
-  function spawnBoss(kind) {
+  // a five-second warning before a scripted boss: mark the ground where the player
+  // stands now, flash it red, then drop the boss there.
+  function startBossAlert(kind) {
+    const dur = kind === 'gutter' ? 12 : 5; // the dawn gets a long warning so the prophecy can be read
+    G.bossAlert = { kind, x: P.x, y: P.y, t: dur };
+    announce(BOSS_INFO[kind].shout + ' — incoming', true);
+    Sound.play('boss');
+    addShake(6);
+    if (kind === 'gutter') {
+      // the two dawn lines, read while the marker flashes and before he lands
+      announce('Gutter holds within him the dawn of the morning.');
+      announce('THE LIGHT MUST BE RELEASED', true, true);
+    }
+  }
+
+  function spawnBoss(kind, atX, atY) {
     if (kind === 1 || kind === undefined) kind = 'mourn'; // legacy safety
     const info = BOSS_INFO[kind];
     announce(info.shout, true);
@@ -532,21 +573,48 @@
     const e = spawnEnemy(kind, undefined, 0.9);
     const epow = G.endless ? (1 + 0.42 * (G.eBossPow - 1)) : 1;
     e.hp = e.maxHp = ETYPES[kind].hp * epow;
+    if (atX !== undefined) { e.x = atX; e.y = atY; } // drop onto the marker
     G.boss = e;
     $('bossname').textContent = info.name;
     $('bosswrap').classList.remove('hidden');
     addShake(10);
+
+    // a greater dark scatters the lesser down to a manageable few — the culled leave their sparks
+    const KEEP = 30;
+    const alive = [];
+    for (const o of enemies) if (!o.dead && !o.def.boss) alive.push(o);
+    for (let i = alive.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const t = alive[i]; alive[i] = alive[j]; alive[j] = t; }
+    for (let i = KEEP; i < alive.length; i++) killEnemy(alive[i]);
+
+    // the boss lands with a shockwave — flings the surviving swarm far and singes them.
+    // the player (and the boss) are untouched.
+    if (atX !== undefined) {
+      addShake(16);
+      rings.push({ x: e.x, y: e.y, r: 30, maxr: 740, life: 0.5, maxlife: 0.5, thick: 2 });
+      puff(e.x, e.y, '#ffd23f', 34, 340, 0.9, 5);
+      for (const o of enemies) {
+        if (o.dead || o.def.boss) continue;
+        const dx = o.x - e.x, dy = o.y - e.y, d = Math.hypot(dx, dy) || 1;
+        damageEnemy(o, rand(11, 13), dx / d, dy / d, 3600);
+      }
+    }
+
+    // mourn and the dawn boss both silence the ambient swarm for their fights
+    if (kind === 'mourn' || kind === 'gutter') G.noSpawn = true;
+    // the dawn boss lands to his own loud, menacing theme
+    if (kind === 'gutter') { Sound.stopMusic(); Sound.startBossTheme(); }
   }
 
   function pickType() {
-    const m = G.time / 60;
+    // the ambient pool grows only as each enemy's "first appear" beat unlocks it
+    const a = G.appear;
     const w = [['moth', 5]];
-    if (m > 0.8) w.push(['skitter', 3]);
-    if (m > 1.8) w.push(['blob', 2.5]);
-    if (m > 3.2) w.push(['spitter', 2]);
-    if (m > 3.6) w.push(['wisp', 1.4]);
-    if (m > 4.6) w.push(['brute', 1.6]);
-    if (m > 5.2) w.push(['gloom', 1.2]);
+    if (a.skitter) w.push(['skitter', 3]);
+    if (a.brute) w.push(['brute', 1.6]);
+    if (a.spitter) w.push(['spitter', 2]);
+    if (a.blob) w.push(['blob', 2.5]);
+    if (a.wisp) w.push(['wisp', 1.4]);
+    if (a.gloom) w.push(['gloom', 1.2]);
     let total = 0;
     for (const [, wt] of w) total += wt;
     let roll = Math.random() * total;
@@ -556,15 +624,30 @@
 
   function spawnTick(dt) {
     if (G.noSpawn) return;
+    // the "dark lies in wait" lull — normal spawning held, just a thin drip
+    if (G.lull) {
+      G.lmoth -= dt; if (G.lmoth <= 0) { G.lmoth += 1; spawnEnemy('moth'); }
+      G.lskit -= dt; if (G.lskit <= 0) { G.lskit += 2; spawnEnemy('skitter'); }
+      return;
+    }
     G.spawnT -= dt;
     if (G.spawnT > 0) return;
     const m = G.time / 60;
     // while a boss holds the floor, the swarm thins to a light trickle so the fight reads
     const bossThin = G.bossUp ? 2 : 1;
-    G.spawnT = clamp(1.3 - 0.1 * m, 0.3, 2) * (G.endless ? 0.5 : 1) * bossThin;
+    // each evolved flame quickens the night by 0.04s between spawns
+    const iv = Math.max(0.12, clamp(1.3 - 0.1 * m, 0.3, 2) - 0.04 * evoCount());
+    G.spawnT = iv * (G.endless ? 0.5 : 1) * bossThin;
+    // during the dawn boss the swarm goes quiet so Gutter is the whole show
+    if (G.boss && !G.boss.dead && G.boss.def.leaper) G.spawnT = 2.12;
     let n = Math.round((1 + Math.floor(m / 2.0) + (G.endless ? 2 : 0)) * 1.25);
     if (G.bossUp) n = Math.max(1, Math.round(n * 0.5));
-    for (let i = 0; i < n; i++) spawnEnemy(pickType());
+    for (let i = 0; i < n; i++) {
+      const t = pickType();
+      // half the ambient skitters between 1:30 and 5:00 — a calmer early stretch
+      if (t === 'skitter' && G.time >= 90 && G.time < 300 && Math.random() < 0.5) continue;
+      spawnEnemy(t);
+    }
   }
 
   /* ---------------- spatial grid ---------------- */
@@ -648,12 +731,12 @@
         const a = (i / 5) * TAU;
         dropGem(e.x + Math.cos(a) * 26, e.y + Math.sin(a) * 26, 3);
       }
-      announce('it dropped something');
+      if (G.time < 780) announce('it dropped something');
       return;
     }
     if (e.def.steals && e.carry > 0) {
       // a thief gives back everything it stole, plus a little for the trouble
-      announce('your sparks, returned');
+      if (G.time < 780) announce('your sparks, returned');
       let left = e.carry + Math.round(e.carry * 0.4);
       const lumps = Math.min(8, 2 + (left / 6 | 0));
       for (let i = 0; i < lumps; i++) {
@@ -663,17 +746,18 @@
       }
     }
     if (e.type === 'skitter') {
-      // skitters leave a moth's spark, and half the time a second one
+      // skitters leave a moth's spark; before Mourn falls, half the time a second one too
       const v = ETYPES.moth.xp * (G.endless ? 2 : 1);
       dropGem(e.x - 6, e.y, v);
-      if (Math.random() < 0.5) dropGem(e.x + 6, e.y, v);
+      if (!G.mournDown && Math.random() < 0.5) dropGem(e.x + 6, e.y, v);
     } else if (e.xpv > 0) dropGem(e.x, e.y, e.xpv * (G.endless ? 2 : 1));
-    if (Math.random() < 0.012) pickups.push({ type: 'heart', x: e.x, y: e.y });
+    // hearts grow scarce as you evolve — halved per evolved flame
+    if (Math.random() < 0.012 * Math.pow(0.5, evoCount())) pickups.push({ type: 'heart', x: e.x, y: e.y });
     else if (G.time > 60 && Math.random() < 0.004) pickups.push({ type: 'magnet', x: e.x, y: e.y });
   }
 
   function dropGem(x, y, v) {
-    if (gems.length > 260) {
+    if (gems.length > 316) {
       gems[(Math.random() * gems.length) | 0].v += v;
       return;
     }
@@ -681,6 +765,10 @@
   }
 
   function bossDown(e) {
+    if (e.type === 'mourn') G.mournDown = true; // skitters stop double-dropping after this
+    const isFinal = e.type === 'gutter' && !G.endless;
+    if (isFinal) { startFinale(e); return; } // the dawn — a whole cinematic, not an instant win
+
     G.boss = null;
     $('bosswrap').classList.add('hidden');
     Sound.play('bossdie');
@@ -688,21 +776,8 @@
     puff(e.x, e.y, '#c9b5ff', 40, 220, 1.2, 5);
     puff(e.x, e.y, '#ffd23f', 30, 160, 1, 4);
 
-    const isFinal = e.type === 'gutter' && !G.endless;
-    if (isFinal) {
-      // the dawn boss — clear the field and break for first light
-      for (const o of enemies) {
-        if (!o.dead && !o.def.boss) {
-          o.dead = true;
-          puff(o.x, o.y, '#3a3450', 4, 60, 0.5, 3);
-        }
-      }
-      G.winT = 1.5;
-      G.noSpawn = true;
-      return;
-    }
-
     // a midboss (or any endless boss): big payout, a breath of relief, then the night goes on
+    G.noSpawn = false; // the ambient swarm resumes now the wall is broken
     pickups.push({ type: 'chest', x: e.x, y: e.y });
     const lumps = G.endless ? 10 : 6, lv = G.endless ? 20 : 9;
     for (let i = 0; i < lumps; i++) {
@@ -712,6 +787,101 @@
     P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.22);
     pickups.push({ type: 'heart', x: e.x + 26, y: e.y });
     announce((BOSS_INFO[e.type] ? BOSS_INFO[e.type].name.split(',')[0] : 'the boss') + ' falls — but the night goes on');
+  }
+
+  /* the dawn cinematic: gutter roars, spills rays of light faster and faster, then
+     shatters into a white nothing that fades to a lit, peaceful morning */
+  function startFinale(e) {
+    state = 'finale';
+    G.boss = null;
+    G.noSpawn = true;
+    $('bosswrap').classList.add('hidden');
+    $('hud').classList.add('hidden');
+    Sound.stopMusic();
+    Sound.stopBossTheme();
+    bullets = []; ebullets = []; // no more player fire or enemy shots
+    P.iframes = 0; P.hp = P.maxHp; // the candle is safe now — a full, contented flame, no blinking
+    // a beat of stunned stillness before he roars
+    G.finale = {
+      phase: 'pre', t: 0.6, elapsed: 0, gx: e.x, gy: e.y, gutter: e,
+      rays: [], rayT: 0.5, rayInt: 0.5, rayCount: 0, ballR: 8, white: 0,
+      camX: P.x, camY: P.y, zoom: 1, hold: 0.6  // camera: pause, then close in on gutter
+    };
+  }
+
+  function clearForDawn() {
+    enemies = []; bullets = []; ebullets = []; gems = []; pickups = [];
+    particles = []; floaters = []; rings = []; flames = []; waves = [];
+    if (G.finale) { G.finale.rays = []; G.finale.camX = P.x; G.finale.camY = P.y; G.finale.zoom = 1; }
+  }
+
+  function finaleUpdate(dt) {
+    const f = G.finale;
+    if (!f) { showVictory(); return; }
+    f.t -= dt;
+    f.elapsed += dt;
+    for (const r of f.rays) r.life -= dt;
+    f.rays = f.rays.filter(r => r.life > 0);
+
+    const building = f.phase === 'pre' || f.phase === 'roar' || f.phase === 'rays' || f.phase === 'split';
+    // still through the pre-beat; then a quake that grows through the roar→split (~4.3s)
+    // and is cut dead the instant the screen goes white
+    const shaking = f.phase === 'roar' || f.phase === 'rays' || f.phase === 'split';
+    if (shaking) { f.shakeE = (f.shakeE || 0) + dt; G.shake = Math.min(60, (f.shakeE / 4.3) * 60); }
+    else G.shake = 0;
+
+    // the ball of dawn: a light welling up inside him that swells with the rays and floods out
+    if (f.phase === 'split') f.ballR += dt * 4200;
+    else if (building) f.ballR += dt * 18;
+
+    // camera: hold a beat, then lerp onto gutter and slowly zoom in as he comes apart
+    if (building) {
+      if (f.hold > 0) f.hold -= dt;
+      else {
+        const cs = Math.min(1, dt * 1.4), zs = Math.min(1, dt * 0.55);
+        f.camX += (f.gx - f.camX) * cs;
+        f.camY += (f.gy - f.camY) * cs;
+        f.zoom += (1.95 - f.zoom) * zs;
+      }
+    }
+
+    if (f.phase === 'pre') {
+      // ~0.6s of stillness, then the roar — the roar phase lasts as long as the first roar,
+      // so the rays begin to spill out exactly as it ends
+      if (f.t <= 0) { f.phase = 'roar'; f.t = Sound.roarDuration(); Sound.play('roar'); }
+    } else if (f.phase === 'roar') {
+      if (Math.random() < 0.5) puff(f.gx + rand(-40, 40), f.gy + rand(-40, 40), '#ff6a2a', 1, 40, 0.5, 4);
+      if (f.t <= 0) { f.phase = 'rays'; f.t = 2.8; }
+    } else if (f.phase === 'rays') {
+      f.rayT -= dt;
+      if (f.rayT <= 0) {
+        f.rays.push({ ang: Math.random() * TAU, life: 1.1 }); // twice as slow to reach full length
+        f.rayCount++;
+        f.ballR += 42; // each ray swells the ball of dawn
+        Sound.play('ray');
+        f.rayInt = Math.max(0.05, f.rayInt * 0.82); // faster and faster
+        f.rayT = f.rayInt;
+      }
+      f.white = clamp(1 - f.t / 2.8, 0, 1) * 0.55; // the world brightens as it builds
+      if (f.t <= 0) { f.phase = 'split'; f.t = 0.5; Sound.play('dawnburst'); }
+    } else if (f.phase === 'split') {
+      f.white = lerp(0.55, 1, 1 - clamp(f.t / 0.5, 0, 1));
+      if (f.t <= 0) { f.phase = 'white'; f.t = 3.0; f.white = 1; clearForDawn(); }
+    } else if (f.phase === 'white') {
+      f.white = 1;
+      // the morning lasts: 2s white-fade + the three (long-held) closing lines + a 3.5s calm tail
+      if (f.t <= 0) { f.phase = 'dawn'; f.t = 27; f.dawnTotal = 27; Sound.play('win'); Sound.startDawnTheme(); }
+    } else if (f.phase === 'dawn') {
+      const elapsed = f.dawnTotal - f.t;
+      f.white = clamp(1 - elapsed / 2, 0, 1); // white clears over the first ~2s to reveal the morning
+      if (!f.spoke && elapsed >= 2) {
+        f.spoke = true;
+        announce('the dawn breaks, another day unfolds', false, false, 6000);
+        announce('just like before, you have never let us down', false, false, 6000);
+        announce('thanks to you, the night never prevails, and there is always a new hope for tomorrow.', false, false, 7500);
+      }
+      if (f.t <= 0) { showVictory(); }
+    }
   }
 
   function damagePlayer(dmg) {
@@ -738,6 +908,7 @@
     state = 'dying';
     G.deathT = 1.8;
     Sound.stopMusic();
+    Sound.stopBossTheme();
     Sound.play('death');
     addShake(12);
   }
@@ -811,6 +982,11 @@
               damageEnemy(e, wstat(w, 'dmg') * P.dmgMul, (e.x - wx) / dd, (e.y - wy) / dd, 70);
             }
           }
+          // an enemy shot that strikes an ember is snuffed
+          for (const b of ebullets) {
+            if (b.dead) continue;
+            if (dist2(wx, wy, b.x, b.y) < (14 + b.r) * (14 + b.r)) { b.dead = true; puff(b.x, b.y, '#ffcf6b', 4, 80, 0.3, 3); }
+          }
         }
       }
       else if (w.id === 'tallow') {
@@ -829,7 +1005,7 @@
             if (e.dead) continue;
             if (dist2(P.x, P.y, e.x, e.y) < (rad + e.r) * (rad + e.r)) {
               const dd = Math.hypot(e.x - P.x, e.y - P.y) || 1;
-              damageEnemy(e, wstat(w, 'dmg') * P.dmgMul, (e.x - P.x) / dd, (e.y - P.y) / dd, 160);
+              damageEnemy(e, wstat(w, 'dmg') * P.dmgMul, (e.x - P.x) / dd, (e.y - P.y) / dd, 80);
             }
           }
         }
@@ -890,23 +1066,20 @@
       w.t -= dt;
       if (w.t <= 0) {
         const tgt = nearestEnemy(P.x, P.y, 720);
-        if (!tgt) { w.t = 0.12; return; }
-        w.t = 0.42 * P.cdMul;
-        const base = Math.atan2(tgt.y - P.y, tgt.x - P.x);
-        for (let i = 0; i < 4; i++) {
-          const a = base + (i - 1.5) * 0.1;
-          bullets.push({
-            kind: 'bolt', lance: true, x: P.x, y: P.y - 8,
-            vx: Math.cos(a) * 700, vy: Math.sin(a) * 700,
-            dmg: 34 * m, pierce: 999, r: 8, life: 1.2, hit: new Set()
-          });
-        }
+        if (!tgt) { w.t = 0.08; return; }
+        w.t = 0.14 * P.cdMul; // a near-constant stream of piercing light
+        const a = Math.atan2(tgt.y - P.y, tgt.x - P.x);
+        bullets.push({
+          kind: 'bolt', lance: true, x: P.x, y: P.y - 8,
+          vx: Math.cos(a) * 900, vy: Math.sin(a) * 900,
+          dmg: 30 * m, pierce: 1, r: 8, life: 1.0, hit: new Set()
+        });
         Sound.play('shoot');
       }
     }
     else if (w.evo === 'halo') {
       w.ang += dt * 3.1;
-      const n = 6, rad = 112;
+      const n = 6, rad = 122;
       G.haloR = Math.max(G.haloR, rad + 16); // reel in sparks across the whole ring
       w.wisps.length = 0;
       for (let i = 0; i < n; i++) {
@@ -917,19 +1090,15 @@
         for (const e of near) {
           if (e.dead || e.orbitT > 0) continue;
           if (dist2(wx, wy, e.x, e.y) < (18 + e.r) * (18 + e.r)) {
-            e.orbitT = 0.16; // near-continuous burn — it's a solid wheel of fire now
+            e.orbitT = 0.26; // near-continuous burn — it's a solid wheel of fire now
             const dd = Math.hypot(e.x - wx, e.y - wy) || 1;
-            damageEnemy(e, 16 * m, (e.x - wx) / dd, (e.y - wy) / dd, 50);
+            damageEnemy(e, 27 * m, (e.x - wx) / dd, (e.y - wy) / dd, 50);
           }
         }
-      }
-      // the wheel of fire incinerates enemy shots that cross it
-      for (const b of ebullets) {
-        if (b.dead) continue;
-        const pd2 = dist2(b.x, b.y, P.x, P.y);
-        if (pd2 < (rad + 22) * (rad + 22) && pd2 > (rad - 26) * (rad - 26)) {
-          b.dead = true;
-          puff(b.x, b.y, '#ffcf6b', 5, 90, 0.3, 3);
+        // an enemy shot that strikes an ember is snuffed
+        for (const b of ebullets) {
+          if (b.dead) continue;
+          if (dist2(wx, wy, b.x, b.y) < (16 + b.r) * (16 + b.r)) { b.dead = true; puff(b.x, b.y, '#ffcf6b', 5, 90, 0.3, 3); }
         }
       }
     }
@@ -939,9 +1108,9 @@
         const rad = 188;
         const tgt = nearestEnemy(P.x, P.y, rad + 40);
         if (!tgt) { w.t = 0.3; return; }
-        w.t = 2.1 * P.cdMul;
+        w.t = 2.4 * P.cdMul;
         Sound.play('nova');
-        rings.push({ x: P.x, y: P.y, r: 22, maxr: rad, life: 0.4, maxlife: 0.4 });
+        rings.push({ x: P.x, y: P.y, r: 22, maxr: rad, life: 0.4, maxlife: 0.4, red: true });
         puff(P.x, P.y, '#ffcf6b', 18, 200, 0.5, 3);
         addShake(4);
         const near = gridQuery(P.x, P.y, rad + 50);
@@ -949,7 +1118,7 @@
           if (e.dead) continue;
           if (dist2(P.x, P.y, e.x, e.y) < (rad + e.r) * (rad + e.r)) {
             const dd = Math.hypot(e.x - P.x, e.y - P.y) || 1;
-            damageEnemy(e, 40 * m, (e.x - P.x) / dd, (e.y - P.y) / dd, 170);
+            damageEnemy(e, 40 * m, (e.x - P.x) / dd, (e.y - P.y) / dd, 80);
           }
         }
         // the burst leaves a pool of fire where you stand
@@ -979,21 +1148,27 @@
       }
     }
     else if (w.evo === 'wisppack') {
-      // maintain a pack of undying hunting wisps that orbit, chain, and leave embers
+      // a pack of undying hunting wisps that hunt, chain, and leave embers —
+      // every 10s they dissipate and a fresh pack shoots out from the candle
       const want = 4;
-      let alive = 0;
-      for (const b of bullets) if (b.kind === 'fox' && b.persist) alive++;
-      w.t -= dt;
-      if (alive < want && w.t <= 0) {
-        w.t = 0.5;
-        const a = Math.random() * TAU;
-        bullets.push({
-          kind: 'fox', persist: true, x: P.x, y: P.y,
-          vx: Math.cos(a) * 300, vy: Math.sin(a) * 300,
-          dmg: 30 * m, blast: 70, target: null,
-          r: 8, life: 999, pierce: 0, hit: new Set(), rehit: 0
-        });
+      const pushWisp = (a) => bullets.push({
+        kind: 'fox', persist: true, x: P.x, y: P.y,
+        vx: Math.cos(a) * 300, vy: Math.sin(a) * 300,
+        dmg: 30 * m, blast: 70, target: null,
+        r: 8, life: 999, pierce: 0, hit: new Set(), rehit: 0
+      });
+      let live = 0;
+      for (const b of bullets) if (b.kind === 'fox' && b.persist && !b.dead) live++;
+      w.recycleT = (w.recycleT || 0) - dt;
+      if (w.recycleT <= 0) {
+        w.recycleT = 10; // fires immediately on the first frame (evolution just claimed), then every 10s
+        for (const b of bullets) if (b.kind === 'fox' && b.persist) { b.dead = true; puff(b.x, b.y, '#ffb86b', 6, 90, 0.4, 3); }
+        for (let i = 0; i < want; i++) pushWisp((i / want) * TAU + rand(-0.2, 0.2));
         Sound.play('foxfire');
+      } else if (live < want) {
+        // top up if the pack is somehow short
+        w.t = (w.t || 0) - dt;
+        if (w.t <= 0) { w.t = 0.5; pushWisp(Math.random() * TAU); }
       }
     }
   }
@@ -1100,8 +1275,8 @@
       e.castT -= dt;
       if (e.castT <= 0) {
         e.castT = enraged ? 3.4 : 5.2;
-        addWave(e.x, e.y, 0, enraged);
-        if (enraged) addWave(e.x, e.y, 0.28, true);
+        addWave(e.x, e.y, 0, enraged, rand(15, 20));
+        if (enraged) addWave(e.x, e.y, 0.28, true, rand(15, 20));
         addShake(7); Sound.play('nova');
       }
     }
@@ -1178,49 +1353,90 @@
     if (Math.random() < 0.4) puff(e.x + rand(-22, 22), e.y + rand(-22, 22), '#2a3a55', 1, 18, 0.6, 4);
   }
 
-  /* gutter, the leaping dark — blinks around scattering shots, then leaps and slams concentric waves */
+  /* gutter, the leaping dark — stalks toward you, blinks & scatters, leaps & slams;
+     past half-health it also breaks into a radial burst or a spinning spiral */
   function updateGutter(e, dt, nx, ny, d) {
     if (e.phaseN === 1 && e.hp < e.maxHp * 0.5) { e.phaseN = 2; announce('gutter splits the dark', true); addShake(8); }
     const p2 = e.phaseN >= 2;
+    // dawn-coming encouragement as it weakens
+    const hpf = e.hp / e.maxHp;
+    if (!e.enc80 && hpf < 0.8) { e.enc80 = true; announce('the sky greys at the edges — keep going'); }
+    if (!e.enc30 && hpf < 0.3) { e.enc30 = true; announce('dawn is almost here — hold the line', true); }
+    if (!e.enc12 && hpf < 0.12) { e.enc12 = true; announce('first light breaks — one more push!', true); }
     e.bT -= dt;
-    if (e.bState === 'chase') { e.bState = 'blinkwait'; e.bT = 0.5; e.blinks = 0; e.blinkGoal = 4 + (Math.random() * 3 | 0); }
+
+    if (e.bState === 'chase') { e.bState = 'blinkwait'; e.bT = 0.5; e.blinks = 0; e.blinkGoal = 4 + (Math.random() * 3 | 0); e.atkT = rand(6, 9); }
     else if (e.bState === 'blinkwait') {
-      e.x += nx * e.spd * 0.3 * dt; e.y += ny * e.spd * 0.3 * dt;
+      // stalk toward the player between teleports
+      e.x += nx * e.spd * 0.6 * dt; e.y += ny * e.spd * 0.6 * dt;
+      // past half health it periodically breaks into a new attack instead of blinking
+      if (p2) { e.atkT -= dt; if (e.atkT <= 0) { e.atkT = rand(7, 10); startGutterAttack(e); return; } }
       if (e.bT <= 0) {
         // blink to a new spot — erratic, and farther out with each jump of the cycle
         const a = Math.random() * TAU, dist = 220 + e.blinks * 45 + rand(0, 120);
-        puff(e.x, e.y, '#6a4aa8', 8, 120, 0.4, 4);
+        puff(e.x, e.y, '#a0301a', 8, 120, 0.4, 4);
         e.x = P.x + Math.cos(a) * dist; e.y = P.y + Math.sin(a) * dist;
-        puff(e.x, e.y, '#9a6ad8', 14, 170, 0.5, 4); addShake(2); Sound.play('shoot');
-        // a scatter of bolts at where you are now
+        puff(e.x, e.y, '#ff5a2a', 14, 170, 0.5, 4); addShake(2); Sound.play('shoot');
         const base = Math.atan2(P.y - e.y, P.x - e.x), cnt = p2 ? 7 : 5;
         for (let i = 0; i < cnt; i++) {
           const aa = base + (i - (cnt - 1) / 2) * 0.16 + rand(-0.04, 0.04);
           ebullets.push({ x: e.x, y: e.y, vx: Math.cos(aa) * 235, vy: Math.sin(aa) * 235, r: 6, dmg: 13 * dmgScale(), life: 4 });
         }
         e.blinks++;
-        if (e.blinks >= e.blinkGoal) { e.bState = 'leaptell'; e.bT = p2 ? 2.6 : 3.0; e.lx = P.x; e.ly = P.y; } // long, readable wind-up
-        else { e.bT = p2 ? 0.9 : 1.2; } // longer pauses between teleports
+        if (e.blinks >= e.blinkGoal) { e.bState = 'leaptell'; e.bT = p2 ? 2.6 : 3.0; e.lx = P.x; e.ly = P.y; }
+        else { e.bT = p2 ? 0.9 : 1.2; }
       }
     } else if (e.bState === 'leaptell') {
-      // landing locked where you stood — a full ~3s to read it and run off the mark
       if (e.bT <= 0) { e.bState = 'leap'; e.bT = 0.75; e.lsx = e.x; e.lsy = e.y; addShake(3); }
     } else if (e.bState === 'leap') {
-      const k = 1 - clamp(e.bT / 0.75, 0, 1); // a slower, floatier arc
-      e.x = lerp(e.lsx, e.lx, k); e.y = lerp(e.lsy, e.ly, k) - Math.sin(k * Math.PI) * 80; // an arc
-      if (Math.random() < 0.7) puff(e.x, e.y, '#9a6ad8', 1, 50, 0.4, 4);
+      const k = 1 - clamp(e.bT / 0.75, 0, 1);
+      e.x = lerp(e.lsx, e.lx, k); e.y = lerp(e.lsy, e.ly, k) - Math.sin(k * Math.PI) * 80;
+      if (Math.random() < 0.7) puff(e.x, e.y, '#ff5a2a', 1, 50, 0.4, 4);
       if (e.bT <= 0) {
         e.x = e.lx; e.y = e.ly;
         addShake(13); Sound.play('nova');
         for (let i = 0; i < 3; i++) addWave(e.x, e.y, i * (p2 ? 0.22 : 0.3), p2);
-        if (p2) for (let i = 0; i < 3; i++) spawnEnemy('skitter', Math.random() * TAU, 0.5);
+        // the slam also tears open a ring of the swarm around him — 5 of each
+        for (const kind of ['moth', 'skitter', 'blob', 'spitter', 'brute', 'gloom']) {
+          for (let i = 0; i < 5; i++) {
+            const a = (i / 5) * TAU + rand(-0.12, 0.12);
+            const en = spawnEnemy(kind);
+            en.x = e.x + Math.cos(a) * (e.r + 70);
+            en.y = e.y + Math.sin(a) * (e.r + 70);
+          }
+        }
         e.bState = 'blinkwait'; e.bT = 0.7; e.blinks = 0; e.blinkGoal = 4 + (Math.random() * 3 | 0);
       }
+    } else if (e.bState === 'burst') {
+      // a moment of stillness, then a wide radial volley
+      if (e.bT <= 0) {
+        const n = 26;
+        for (let i = 0; i < n; i++) { const a = (i / n) * TAU + e.spinA; ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * 190, vy: Math.sin(a) * 190, r: 6, dmg: 14 * dmgScale(), life: 6 }); }
+        addShake(7); Sound.play('nova'); puff(e.x, e.y, '#ff5a2a', 20, 220, 0.6, 4);
+        e.bState = 'blinkwait'; e.bT = 0.9; e.blinks = 0; e.blinkGoal = 4 + (Math.random() * 3 | 0);
+      }
+    } else if (e.bState === 'spiral') {
+      // a spinning sprinkler of fire for a couple of seconds
+      e.spinA += dt * 3.6;
+      e.fireT -= dt;
+      if (e.fireT <= 0) {
+        e.fireT = 0.09;
+        for (let k = 0; k < 3; k++) { const a = e.spinA + (k / 3) * TAU; ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * 150, vy: Math.sin(a) * 150, r: 6, dmg: 13 * dmgScale(), life: 6 }); }
+      }
+      if (e.bT <= 0) { e.bState = 'blinkwait'; e.bT = 0.9; e.blinks = 0; e.blinkGoal = 4 + (Math.random() * 3 | 0); }
     }
   }
 
-  function addWave(x, y, delay, fast) {
-    waves.push({ x, y, r: 12, maxr: 380, spd: fast ? 520 : 430, band: 28, dmg: 22 * dmgScale(), delay: delay || 0, hit: false });
+  // gutter's phase-2 alternates: a radial burst or a spinning spiral
+  function startGutterAttack(e) {
+    if (Math.random() < 0.5) { e.bState = 'burst'; e.bT = 0.45; addShake(4); }
+    else { e.bState = 'spiral'; e.bT = 1.6; e.fireT = 0; addShake(3); }
+    puff(e.x, e.y, '#ff5a2a', 12, 150, 0.5, 4);
+    Sound.play('boss');
+  }
+
+  function addWave(x, y, delay, fast, dmg) {
+    waves.push({ x, y, r: 12, maxr: 380, spd: fast ? 520 : 430, band: 28, dmg: dmg !== undefined ? dmg : 22 * dmgScale(), delay: delay || 0, hit: false });
   }
 
   function updateWaves(dt) {
@@ -1343,7 +1559,7 @@
         if (e.def.steals && e.carry > 0) {
           // a laden thief that gets away keeps everything it stole — chase it or lose it
           e.dead = true;
-          announce('a thief slipped into the dark with your sparks');
+          if (G.time < 780) announce('a thief slipped into the dark with your sparks');
           continue;
         }
         const a = Math.random() * TAU;
@@ -1431,14 +1647,39 @@
 
   function addShake(v) { G.shake = Math.min(18, G.shake + v); }
 
+  // announcements queue up and show one at a time — a new one waits until the
+  // current has faded rather than cutting it off mid-line
+  let announceQueue = [];
+  let announceBusy = false;
   let announceTimer = null;
-  function announce(txt, grim) {
+
+  function announce(txt, grim, italic, holdMs) {
+    announceQueue.push({ txt: txt, grim: !!grim, italic: !!italic, hold: holdMs || 0 });
+    if (announceQueue.length > 5) announceQueue.shift(); // never let a backlog pile up
+    if (!announceBusy) nextAnnounce();
+  }
+
+  function nextAnnounce() {
     const el = $('announce');
-    el.textContent = txt;
-    el.classList.toggle('grim', !!grim);
+    if (!announceQueue.length) { announceBusy = false; el.classList.remove('show'); return; }
+    announceBusy = true;
+    const m = announceQueue.shift();
+    el.textContent = m.txt;
+    el.classList.toggle('grim', m.grim);
+    el.classList.toggle('ital', m.italic);
     el.classList.add('show');
-    if (announceTimer) clearTimeout(announceTimer);
-    announceTimer = setTimeout(() => el.classList.remove('show'), grim ? 3400 : 2500);
+    announceTimer = setTimeout(() => {
+      el.classList.remove('show');            // begin the fade
+      announceTimer = setTimeout(nextAnnounce, 560); // wait for it to fade, then the next
+    }, m.hold || (m.grim ? 3400 : 2500));
+  }
+
+  function clearAnnounce() {
+    announceQueue.length = 0;
+    announceBusy = false;
+    if (announceTimer) { clearTimeout(announceTimer); announceTimer = null; }
+    const el = $('announce');
+    if (el) el.classList.remove('show');
   }
 
   /* ---------------- level-up cards ---------------- */
@@ -1469,20 +1710,33 @@
 
   function rollChoices() {
     const picks = [];
+    const has = (type, id) => picks.some(p => p.type === type && p.id === id);
     // a ready evolution always takes the first slot — earned, and impossible to miss
     const ready = evoReady();
     if (ready.length) {
       const pick = ready[(Math.random() * ready.length) | 0];
       picks.push({ type: 'evo', id: pick.id });
     }
+    // when a weapon is maxed and its evo-gift is one level short, force that gift in
+    // so the evolution is always within reach on the next growth
+    for (const wid in EVOS) {
+      const ev = EVOS[wid];
+      const w = P.weapons.find(x => x.id === wid);
+      if (w && !w.evo && w.lvl >= 5 && lvOf(ev.req) === 4 && !has('p', ev.req)) {
+        picks.push({ type: 'p', id: ev.req });
+        break; // at most one forced gift per growth
+      }
+    }
 
     const pool = [];
     for (const id in WEAPONS) {
       const owned = P.weapons.find(w => w.id === id);
+      if (has('w', id)) continue;
       if (owned) { if (!owned.evo && owned.lvl < 5) pool.push({ type: 'w', id, wgt: 3 }); }
       else if (weaponSlots() < 4) pool.push({ type: 'w', id, wgt: 2 });
     }
     for (const id in PASSIVES) {
+      if (has('p', id)) continue;
       const lv = lvOf(id);
       if (lv > 0) { if (lv < 5) pool.push({ type: 'p', id, wgt: 3 }); }
       else if (passiveSlots() < 5) pool.push({ type: 'p', id, wgt: 2 });
@@ -1517,7 +1771,8 @@
       }
       else parts.push((STAT_LABEL[key] || key) + ' ' + sign(b - a));
     }
-    return parts.join(' · ');
+    // a bullet list, one change per line
+    return '<div class="upglist">' + parts.map(p => '· ' + p).join('<br>') + '</div>';
   }
 
   function buildCard(c) {
@@ -1605,6 +1860,14 @@
       addShake(10); G.flashV = 0.4;
       puff(P.x, P.y, '#ffd23f', 30, 280, 0.8, 5);
       Sound.play('win');
+      // the dark recoils at your new power — a reprisal swarm rushes in
+      const ev = EVOS[c.id].evo;
+      if (ev === 'sunpiercer') spawnRing('spitter', 100);
+      else if (ev === 'wisppack') spawnRing(G.appear.gloom ? 'gloom' : 'brute', 100);
+      else if (ev === 'halo') spawnRing('skitter', 100);
+      else if (ev === 'pyre') spawnRing('blob', 100);
+      else if (ev === 'wildfire') spawnRing('brute', 100);
+      spawnRing('moth', 50);
     } else if (c.type === 'p') {
       P.passives[c.id] = lvOf(c.id) + 1;
       recalcStats();
@@ -1658,8 +1921,14 @@
       let pips = '<div class="pips">';
       for (let i = 0; i < 5; i++) pips += '<div class="pip' + (i < w.lvl ? ' on' : '') + '"></div>';
       pips += '</div>';
-      s.innerHTML = WEAPONS[w.id].icon + pips;
-      s.title = WEAPONS[w.id].name + ' — level ' + w.lvl;
+      if (w.evo) {
+        s.classList.add('evoSlot'); // a red box showing the evolved weapon
+        s.innerHTML = EVOS[w.id].icon + pips;
+        s.title = EVOS[w.id].name + ' (evolved)';
+      } else {
+        s.innerHTML = WEAPONS[w.id].icon + pips;
+        s.title = WEAPONS[w.id].name + ' — level ' + w.lvl;
+      }
       el.appendChild(s);
     }
   }
@@ -1707,6 +1976,28 @@
     Sound.startMusic();
   }
 
+  /* debug: drop straight into the 14:00 mark with a full evolved build to test Gutter fast.
+     trigger with index.html#test or by pressing T on the title. */
+  function testStart() {
+    startRun();
+    G.time = 840;
+    for (const k in G.appear) G.appear[k] = true;
+    G.thiefOn = true; G.thiefT = rand(40, 48); G.mournDown = true;
+    G.events = G.events.filter(ev => ev.t > 840); // keep only 14:12+ beats and the dawn boss
+    P.weapons = [
+      { id: 'flicker', lvl: 5, evo: 'sunpiercer', t: 0.2, ang: Math.random() * TAU, wisps: [] },
+      { id: 'cinder',  lvl: 5, evo: 'halo',       t: 0.2, ang: Math.random() * TAU, wisps: [] },
+      { id: 'foxfire', lvl: 5, evo: 'wisppack',   t: 0.2, ang: Math.random() * TAU, wisps: [] },
+      { id: 'tallow',  lvl: 5, evo: 'pyre',       t: 0.2, ang: Math.random() * TAU, wisps: [] }
+    ];
+    P.passives = { bright: 5, draft: 5, hands: 5, wax: 5, melt: 5 };
+    recalcStats();
+    P.hp = P.maxHp;
+    G.lvl = 45; G.xp = 0; G.xpNext = xpNeed(45);
+    refreshLoadout();
+    announce('test: the dawn approaches', true);
+  }
+
   function pauseGame() {
     state = 'paused';
     Sound.play('click');
@@ -1716,7 +2007,11 @@
       '<div class="row"><span>flame level</span><span>' + G.lvl + '</span></div>' +
       '<div class="row"><span>shadows undone</span><span>' + G.kills + '</span></div><hr>';
     for (const w of P.weapons) {
-      html += '<div class="row"><span>' + WEAPONS[w.id].name + '</span><span>lv ' + w.lvl + '</span></div>';
+      if (w.evo) {
+        html += '<div class="row"><span class="evoRow">' + EVOS[w.id].name + '</span><span class="evoRow">evolved</span></div>';
+      } else {
+        html += '<div class="row"><span>' + WEAPONS[w.id].name + '</span><span>lv ' + w.lvl + '</span></div>';
+      }
     }
     const ps = Object.keys(P.passives).filter(k => P.passives[k] > 0);
     if (ps.length) {
@@ -1753,7 +2048,10 @@
   function showVictory() {
     state = 'victory';
     G.won = true;
+    // keep G.finale in its 'dawn' phase so the bright morning shows behind the stats
+    $('hud').classList.add('hidden');
     Sound.stopMusic();
+    Sound.stopBossTheme();
     Sound.play('win');
     SAVE.wins++;
     if (G.time > SAVE.best) SAVE.best = G.time;
@@ -1773,9 +2071,11 @@
     $('hud').classList.remove('hidden');
     G.endless = true;
     G.noSpawn = false;
+    G.finale = null; // leave the morning behind
     G.surgeT = 50;
     G.eBossT = 170;
     state = 'playing';
+    Sound.stopDawnTheme();
     Sound.startMusic();
     announce('the dark does not end. neither do you.');
   }
@@ -1784,6 +2084,8 @@
     dropFocus();
     Sound.play('click');
     Sound.stopMusic();
+    Sound.stopBossTheme();
+    Sound.stopDawnTheme();
     $('flash').style.opacity = 0;
     hideAllOverlays();
     $('hud').classList.add('hidden');
@@ -1808,6 +2110,7 @@
   /* ---------------- update ---------------- */
 
   function update(dt) {
+    if (state === 'finale') { finaleUpdate(dt); return; }
     if (state !== 'playing' && state !== 'dying') return;
 
     if (state === 'dying') {
@@ -1859,17 +2162,28 @@
           spawnBoss(['hush', 'gutter', 'mourn'][G.eBossPow % 3]); // endless rotates all three
         }
       }
-      // a lone thief prowls in now and then — never in packs, at most two at once
-      G.thiefT -= dt;
-      if (G.thiefT <= 0) {
-        G.thiefT = rand(30, 38);
-        let nthief = 0;
-        for (const e of enemies) if (e.type === 'thief' && !e.dead) nthief++;
-        if (nthief < 2) spawnEnemy('thief');
+      // once it wakes (5:09), a lone thief prowls in every 40-48s — at most two at once
+      if (G.thiefOn) {
+        G.thiefT -= dt;
+        if (G.thiefT <= 0) {
+          G.thiefT = rand(40, 48);
+          let nthief = 0;
+          for (const e of enemies) if (e.type === 'thief' && !e.dead) nthief++;
+          if (nthief < 2) spawnEnemy('thief');
+        }
       }
     }
 
     if (G.lightDrain > 0) G.lightDrain = Math.max(0, G.lightDrain - dt * 0.7); // light returns once the wisps are gone
+
+    // boss alert: five seconds on the marker, then the boss drops in
+    if (G.bossAlert) {
+      G.bossAlert.t -= dt;
+      if (G.bossAlert.t <= 0) {
+        const a = G.bossAlert; G.bossAlert = null;
+        spawnBoss(a.kind, a.x, a.y);
+      }
+    }
 
     spawnTick(dt);
     gridBuild();
@@ -2178,35 +2492,49 @@
       ctx.fill();
       ctx.globalAlpha = 1;
     } else if (e.type === 'gutter') {
-      // a tattered leaping shade; stretches when it leaps, splits in two in phase 2
+      // a huge, glowing menace — a hunched shade with a jagged crown, wreathed in red fire.
+      // it stalks (bobbing) between teleports and stretches tall when it leaps.
       const leaping = e.bState === 'leap';
-      const sx = leaping ? 0.7 : 1, sy = leaping ? 1.4 : 1;
-      const ragged = (off) => {
-        ctx.beginPath();
-        for (let i = 0; i <= 18; i++) {
-          const a = (i / 18) * TAU;
-          const rr = e.r * (1 + 0.16 * Math.sin(a * 4 + t * 3 + off)) ;
-          const px = Math.cos(a) * rr * sx, py = Math.sin(a) * rr * sy;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-        ctx.fill();
-      };
-      if (e.phaseN >= 2) {
-        ctx.fillStyle = '#211833';
-        ctx.save(); ctx.translate(-e.r * 0.4, 0); ragged(1.7); ctx.restore();
-        ctx.save(); ctx.translate(e.r * 0.4, 0); ragged(3.1); ctx.restore();
-      } else {
-        ctx.fillStyle = '#241a36';
-        ragged(0);
+      const sx = leaping ? 0.72 : 1, sy = leaping ? 1.42 : 1;
+      const walking = e.bState === 'blinkwait';
+      const bob = walking ? Math.abs(Math.sin(t * 6)) * 4 : 0;
+      const sway = walking ? Math.sin(t * 3) * 0.045 : 0;
+      e._bob = bob; // so the eyes ride the head
+      drawGlow(ctx, 0, -bob, e.r * 2.0, 'rgba(220,35,12,0.95)', 0.34 + 0.14 * Math.sin(t * 3.5));
+      drawGlow(ctx, 0, -bob, e.r * 1.1, 'rgba(255,80,30,0.95)', 0.28 + 0.1 * Math.sin(t * 6));
+      ctx.save();
+      ctx.translate(0, -bob);
+      ctx.rotate(sway);
+      ctx.scale(sx, sy);
+      const R = e.r;
+      const spikeH = e.phaseN >= 2 ? 0.52 : 0.36;
+      const crown = e.phaseN >= 2 ? 5 : 4;
+      ctx.fillStyle = '#25100c';
+      ctx.beginPath();
+      ctx.moveTo(-R * 0.85, R * 0.55);
+      ctx.quadraticCurveTo(-R * 1.02, -R * 0.1, -R * 0.6, -R * 0.5);
+      for (let i = 0; i <= crown; i++) {
+        const px = -R * 0.6 + (R * 1.2) * (i / crown);
+        const py = -R * 0.5 + (i % 2 === 0 ? -R * spikeH : R * 0.06) + 0.05 * R * Math.sin(t * 5 + i);
+        ctx.lineTo(px, py);
       }
-      // a violet inner spark
-      ctx.fillStyle = '#c98aff';
+      ctx.quadraticCurveTo(R * 1.02, -R * 0.1, R * 0.85, R * 0.55);
+      const teeth = 5;
+      for (let i = 1; i <= teeth; i++) {
+        const px = R * 0.85 - (R * 1.7) * (i / teeth);
+        const py = R * 0.55 + (i % 2 === 0 ? R * 0.22 : -R * 0.04);
+        ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      // a deep fiery-red core in the chest
+      ctx.fillStyle = '#ff3a16';
       ctx.globalAlpha = 0.5 + 0.3 * Math.sin(t * 9);
       ctx.beginPath();
-      ctx.arc(0, 0, e.r * 0.28, 0, TAU);
+      ctx.arc(0, -R * 0.02, R * 0.22, 0, TAU);
       ctx.fill();
       ctx.globalAlpha = 1;
+      ctx.restore();
     }
 
     if (e.flash > 0) {
@@ -2235,10 +2563,17 @@
     // eyes get drawn above the darkness so they watch you from the black
     const elook = Math.atan2(P.y - e.y, P.x - e.x);
     const ox = Math.cos(elook) * 2, oy = Math.sin(elook) * 2;
-    const sep = e.def.eyeS * 1.9;
-    const eyeY = e.def.boss ? e.y - 10 : e.y - 2;
-    eyesList.push({ x: e.x - sep + ox, y: eyeY + oy, c: e.def.eye, s: e.def.eyeS });
-    eyesList.push({ x: e.x + sep + ox, y: eyeY + oy, c: e.def.eye, s: e.def.eyeS });
+    if (e.type === 'gutter') {
+      // wide-set, solid hell-fire eyes riding the bobbing head
+      const sep = e.r * 0.34, ey = e.y - e.r * 0.32 - (e._bob || 0);
+      eyesList.push({ x: e.x - sep + ox, y: ey + oy, c: e.def.eye, s: e.def.eyeS, fx: 'hell', seed: 0 });
+      eyesList.push({ x: e.x + sep + ox, y: ey + oy, c: e.def.eye, s: e.def.eyeS, fx: 'hell', seed: 2.3 });
+    } else {
+      const sep = e.def.eyeS * 1.9;
+      const eyeY = e.def.boss ? e.y - 10 : e.y - 2;
+      eyesList.push({ x: e.x - sep + ox, y: eyeY + oy, c: e.def.eye, s: e.def.eyeS });
+      eyesList.push({ x: e.x + sep + ox, y: eyeY + oy, c: e.def.eye, s: e.def.eyeS });
+    }
   }
 
   function drawGroundAndProps() {
@@ -2279,6 +2614,87 @@
     }
   }
 
+  /* a solid, living hell-fire eye — layered flame licks that flicker upward */
+  function drawHellEye(x, y, s, AT, seed) {
+    const fl = 1 + 0.28 * Math.sin(AT * 17 + seed) + 0.16 * Math.sin(AT * 29 + seed * 1.7);
+    drawGlow(ctx, x, y - s * 0.3, s * 5, 'rgba(255,60,0,0.98)', 0.85);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = '#ff3200';
+    ctx.beginPath();
+    ctx.moveTo(0, s * 1.1);
+    ctx.quadraticCurveTo(-s * 1.1, s * 0.2, -s * 0.5, -s * 0.6 * fl);
+    ctx.quadraticCurveTo(0, -s * 1.5 * fl, s * 0.5, -s * 0.6 * fl);
+    ctx.quadraticCurveTo(s * 1.1, s * 0.2, 0, s * 1.1);
+    ctx.fill();
+    ctx.fillStyle = '#ff8a1a';
+    ctx.beginPath();
+    ctx.moveTo(0, s * 0.9);
+    ctx.quadraticCurveTo(-s * 0.7, s * 0.1, -s * 0.32, -s * 0.42 * fl);
+    ctx.quadraticCurveTo(0, -s * 1.1 * fl, s * 0.32, -s * 0.42 * fl);
+    ctx.quadraticCurveTo(s * 0.7, s * 0.1, 0, s * 0.9);
+    ctx.fill();
+    ctx.fillStyle = '#ffe89a';
+    ctx.beginPath();
+    ctx.ellipse(0, s * 0.15, s * 0.3, s * 0.6 * fl, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* the boss-incoming marker: a fixed red reticle on the ground with a flashing
+     red silhouette of what's about to land there */
+  function drawBossMarker(al, AT) {
+    const x = al.x, y = al.y, kind = al.kind, r = ETYPES[kind].r;
+    const beat = 0.35 + 0.45 * Math.abs(Math.sin(AT * 7));
+    ctx.save();
+    ctx.translate(x, y);
+
+    // ground reticle
+    ctx.globalAlpha = 0.45 + 0.35 * Math.sin(AT * 8);
+    ctx.strokeStyle = '#ff3a3a';
+    ctx.lineWidth = 3;
+    const rr = r + 30 + 7 * Math.sin(AT * 4);
+    ctx.beginPath(); ctx.arc(0, 0, rr, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, rr * 0.62, 0, TAU); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-rr - 12, 0); ctx.lineTo(rr + 12, 0);
+    ctx.moveTo(0, -rr - 12); ctx.lineTo(0, rr + 12);
+    ctx.stroke();
+
+    // red silhouette of the boss to come
+    ctx.globalAlpha = beat;
+    ctx.fillStyle = '#ff2a2a';
+    ctx.strokeStyle = '#ff2a2a';
+    if (kind === 'mourn') {
+      ctx.beginPath();
+      for (let i = 0; i <= 16; i++) {
+        const a = (i / 16) * TAU, q = r * (1 + 0.09 * Math.sin(a * 3 + AT * 2));
+        const px = Math.cos(a) * q, py = Math.sin(a) * q;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+      ctx.lineWidth = 4;
+      for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 18, -r + 6); ctx.lineTo(i * 22, -r - 14); ctx.stroke(); }
+    } else if (kind === 'hush') {
+      ctx.beginPath();
+      ctx.moveTo(0, -r);
+      ctx.quadraticCurveTo(r * 0.8, -r * 0.5, r * 0.7, r * 0.6);
+      ctx.lineTo(-r * 0.7, r * 0.6);
+      ctx.quadraticCurveTo(-r * 0.8, -r * 0.5, 0, -r);
+      ctx.fill();
+    } else { // gutter
+      ctx.beginPath();
+      for (let i = 0; i <= 18; i++) {
+        const a = (i / 18) * TAU, q = r * (1 + 0.16 * Math.sin(a * 4 + AT * 3));
+        const px = Math.cos(a) * q, py = Math.sin(a) * q;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
   function render(rdt) {
     const AT = performance.now() / 1000;
 
@@ -2288,8 +2704,11 @@
 
     const shx = G.shake ? rand(-G.shake, G.shake) * 0.5 : 0;
     const shy = G.shake ? rand(-G.shake, G.shake) * 0.5 : 0;
-    camX = P.x - W / 2 + shx;
-    camY = P.y - H / 2 + shy;
+    // the finale can move + zoom the camera; normal play centres on the candle at zoom 1
+    let zoom = 1, ccx = P.x, ccy = P.y;
+    if (G.finale) { zoom = G.finale.zoom || 1; ccx = G.finale.camX; ccy = G.finale.camY; }
+    camX = ccx - (W / 2) / zoom + shx / zoom;
+    camY = ccy - (H / 2) / zoom + shy / zoom;
 
     eyesList.length = 0;
     lights.length = 0;
@@ -2302,18 +2721,21 @@
       return;
     }
 
+    const fin = G.finale;
+    const dawnP = !!(fin && fin.phase === 'dawn'); // the bright, peaceful morning
+
     ctx.save();
-    ctx.translate(-camX, -camY);
+    ctx.setTransform(DPR * zoom, 0, 0, DPR * zoom, -camX * DPR * zoom, -camY * DPR * zoom);
 
     drawGroundAndProps();
 
-    // lingering fire pools (pyre / wildfire / evolved bursts) — under the entities
+    // lingering fire pools (pyre / wildfire / evolved bursts — they all burn red) — under the entities
     for (const f of flames) {
       const k = clamp(f.life / f.maxlife, 0, 1);
       const flick = 0.8 + 0.2 * Math.sin(AT * 16 + f.x * 0.05);
-      drawGlow(ctx, f.x, f.y, f.r * flick, 'rgba(255,150,55,0.9)', 0.34 * k);
+      drawGlow(ctx, f.x, f.y, f.r * flick, 'rgba(255,70,45,0.9)', 0.34 * k);
       ctx.globalAlpha = 0.22 * k;
-      ctx.fillStyle = '#ff8a3a';
+      ctx.fillStyle = '#ff5232';
       ctx.beginPath();
       ctx.arc(f.x, f.y, f.r * 0.55 * flick, 0, TAU);
       ctx.fill();
@@ -2321,13 +2743,13 @@
       lights.push({ x: f.x, y: f.y, r: f.r + 24, a: 0.5 * k });
     }
 
-    // rings (nova shockwaves, foxfire pops, cold wisp pulses)
+    // rings (nova shockwaves, foxfire pops, cold wisp pulses, red pyre bursts)
     for (const r of rings) {
       const k = 1 - r.life / r.maxlife;
       const rr = lerp(r.r, r.maxr, k);
       ctx.globalAlpha = (1 - k) * 0.8;
-      ctx.strokeStyle = r.cold ? '#9fc0ff' : '#ffcf6b';
-      ctx.lineWidth = 4 * (1 - k) + 1.5;
+      ctx.strokeStyle = r.cold ? '#9fc0ff' : r.red ? '#ff6a4a' : '#ffcf6b';
+      ctx.lineWidth = (4 * (1 - k) + 1.5) * (r.thick || 1);
       ctx.beginPath();
       ctx.arc(r.x, r.y, rr, 0, TAU);
       ctx.stroke();
@@ -2368,13 +2790,16 @@
 
     // enemies, player, wisps, bullets
     for (const e of enemies) drawEnemy(e, AT);
+    // during the roar/rays, gutter is dead but still stands — draw him until the white takes him
+    if (fin && fin.gutter && fin.phase !== 'white' && fin.phase !== 'dawn') drawEnemy(fin.gutter, AT);
     drawPlayer(AT);
 
-    for (const w of P.weapons) {
+    if (!fin) for (const w of P.weapons) {
       if (w.id === 'cinder') {
+        const red = !!w.evo; // halo of ash burns red
         for (const wsp of w.wisps) {
-          drawGlow(ctx, wsp.x, wsp.y, 18, 'rgba(255,154,61,0.9)', 0.6);
-          ctx.fillStyle = '#ffd23f';
+          drawGlow(ctx, wsp.x, wsp.y, 18, red ? 'rgba(255,70,55,0.9)' : 'rgba(255,154,61,0.9)', 0.6);
+          ctx.fillStyle = red ? '#ff6a52' : '#ffd23f';
           ctx.beginPath();
           ctx.arc(wsp.x, wsp.y, 4, 0, TAU);
           ctx.fill();
@@ -2383,27 +2808,29 @@
       }
     }
 
-    for (const b of bullets) {
+    if (!fin) for (const b of bullets) {
       if (b.kind === 'bolt') {
-        drawGlow(ctx, b.x, b.y, 16, 'rgba(255,180,80,0.9)', 0.6);
-        ctx.fillStyle = '#ffe9a3';
+        const red = !!b.lance; // sunpiercer lances run red
+        drawGlow(ctx, b.x, b.y, 16, red ? 'rgba(255,70,55,0.95)' : 'rgba(255,180,80,0.9)', 0.6);
+        ctx.fillStyle = red ? '#ffb0a0' : '#ffe9a3';
         ctx.save();
         ctx.translate(b.x, b.y);
         ctx.rotate(Math.atan2(b.vy, b.vx));
         ctx.beginPath();
-        ctx.ellipse(0, 0, 7, 2.6, 0, 0, TAU);
+        ctx.ellipse(0, 0, red ? 9 : 7, 2.6, 0, 0, TAU);
         ctx.fill();
         ctx.restore();
         lights.push({ x: b.x, y: b.y, r: 50, a: 0.6 });
       } else if (b.kind === 'pellet') {
-        ctx.fillStyle = '#ffcf6b';
+        ctx.fillStyle = b.ignite ? '#ff6a4a' : '#ffcf6b'; // wildfire pellets run red
         ctx.beginPath();
-        ctx.arc(b.x, b.y, 2.2, 0, TAU);
+        ctx.arc(b.x, b.y, b.ignite ? 2.6 : 2.2, 0, TAU);
         ctx.fill();
         lights.push({ x: b.x, y: b.y, r: 26, a: 0.4 });
       } else { // fox
-        drawGlow(ctx, b.x, b.y, 20, 'rgba(123,232,255,0.9)', 0.7);
-        ctx.fillStyle = '#d6f6ff';
+        const red = !!b.persist; // wisp-pack wisps run red
+        drawGlow(ctx, b.x, b.y, 20, red ? 'rgba(255,80,60,0.9)' : 'rgba(123,232,255,0.9)', 0.7);
+        ctx.fillStyle = red ? '#ffb0a0' : '#d6f6ff';
         ctx.beginPath();
         ctx.arc(b.x, b.y, 4.5, 0, TAU);
         ctx.fill();
@@ -2425,33 +2852,49 @@
 
     /* ---- darkness ---- */
     const hpRatio = P.maxHp > 0 ? P.hp / P.maxHp : 0;
+    // as the dawn boss weakens, first light creeps in — the reach grows a touch
+    const dawnGlow = (G.boss && !G.boss.dead && G.boss.def.leaper) ? clamp(1 - G.boss.hp / G.boss.maxHp, 0, 1) : 0;
     let lightR = 190 + 250 * hpRatio + (G.pulse > 0 ? G.pulse * 150 : 0);
-    lightR = Math.max(120, lightR) * (1 + 0.015 * Math.sin(AT * 9));
+    lightR = Math.max(120, lightR) * (1 + 0.015 * Math.sin(AT * 9)) * (1 + 0.1 * dawnGlow);
     // wisps drink the light — your reach shrinks hard while they pulse on you
     if (G.lightDrain > 0) lightR *= 1 - 0.27 * clamp(G.lightDrain, 0, 2.6);
     if (state === 'dying') lightR = lerp(90, lightR, clamp(G.deathT / 1.8, 0, 1));
     if (G.boss && !G.boss.dead) {
-      lights.push({ x: G.boss.x, y: G.boss.y, r: G.boss.def.gaunt ? 90 : 130, a: G.boss.def.gaunt ? 0.45 : 0.6 });
+      const br = G.boss.def.gaunt ? 90 : G.boss.def.leaper ? 200 : 130;
+      lights.push({ x: G.boss.x, y: G.boss.y, r: br, a: G.boss.def.gaunt ? 0.45 : 0.6 });
+    }
+    if (fin && fin.phase !== 'dawn') lights.push({ x: fin.gx, y: fin.gy, r: 260, a: 0.8 }); // gutter blazes as he comes apart
+
+    if (!fin) { // the dawn cinematic (and its morning) has no darkness — light floods in
+      darkCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      darkCtx.clearRect(0, 0, W, H);
+      darkCtx.fillStyle = 'rgba(5,4,12,0.94)';
+      darkCtx.fillRect(0, 0, W, H);
+      darkCtx.globalCompositeOperation = 'destination-out';
+      darkCtx.globalAlpha = 1;
+      darkCtx.drawImage(lightMask, P.x - camX - lightR, P.y - camY - lightR, lightR * 2, lightR * 2);
+      for (const L of lights) {
+        darkCtx.globalAlpha = L.a;
+        darkCtx.drawImage(punchSprite, L.x - camX - L.r, L.y - camY - L.r, L.r * 2, L.r * 2);
+      }
+      darkCtx.globalAlpha = 1;
+      darkCtx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(darkCv, 0, 0, W, H);
     }
 
-    darkCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    darkCtx.clearRect(0, 0, W, H);
-    darkCtx.fillStyle = 'rgba(5,4,12,0.94)';
-    darkCtx.fillRect(0, 0, W, H);
-    darkCtx.globalCompositeOperation = 'destination-out';
-    darkCtx.globalAlpha = 1;
-    darkCtx.drawImage(lightMask, P.x - camX - lightR, P.y - camY - lightR, lightR * 2, lightR * 2);
-    for (const L of lights) {
-      darkCtx.globalAlpha = L.a;
-      darkCtx.drawImage(punchSprite, L.x - camX - L.r, L.y - camY - L.r, L.r * 2, L.r * 2);
+    // dawn creeping in during the finale — a faint orange warmth over the ground
+    if (dawnGlow > 0) {
+      ctx.globalAlpha = 0.08 * dawnGlow;
+      ctx.fillStyle = '#ff8a2a';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
     }
-    darkCtx.globalAlpha = 1;
-    darkCtx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(darkCv, 0, 0, W, H);
 
     /* ---- above the darkness: sparks, eyes, enemy shots, text ---- */
     ctx.save();
-    ctx.translate(-camX, -camY);
+    ctx.setTransform(DPR * zoom, 0, 0, DPR * zoom, -camX * DPR * zoom, -camY * DPR * zoom);
+
+    if (G.bossAlert) drawBossMarker(G.bossAlert, AT);
 
     for (const g of gems) {
       const c = g.v >= 20 ? '#c98aff' : g.v >= 8 ? '#7be8ff' : g.v >= 3 ? '#ffb347' : '#ffe9a3';
@@ -2513,6 +2956,7 @@
     }
 
     for (const ey of eyesList) {
+      if (ey.fx === 'hell') { drawHellEye(ey.x, ey.y, ey.s, AT, ey.seed || 0); continue; } // gutter's eyes are solid living fire
       // eyes in your light are full bright; those well outside are dimmed hard — the dark hides what's far
       const lit = dist2(ey.x, ey.y, P.x, P.y) < (lightR * 0.92) * (lightR * 0.92) ? 1 : 0.125;
       drawGlow(ctx, ey.x, ey.y, ey.s * 4, ey.c, 0.55 * lit);
@@ -2535,6 +2979,51 @@
 
     ctx.restore();
 
+    // ---- the dawn cinematic ----
+    if (fin) {
+      // rays of light spilling out of gutter, and his charging glow (world space, zoomed)
+      ctx.save();
+      ctx.setTransform(DPR * zoom, 0, 0, DPR * zoom, -camX * DPR * zoom, -camY * DPR * zoom);
+      // the ball of dawn welling up inside him — grows with the rays until it floods the screen
+      if (fin.ballR > 0 && fin.phase !== 'white' && fin.phase !== 'dawn') {
+        drawGlow(ctx, fin.gx, fin.gy, fin.ballR * 1.35, 'rgba(255,250,236,0.99)', 0.95);
+        ctx.fillStyle = '#fffdf4';
+        ctx.beginPath(); ctx.arc(fin.gx, fin.gy, fin.ballR * 0.72, 0, TAU); ctx.fill();
+      }
+      // each ray is a triangle that widens the farther out it reaches
+      for (const r of fin.rays) {
+        const k = clamp(r.life / 1.1, 0, 1);
+        const len = 1600 * (1 - k) + 120;
+        const c = Math.cos(r.ang), s = Math.sin(r.ang);
+        const px = -s, py = c; // perpendicular
+        const w0 = 5, w1 = 20 + 120 * (1 - k); // narrow at gutter, wide at the tip
+        ctx.globalAlpha = k * 0.9;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(fin.gx + px * w0, fin.gy + py * w0);
+        ctx.lineTo(fin.gx - px * w0, fin.gy - py * w0);
+        ctx.lineTo(fin.gx + c * len - px * w1, fin.gy + s * len - py * w1);
+        ctx.lineTo(fin.gx + c * len + px * w1, fin.gy + s * len + py * w1);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = k * 0.6;
+        ctx.fillStyle = '#ffe0a8';
+        ctx.beginPath();
+        ctx.moveTo(fin.gx + px * w0 * 0.6, fin.gy + py * w0 * 0.6);
+        ctx.lineTo(fin.gx - px * w0 * 0.6, fin.gy - py * w0 * 0.6);
+        ctx.lineTo(fin.gx + c * len - px * w1 * 0.55, fin.gy + s * len - py * w1 * 0.55);
+        ctx.lineTo(fin.gx + c * len + px * w1 * 0.55, fin.gy + s * len + py * w1 * 0.55);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+      // keep the warm dawn tint right through the cinematic — it doesn't cut out when he dies
+      ctx.globalAlpha = 0.15; ctx.fillStyle = '#ff9a3a'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
+      // the white nothing
+      if (fin.white > 0) { ctx.globalAlpha = clamp(fin.white, 0, 1); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+    }
+
     // red flash / low-hp pulse
     const lowHp = (state === 'playing' && hpRatio < 0.3)
       ? 0.1 + 0.08 * Math.sin(AT * 5)
@@ -2542,6 +3031,204 @@
     $('flash').style.opacity = Math.max(G.flashV, lowHp);
 
     if (state !== 'gameover' && state !== 'victory') updateHud();
+  }
+
+  /* ---------------- logbook (bestiary) ---------------- */
+
+  const LOG_ORDER = ['moth', 'skitter', 'blob', 'spitter', 'wisp', 'brute', 'gloom', 'thief', 'snuffer', 'mourn', 'hush', 'gutter'];
+  const LOG_NAME = {
+    moth: 'Moth', skitter: 'Skitter', blob: 'Blob', spitter: 'Spitter', wisp: 'Wisp',
+    brute: 'Brute', gloom: 'Gloom', thief: 'Thief', snuffer: 'Snuffer',
+    mourn: 'Mourn, the Unlit', hush: 'Hush, the Gaunt Lantern', gutter: 'Gutter, the Leaping Dark'
+  };
+  const LOG_DESC = {
+    moth: 'A shade drawn to your flame. Slow, but it never stops coming.',
+    skitter: 'Fast and jittery, weaving as it closes. Leaves a spark or two.',
+    blob: 'A wobbling mass that splits into smaller ones when it falls.',
+    spitter: 'Hangs back in the dark and spits at you. Keep circling.',
+    wisp: 'A cold, hungry flame that drinks your light and pulls the dark in close. Snuff it fast.',
+    brute: 'A heavy bruiser — slow to reach you, but it hits like a falling wall.',
+    gloom: 'Armored in cooled wax; every blow is blunted. Melt it with fire and area.',
+    thief: 'A big scavenger that hoards your fallen sparks and bolts. Kill it to get them back.',
+    snuffer: 'An elite of the dark. Put it out and it leaves a gift behind.',
+    mourn: 'The first great wall — a charging horror that comes apart into fiercer phases.',
+    hush: 'A gaunt iron lantern that spins cold fire and summons wisps to blind you.',
+    gutter: 'The leaping dark of the final hour. He holds the coming dawn within him — free it.'
+  };
+
+  let logCanvases = [], logRAF = null;
+
+  function logEye(g, x, y, s, c) {
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    const grd = g.createRadialGradient(x, y, 0, x, y, s * 4.5);
+    grd.addColorStop(0, c); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grd; g.beginPath(); g.arc(x, y, s * 4.5, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'source-over';
+    g.fillStyle = c; g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
+    g.restore();
+  }
+
+  function drawCreature(g, type, t) {
+    const c = ETYPES[type].eye, es = 2.6;
+    if (type === 'moth') {
+      const flap = Math.sin(t * 10) * 0.6;
+      g.fillStyle = '#3b3652';
+      g.beginPath();
+      g.moveTo(0, -7); g.lineTo(-24, -7 - 16 * (1 + flap)); g.lineTo(-15, 7); g.closePath();
+      g.moveTo(0, -7); g.lineTo(24, -7 - 16 * (1 - flap)); g.lineTo(15, 7); g.closePath();
+      g.fill();
+      g.fillStyle = '#4a4560'; g.beginPath(); g.ellipse(0, 0, 9, 15, 0, 0, TAU); g.fill();
+      logEye(g, -4, -4, es, c); logEye(g, 4, -4, es, c);
+    } else if (type === 'skitter') {
+      g.strokeStyle = '#3a3550'; g.lineWidth = 3;
+      for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + Math.sin(t * 16 + i) * 0.3; g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * 26, Math.sin(a) * 26); g.stroke(); }
+      g.fillStyle = '#443f5c'; g.beginPath(); g.arc(0, 0, 14, 0, TAU); g.fill();
+      logEye(g, -4, -2, es, c); logEye(g, 4, -2, es, c);
+    } else if (type === 'blob') {
+      const wob = 1 + 0.1 * Math.sin(t * 5);
+      g.fillStyle = '#42355e'; g.beginPath(); g.ellipse(0, 0, 26 * wob, 26 / wob, 0, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(180,140,240,0.18)'; g.beginPath(); g.ellipse(-8, -8, 9, 7, 0, 0, TAU); g.fill();
+      logEye(g, -6, -2, es, c); logEye(g, 6, -2, es, c);
+    } else if (type === 'spitter') {
+      g.fillStyle = '#3a3550'; g.beginPath();
+      g.moveTo(0, -26); g.quadraticCurveTo(20, -7, 16, 20); g.lineTo(-16, 20); g.quadraticCurveTo(-20, -7, 0, -26); g.fill();
+      logEye(g, -5, -4, es, c); logEye(g, 5, -4, es, c);
+    } else if (type === 'wisp') {
+      const fl = 1 + 0.22 * Math.sin(t * 11) + 0.12 * Math.sin(t * 23);
+      g.fillStyle = 'rgba(160,190,240,0.55)'; g.beginPath(); g.ellipse(0, 0, 11 * fl, 20 * fl, 0, 0, TAU); g.fill();
+      g.fillStyle = '#1c2438'; g.beginPath(); g.ellipse(0, 2, 6, 11 * fl, 0, 0, TAU); g.fill();
+      logEye(g, -4, -3, es, c); logEye(g, 4, -3, es, c);
+    } else if (type === 'brute') {
+      g.fillStyle = '#3a3450';
+      g.beginPath(); g.arc(-16, -6, 15, 0, TAU); g.arc(16, -6, 15, 0, TAU); g.fill();
+      g.beginPath(); g.arc(0, 2, 26, 0, TAU); g.fill();
+      logEye(g, -8, -6, es * 1.1, c); logEye(g, 8, -6, es * 1.1, c);
+    } else if (type === 'gloom') {
+      const wob = 1 + 0.04 * Math.sin(t * 2.5);
+      g.fillStyle = '#2c2542'; g.beginPath(); g.arc(0, 0, 26 * wob, 0, TAU); g.fill();
+      g.fillStyle = '#3a3458';
+      for (let i = 0; i < 5; i++) { const a = (i / 5) * TAU + t * 0.3; g.save(); g.rotate(a); g.beginPath(); g.ellipse(16, 0, 9, 6, 0, 0, TAU); g.fill(); g.restore(); }
+      logEye(g, -6, -4, es, c); logEye(g, 6, -4, es, c);
+    } else if (type === 'thief') {
+      const sk = Math.sin(t * 16) * 2;
+      g.fillStyle = '#3a3550'; g.beginPath(); g.ellipse(0, sk * 0.3, 20, 17, 0, 0, TAU); g.fill();
+      logEye(g, 13, -6, 4, '#ffe066');
+      logEye(g, -6, -2, es, c); logEye(g, 4, -2, es, c);
+    } else if (type === 'snuffer') {
+      const bob = Math.sin(t * 3) * 2;
+      g.fillStyle = '#2b2842'; g.beginPath(); g.ellipse(0, bob, 15, 28, 0, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(140,170,255,0.14)'; g.beginPath(); g.ellipse(0, bob - 10, 10, 12, 0, 0, TAU); g.fill();
+      logEye(g, -4, -6 + bob, es * 1.2, c); logEye(g, 4, -6 + bob, es * 1.2, c);
+    } else if (type === 'mourn') {
+      g.fillStyle = '#2a2544'; g.beginPath();
+      for (let i = 0; i <= 16; i++) { const a = (i / 16) * TAU, rr = 27 * (1 + 0.09 * Math.sin(a * 3 + t * 2.2)); const px = Math.cos(a) * rr, py = Math.sin(a) * rr; i === 0 ? g.moveTo(px, py) : g.lineTo(px, py); }
+      g.closePath(); g.fill();
+      g.strokeStyle = '#151228'; g.lineWidth = 3;
+      for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(i * 10, -24); g.lineTo(i * 12, -34); g.stroke(); }
+      logEye(g, -6, -6, es * 1.3, c); logEye(g, 6, -6, es * 1.3, c);
+    } else if (type === 'hush') {
+      const sway = Math.sin(t * 2) * 0.05; g.save(); g.rotate(sway);
+      const R = 28;
+      g.fillStyle = '#20233a'; g.beginPath();
+      g.moveTo(0, -R); g.quadraticCurveTo(R * 0.8, -R * 0.5, R * 0.7, R * 0.6); g.lineTo(-R * 0.7, R * 0.6); g.quadraticCurveTo(-R * 0.8, -R * 0.5, 0, -R); g.fill();
+      g.strokeStyle = '#12131f'; g.lineWidth = 2.5;
+      for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(i * R * 0.45, -R * 0.7); g.lineTo(i * R * 0.5, R * 0.55); g.stroke(); }
+      g.fillStyle = '#bfe0ff'; g.globalAlpha = 0.5 + 0.4 * Math.sin(t * 4); g.beginPath(); g.ellipse(0, -R * 0.05, R * 0.34, R * 0.5, 0, 0, TAU); g.fill(); g.globalAlpha = 1;
+      g.restore();
+      logEye(g, -5, -6, es, c); logEye(g, 5, -6, es, c);
+    } else if (type === 'gutter') {
+      const R = 30;
+      g.save(); g.globalCompositeOperation = 'lighter';
+      const grd = g.createRadialGradient(0, 0, 0, 0, 0, R * 1.7);
+      grd.addColorStop(0, 'rgba(220,45,15,0.9)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+      g.globalAlpha = 0.45; g.fillStyle = grd; g.beginPath(); g.arc(0, 0, R * 1.7, 0, TAU); g.fill();
+      g.restore();
+      g.fillStyle = '#25100c'; g.beginPath();
+      g.moveTo(-R * 0.85, R * 0.5); g.quadraticCurveTo(-R, -R * 0.1, -R * 0.6, -R * 0.5);
+      for (let i = 0; i <= 4; i++) { const px = -R * 0.6 + (R * 1.2) * (i / 4), py = -R * 0.5 + (i % 2 === 0 ? -R * 0.4 : R * 0.06) + 0.05 * R * Math.sin(t * 5 + i); g.lineTo(px, py); }
+      g.quadraticCurveTo(R, -R * 0.1, R * 0.85, R * 0.5);
+      for (let i = 1; i <= 5; i++) { const px = R * 0.85 - (R * 1.7) * (i / 5), py = R * 0.5 + (i % 2 === 0 ? R * 0.2 : -R * 0.04); g.lineTo(px, py); }
+      g.closePath(); g.fill();
+      g.fillStyle = '#ff3a16'; g.globalAlpha = 0.5 + 0.3 * Math.sin(t * 9); g.beginPath(); g.arc(0, 0, R * 0.2, 0, TAU); g.fill(); g.globalAlpha = 1;
+      logEye(g, -9, -8, es * 1.4, '#ff4d18'); logEye(g, 9, -8, es * 1.4, '#ff4d18');
+    }
+  }
+
+  const LOG_SUB = {
+    enemies: 'every shadow you have lived to see',
+    upgrades: 'the flames and gifts you can wield',
+    evolutions: 'what your flames can become'
+  };
+
+  // a card with an svg icon on the left instead of an animated canvas
+  function iconCard(grid, svg, name, desc, cls) {
+    const card = document.createElement('div'); card.className = 'logCard';
+    const ic = document.createElement('div'); ic.className = 'logIcon ' + (cls || ''); ic.innerHTML = svg;
+    const tw = document.createElement('div'); tw.className = 'logText';
+    const nm = document.createElement('div'); nm.className = 'logName'; nm.textContent = name;
+    const ds = document.createElement('div'); ds.className = 'logDesc'; ds.innerHTML = desc;
+    tw.appendChild(nm); tw.appendChild(ds);
+    card.appendChild(ic); card.appendChild(tw);
+    grid.appendChild(card);
+  }
+
+  function buildLogTab(tab) {
+    const grid = $('logGrid');
+    grid.innerHTML = '';
+    logCanvases = [];
+    $('logSub').textContent = LOG_SUB[tab] || '';
+    for (const b of document.querySelectorAll('#logTabs .logTab')) b.classList.toggle('on', b.dataset.tab === tab);
+
+    if (tab === 'enemies') {
+      let any = false;
+      for (const type of LOG_ORDER) {
+        if (!SAVE.seen[type]) continue;
+        any = true;
+        const card = document.createElement('div'); card.className = 'logCard';
+        const cv = document.createElement('canvas'); cv.width = 96; cv.height = 96; cv.className = 'logCanvas';
+        const tw = document.createElement('div'); tw.className = 'logText';
+        const nm = document.createElement('div'); nm.className = 'logName'; nm.textContent = LOG_NAME[type];
+        const ds = document.createElement('div'); ds.className = 'logDesc'; ds.textContent = LOG_DESC[type];
+        tw.appendChild(nm); tw.appendChild(ds);
+        card.appendChild(cv); card.appendChild(tw);
+        grid.appendChild(card);
+        logCanvases.push({ g: cv.getContext('2d'), type });
+      }
+      if (!any) grid.innerHTML = '<div class="logEmpty">step into the dark, and the things you meet will be recorded here.</div>';
+    } else if (tab === 'upgrades') {
+      for (const id in WEAPONS) iconCard(grid, WEAPONS[id].icon, WEAPONS[id].name, '<i>' + WEAPONS[id].flavor + '</i><br>' + WEAPONS[id].blurb, 'warm');
+      for (const id in PASSIVES) iconCard(grid, PASSIVES[id].icon, PASSIVES[id].name, '<i>' + PASSIVES[id].flavor + '</i><br>' + PASSIVES[id].per, 'cool');
+    } else if (tab === 'evolutions') {
+      for (const wid in EVOS) {
+        const ev = EVOS[wid];
+        const req = 'max <b>' + WEAPONS[wid].name + '</b> + <b>' + PASSIVES[ev.req].name + '</b>';
+        iconCard(grid, ev.icon, ev.name, '<i>' + ev.flavor + '</i><br>' + ev.blurb + '<br><span class="logReq">' + req + '</span>', 'gold');
+      }
+    }
+  }
+
+  function openLogbook() {
+    Sound.init(); Sound.play('click');
+    $('logbook').classList.remove('hidden');
+    buildLogTab('enemies');
+    if (!logRAF) logLoop();
+  }
+
+  function logLoop() {
+    if ($('logbook').classList.contains('hidden')) { logRAF = null; return; }
+    const t = performance.now() / 1000;
+    for (const lc of logCanvases) {
+      lc.g.clearRect(0, 0, 96, 96);
+      lc.g.save(); lc.g.translate(48, 52); drawCreature(lc.g, lc.type, t); lc.g.restore();
+    }
+    logRAF = requestAnimationFrame(logLoop);
+  }
+
+  function closeLogbook() {
+    Sound.play('click');
+    $('logbook').classList.add('hidden');
+    logCanvases = [];
   }
 
   /* title screen: the candle alone in the dark, motes drifting */
@@ -2598,7 +3285,7 @@
     requestAnimationFrame(frame);
     const dt = Math.min(0.25, (now - last) / 1000);
     last = now;
-    if (state === 'playing' || state === 'dying') {
+    if (state === 'playing' || state === 'dying' || state === 'finale') {
       acc += dt;
       let steps = 0;
       while (acc >= STEP && steps < 5) {
@@ -2619,6 +3306,11 @@
     Sound.play('click');
     $('howto').classList.toggle('hidden');
   });
+  $('btnLog').addEventListener('click', openLogbook);
+  $('btnLogClose').addEventListener('click', closeLogbook);
+  for (const b of document.querySelectorAll('#logTabs .logTab')) {
+    b.addEventListener('click', () => { Sound.play('click'); buildLogTab(b.dataset.tab); });
+  }
   $('btnResume').addEventListener('click', resumeGame);
   $('btnRestart').addEventListener('click', startRun);
   $('btnQuitP').addEventListener('click', goToTitle);
@@ -2661,6 +3353,7 @@
   buildFlamePicker();
   goToTitle();
   loadServerSave();
+  if (location.hash === '#test') testStart(); // debug: land at 14:00 with a full build
   requestAnimationFrame(frame);
 
 })();

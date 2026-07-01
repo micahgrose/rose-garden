@@ -5,9 +5,6 @@
 <title>wick</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20x='9'%20y='11'%20width='6'%20height='11'%20rx='1.5'%20fill='%23f4ead8'/%3E%3Cellipse%20cx='12'%20cy='7'%20rx='3'%20ry='4.5'%20fill='%23ffb347'/%3E%3Cellipse%20cx='12'%20cy='8'%20rx='1.4'%20ry='2.2'%20fill='%23ffe9a3'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@500;700&family=Mulish:wght@400;600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,6 +12,9 @@
 <canvas id="game"></canvas>
 <div id="vignette"></div>
 <div id="flash"></div>
+
+<!-- announcements: outside the hud so they show even during the finale -->
+<div id="announce"></div>
 
 <!-- in-run hud -->
 <div id="hud" class="hidden">
@@ -28,7 +28,6 @@
     <div id="bossname"></div>
     <div id="bossbar"><div id="bossfill"></div></div>
   </div>
-  <div id="announce"></div>
   <div id="hint"></div>
   <div id="hpwrap">
     <div id="hpbar"><div id="hpfill"></div></div>
@@ -49,6 +48,7 @@
     </div>
     <button id="btnStart" class="big">light the candle</button>
     <button id="btnHow" class="ghost">how to play</button>
+    <button id="btnLog" class="ghost">logbook</button>
     <div id="howto" class="panel hidden">
       <p><b>move</b> &mdash; wasd or arrow keys. your candle fights on its own.</p>
       <p><b>sparks</b> &mdash; fallen shadows leave sparks. gather them to grow your flame and choose new gifts.</p>
@@ -60,6 +60,19 @@
     <div id="best"></div>
   </div>
   <div class="foot">v2.1</div>
+</div>
+
+<!-- logbook -->
+<div id="logbook" class="overlay dimmed hidden">
+  <h2>the logbook</h2>
+  <p class="sub" id="logSub">every shadow you have lived to see</p>
+  <div id="logTabs">
+    <button class="logTab on" data-tab="enemies">enemies</button>
+    <button class="logTab" data-tab="upgrades">upgrades</button>
+    <button class="logTab" data-tab="evolutions">evolutions</button>
+  </div>
+  <div id="logGrid"></div>
+  <button id="btnLogClose" class="ghost">close</button>
 </div>
 
 <!-- level up / chest -->
