@@ -53,7 +53,7 @@
         fetch('/api/wick/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RG_TOKEN },
-          body: JSON.stringify({ best: SAVE.best, wins: SAVE.wins, runs: SAVE.runs })
+          body: JSON.stringify({ best: SAVE.best, wins: SAVE.wins, runs: SAVE.runs, seen: SAVE.seen })
         }).catch(() => {});
       } catch (e) {}
     }
@@ -69,7 +69,13 @@
       SAVE.best = Math.max(SAVE.best || 0, d.best || 0);
       SAVE.wins = Math.max(SAVE.wins || 0, d.wins || 0);
       SAVE.runs = Math.max(SAVE.runs || 0, d.runs || 0);
+      // bestiary is a union — merge in anything the account has seen elsewhere
+      if (d.seen && typeof d.seen === 'object') {
+        if (!SAVE.seen) SAVE.seen = {};
+        for (const k in d.seen) if (d.seen[k]) SAVE.seen[k] = true;
+      }
       try { localStorage.setItem('wick_save_v1', JSON.stringify(SAVE)); } catch (e) {}
+      persist(); // migrate any local-only progress up to the account
       if (state === 'title') renderBest();
     } catch (e) {}
   }

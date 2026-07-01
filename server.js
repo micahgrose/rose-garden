@@ -1111,17 +1111,32 @@ app.post('/api/ollie/progress/:order', requireAuth, async (req, res) => {
 // Per-user progress: longest night survived, dawns won, total runs.
 app.get('/api/wick/save', requireAuth, async (req, res) => {
     const doc = await db.collection('wick_saves').findOne({ userId: uid(req.user.id) });
-    res.json({ best: doc?.best || 0, wins: doc?.wins || 0, runs: doc?.runs || 0 });
+    res.json({ best: doc?.best || 0, wins: doc?.wins || 0, runs: doc?.runs || 0, seen: doc?.seen || {} });
 });
 
 app.post('/api/wick/save', requireAuth, async (req, res) => {
     const best = Math.max(0, Math.floor(Number(req.body.best) || 0));
     const wins = Math.max(0, Math.floor(Number(req.body.wins) || 0));
     const runs = Math.max(0, Math.floor(Number(req.body.runs) || 0));
-    // these stats are monotonic — $max makes writes idempotent and race-safe
+
+    const update = { $max: { best, wins, runs } };
+
+    // bestiary: a union-set of enemy types the player has seen. merge each key with
+    // dot-notation $set so it's idempotent and never clobbers keys from another device.
+    const seen = req.body.seen;
+    if (seen && typeof seen === 'object') {
+        const $set = {};
+        for (const key of Object.keys(seen)) {
+            // guard against dots / operator chars that would break field paths
+            if (seen[key] && /^[A-Za-z0-9_-]{1,64}$/.test(key)) $set['seen.' + key] = true;
+        }
+        if (Object.keys($set).length) update.$set = $set;
+    }
+
+    // best/wins/runs are monotonic — $max makes those writes idempotent and race-safe
     await db.collection('wick_saves').updateOne(
         { userId: uid(req.user.id) },
-        { $max: { best, wins, runs } },
+        update,
         { upsert: true }
     );
     res.json({ ok: true });
