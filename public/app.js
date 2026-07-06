@@ -509,3 +509,6 @@ document.getElementById('tinyMindsCard').addEventListener('click', () => {
 document.getElementById('wickCard').addEventListener('click', () => {
     window.location.href = '/games/wick/';
 });
+document.getElementById('foundryCard').addEventListener('click', () => {
+    window.location.href = '/games/foundry/';
+});

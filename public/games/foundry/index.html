@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Foundry</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- ======= HUD ======= -->
+<div id="hud" class="hidden">
+
+  <!-- Objective card (top-left) -->
+  <div id="objCard" class="panel">
+    <div id="objHead">
+      <span id="objTier"></span>
+      <span id="objName"></span>
+      <span id="objChev">▾</span>
+    </div>
+    <div id="objBody"></div>
+  </div>
+
+  <!-- Top-right cluster -->
+  <div id="topRight">
+    <div id="powerWrap" class="panel" title="Power grid">
+      <canvas id="powerIcon" width="26" height="26"></canvas>
+      <div id="powerBars">
+        <div id="powerBarOuter"><div id="powerBarFill"></div></div>
+        <div id="powerText">—</div>
+      </div>
+    </div>
+    <button id="btnFoundry" class="iconBtn panel" title="The Foundry — milestones, upgrades, compendium (U)">⬢</button>
+    <button id="btnInv" class="iconBtn panel" title="Inventory (E)">▤</button>
+    <button id="btnSound" class="iconBtn panel" title="Sound on/off (M)">♪</button>
+    <button id="btnMenu" class="iconBtn panel" title="Menu (Esc)">≡</button>
+  </div>
+
+  <!-- Build bar (bottom) -->
+  <div id="buildWrap">
+    <div id="buildTabs"></div>
+    <div id="buildBar" class="panel"></div>
+  </div>
+
+  <!-- Selected-entity panel (right) -->
+  <div id="selPanel" class="panel hidden"></div>
+
+  <!-- Menu popup -->
+  <div id="menuPop" class="panel hidden">
+    <button class="menuBtn" id="mResume">Resume</button>
+    <button class="menuBtn" id="mHowto">How to play</button>
+    <button class="menuBtn" id="mSave">Save now</button>
+    <button class="menuBtn" id="mQuit">Save &amp; quit to title</button>
+  </div>
+
+  <!-- Tooltip -->
+  <div id="tooltip" class="hidden"></div>
+
+  <!-- Toast / tip queue -->
+  <div id="toasts"></div>
+
+  <!-- Hand-mine progress -->
+  <div id="mineRing" class="hidden"><svg viewBox="0 0 44 44"><circle class="bg" cx="22" cy="22" r="18"/><circle class="fg" cx="22" cy="22" r="18"/></svg></div>
+
+  <!-- Cursor-held item stack -->
+  <div id="heldStack" class="hidden"><img width="22" height="22"><span></span></div>
+</div>
+
+<!-- ======= Big panels ======= -->
+<div id="bigPanelWrap" class="hidden">
+  <div id="bigPanel" class="panel">
+    <div id="bigTabs"></div>
+    <button id="bigClose" class="iconBtn">✕</button>
+    <div id="bigBody"></div>
+  </div>
+</div>
+
+<!-- ======= Title screen ======= -->
+<div id="title">
+  <canvas id="titleFx"></canvas>
+  <div id="titleInner">
+    <div id="titleLogo">FOUNDRY</div>
+    <div id="titleSub">the world engine sleeps beneath the ash</div>
+    <div id="titleBtns">
+      <button id="btnContinue" class="titleBtn hidden">CONTINUE</button>
+      <button id="btnNew" class="titleBtn">NEW WORLD</button>
+    </div>
+    <div id="titleHint">mine · belt · smelt · assemble · reignite</div>
+  </div>
+  <div id="titleFoot">left-drag build · right-click remove · wheel zoom · middle-drag / WASD pan · R rotate · T test world</div>
+</div>
+
+<!-- ======= Win overlay ======= -->
+<div id="winOverlay" class="hidden">
+  <div id="winInner">
+    <div id="winTitle">IGNITION</div>
+    <div id="winLines"></div>
+    <button id="btnFreeplay" class="titleBtn hidden">KEEP BUILDING</button>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

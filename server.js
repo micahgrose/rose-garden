@@ -13,7 +13,10 @@ const app        = express();
 const httpServer = http.createServer(app);
 const io         = new IOServer(httpServer);
 
-app.use(express.json());
+// Default 100kb JSON everywhere, except Foundry world saves which can be a few MB.
+const jsonSmall = express.json();
+const jsonBig   = express.json({ limit: '8mb' });
+app.use((req, res, next) => (req.path === '/api/foundry/save' ? jsonBig : jsonSmall)(req, res, next));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Database setup ─────────────────────────────────────
@@ -951,6 +954,7 @@ app.delete('/api/account', requireAuth, async (req, res) => {
     await svRemoveAll({ userId: user._id });
     await db.collection('labyrinth_stats').deleteOne({ userId: user._id });
     await db.collection('wick_saves').deleteOne({ userId: user._id });
+    await db.collection('foundry_saves').deleteOne({ userId: user._id });
     res.json({ message: 'Account deleted.' });
 });
 
@@ -1139,6 +1143,32 @@ app.post('/api/wick/save', requireAuth, async (req, res) => {
         update,
         { upsert: true }
     );
+    res.json({ ok: true });
+});
+
+// ── Foundry ────────────────────────────────────────────
+// One saved factory world per user, kept as an opaque JSON-string blob.
+// updatedAt lets the client resolve local-vs-account conflicts (newest wins).
+app.get('/api/foundry/save', requireAuth, async (req, res) => {
+    const doc = await db.collection('foundry_saves').findOne({ userId: uid(req.user.id) });
+    res.json({ world: doc?.world || null, updatedAt: doc?.updatedAt || 0 });
+});
+
+app.post('/api/foundry/save', requireAuth, async (req, res) => {
+    const { world, updatedAt } = req.body;
+    if (typeof world !== 'string' || world.length > 8 * 1024 * 1024)
+        return res.status(400).json({ error: 'Invalid world blob.' });
+    const ts = Number(updatedAt) || Date.now();
+    await db.collection('foundry_saves').updateOne(
+        { userId: uid(req.user.id) },
+        { $set: { world, updatedAt: ts } },
+        { upsert: true }
+    );
+    res.json({ ok: true, updatedAt: ts });
+});
+
+app.delete('/api/foundry/save', requireAuth, async (req, res) => {
+    await db.collection('foundry_saves').deleteOne({ userId: uid(req.user.id) });
     res.json({ ok: true });
 });
 
