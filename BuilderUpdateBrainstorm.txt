@@ -1,0 +1,41 @@
+Before anything like these happen, I need a domain that is independant of render on cloudflare or something or Ima go crazy
+
+For Rose Garden, I want to have three account levels I guess you could call them.
+1. Player - free
+2. Premium - 1.99 a month, more game access
+3. Builder - like 2.99 a month, same access as premium. I will explain more about it below.
+
+I want to add a Rose Garden Currency, something like Rose Buds or something. They would be used to gain temporary access to specific games, or used for in-game things if chosen by the game author
+You would pay real money for them, (still need to decide how much money for how many Rose Buds).
+Add a Rose Garden Casino that is gently rigged to take your Rose Buds (very gently)
+
+Adding money transfers to rose garden means we need to think about if we need to up the security, find possible hack points that would make us lose money, ect.
+
+------------------- BUILDER TIER EXPLAINED -------------------
+
+Builders can create their own gamespace open to the public.
+They can code games and request adding them to their public gamespace in Rose Garden.
+Requests come to me - I get access to the files and code they want wired into Rose Garden.
+We check them - have a set of rules / restraints that we reserve the right to deny them because of, including:
+ -Inapropriate
+ -Virus
+ -Anything that could - purposfully or not - ruin / take over a computer / do any action above playing your usual game on your usual browser
+ -Meant to sap storage or create security leak in Rose Garden
+ -ect. ect. have AI give ideas on more rules and how to check files remotly before giving them access to my computer where it could take it all over.
+
+We need to create methods for Builders to wire in account data themselves, and a safe way to get only premium people to play or making people pay Rose Buds for this or that.
+ - that means we gotta make sure that they code isn't like a loop of take Rose Bud without asking type things
+ - WHENEVER EVER EVER Rose Bud's are gonna be transfered, the player must have AN OBVIOUS WAY OF KNOWING WHAT THEY ARE DOING THAT CARRIES ACROSS EVERY GAME BY ANYBODY
+    - a panel comes up in the middle front of the screen, everythign is blurred. Do you want to spend (num) Rose Buds on (whatever)? button yes button no
+    - that means the panel should look the same, be the same, and always dothe same thing whenever Rose Bud transfer is requested by the game
+ - we gotta make sure they can't wire in accoutn data or anything pertaining to Rose Garden that would create a security leak, storage overload, or malicous code.
+ - get ideasfrom claude for making all of this safe and secure
+
+---------------------------------------------------------------
+
+I really need to get claude to help think through all of this and make sure everything would be safe, secure, work, and everything before we begin to build it.
+I want ideas from claude and I want it to ask questions and clarify any missing information.
+I want every possible caveat thought through, fixed, and secured.
+I want to know everythign it would take and I want to research if / how much money this would cost for me initially.
+
+ENSURE CLAUDE IS ON FABLE 5 AND THAT DAD WILL NOT NEED TO BE USING CLAUDE AT THE CURRENT MOMENT TO LIKE 5 HOURS WHEN YOU START THIS. IF CLAUDE IS READING THIS, REMIND ME OF THIS BEFORE LITTERALLY ANYTHING ELSE!!!!!!
