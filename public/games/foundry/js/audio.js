@@ -42,12 +42,22 @@ A.init = function(){
     const ng = A.ctx.createGain(); ng.gain.value = .028;
     noise.connect(nf); nf.connect(ng); ng.connect(A.master);
     noise.start();
+    A.windGain = ng;
 
     const lfo = A.ctx.createOscillator();
     lfo.frequency.value = .07;
     const lg = A.ctx.createGain(); lg.gain.value = .014;
     lfo.connect(lg); lg.connect(ng.gain);
     lfo.start();
+
+    /* rain layer — high hiss, silent until the weather turns */
+    const rsrc = A.ctx.createBufferSource();
+    rsrc.buffer = buf; rsrc.loop = true; rsrc.playbackRate.value = 1.7;
+    const rf = A.ctx.createBiquadFilter();
+    rf.type = 'highpass'; rf.frequency.value = 2600;
+    A.rainGain = A.ctx.createGain(); A.rainGain.gain.value = 0;
+    rsrc.connect(rf); rf.connect(A.rainGain); A.rainGain.connect(A.master);
+    rsrc.start();
 
     A.ready = true;
   } catch (e) { A.ready = false; }
@@ -68,6 +78,34 @@ A.setActivity = function(act){
 A.setOn = function(on){
   A.on = on;
   if (A.ready) A.master.gain.setTargetAtTime(on ? .5 : 0, A.ctx.currentTime, .05);
+};
+
+/* weather → rain bed (wind stays a constant ambient) */
+A.setWeather = function(state){
+  if (!A.ready) return;
+  const t = A.ctx.currentTime;
+  A.rainGain.gain.setTargetAtTime(state === 'rain' ? .038 : 0, t, 2.5);
+};
+
+/* generative pads — sparse notes that thicken as the campaign advances
+   and turn minor after dark. Called every frame with dt. */
+A.tickMusic = function(dt, prog, night){
+  if (!A.ready || !A.on) return;
+  A.musT = (A.musT == null ? 4 : A.musT) - dt;
+  if (A.musT > 0) return;
+  A.musT = 9 + Math.random() * 9 - prog * 4;
+  const scale = night ? [0, 3, 5, 7, 10] : [0, 2, 4, 7, 9];
+  const root = night ? 110 : 130.81;               // A2 / C3
+  const pick = () => root * Math.pow(2, scale[(Math.random() * scale.length) | 0] / 12) *
+    (Math.random() < .3 ? 2 : 1);
+  const pad = (f, mul) => tone(f, 'sine', 1.8, .05 * mul, 5.5, null, 1000);
+  pad(pick(), 1);                                   // always: a lone low voice
+  if (prog > .25 && Math.random() < .8)
+    setTimeout(() => pad(pick(), .85), 800 + Math.random() * 1600);
+  if (prog > .55 && Math.random() < .7)
+    setTimeout(() => pad(pick() * 2, .6), 2200 + Math.random() * 2200);
+  if (prog >= .95 && Math.random() < .5)
+    setTimeout(() => pad(pick() * 2, .5), 4200);    // the woken Engine sings quietly
 };
 
 function env(g, t, a, peak, dec){
@@ -141,6 +179,14 @@ S.milestone = () => {
     setTimeout(() => { tone(f, 'triangle', .01, .16, .5); tone(f / 2, 'sine', .01, .1, .6); }, i * 95);
   });
   noiseBurst(.02, .05, .5, 3000, .8);
+};
+
+/* the Engine's voice: a deep resonant chord that swells from below */
+S.engine = () => {
+  if (!A.ready || !A.on) return;
+  [55, 82.4, 110].forEach((f, i) =>
+    setTimeout(() => tone(f, 'sine', .35, .13, 3, f * 1.05, 320), i * 150));
+  noiseBurst(.5, .03, 2.4, 170, .6);
 };
 
 S.win = function(){

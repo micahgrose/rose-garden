@@ -22,8 +22,17 @@
     <div id="objBody"></div>
   </div>
 
+  <!-- Active research chip -->
+  <div id="techChip" class="panel hidden" title="Current research — click to open the tech tree">
+    <span></span>
+    <div id="techChipBar"><div id="techChipFill"></div></div>
+  </div>
+
   <!-- Top-right cluster -->
   <div id="topRight">
+    <div id="clockWrap" class="panel" title="The world's clock — an 11-minute day. Solar follows the sun.">
+      <span id="clockSky">☀</span><span id="clockTime">--:--</span>
+    </div>
     <div id="powerWrap" class="panel" title="Power grid">
       <canvas id="powerIcon" width="26" height="26"></canvas>
       <div id="powerBars">
@@ -31,7 +40,11 @@
         <div id="powerText">—</div>
       </div>
     </div>
-    <button id="btnFoundry" class="iconBtn panel" title="The Foundry — milestones, upgrades, compendium (U)">⬢</button>
+    <button id="btnSun" class="iconBtn panel hidden" title="The Sun Anchor — hold the day/night cycle still">☀</button>
+    <button id="btnBlueprint" class="iconBtn panel" title="Blueprint — copy an area, stamp it elsewhere (C)">⧉</button>
+    <button id="btnDecon" class="iconBtn panel" title="Deconstruct — drag a box to remove & refund (X)">✂</button>
+    <button id="btnSpeed" class="iconBtn panel" title="Game speed — click to cycle, Space to pause">▶</button>
+    <button id="btnFoundry" class="iconBtn panel" title="The Foundry — milestones, recipes, stats (U)">⬢</button>
     <button id="btnInv" class="iconBtn panel" title="Inventory (E)">▤</button>
     <button id="btnSound" class="iconBtn panel" title="Sound on/off (M)">♪</button>
     <button id="btnMenu" class="iconBtn panel" title="Menu (Esc)">≡</button>
@@ -54,8 +67,17 @@
     <button class="menuBtn" id="mQuit">Save &amp; quit to title</button>
   </div>
 
-  <!-- Tooltip -->
-  <div id="tooltip" class="hidden"></div>
+  <!-- Build-mode hint banner -->
+  <div id="modeHint" class="hidden"></div>
+
+  <!-- Bottom-left dock: problem alerts + minimap -->
+  <div id="mmDock">
+    <div id="alertBar"></div>
+    <div id="minimapWrap" class="panel">
+      <canvas id="minimap" width="168" height="168"></canvas>
+      <button id="mmToggle" title="Collapse map">▾</button>
+    </div>
+  </div>
 
   <!-- Toast / tip queue -->
   <div id="toasts"></div>
@@ -76,16 +98,17 @@
   </div>
 </div>
 
+<!-- Tooltip — lives at body level so it floats above the big panel too
+     (inside #hud it was trapped under the panel's stacking context) -->
+<div id="tooltip" class="hidden"></div>
+
 <!-- ======= Title screen ======= -->
 <div id="title">
   <canvas id="titleFx"></canvas>
   <div id="titleInner">
     <div id="titleLogo">FOUNDRY</div>
     <div id="titleSub">the world engine sleeps beneath the ash</div>
-    <div id="titleBtns">
-      <button id="btnContinue" class="titleBtn hidden">CONTINUE</button>
-      <button id="btnNew" class="titleBtn">NEW WORLD</button>
-    </div>
+    <div id="titleBtns"></div>
     <div id="titleHint">mine · belt · smelt · assemble · reignite</div>
   </div>
   <div id="titleFoot">left-drag build · right-click remove · wheel zoom · middle-drag / WASD pan · R rotate · T test world</div>
@@ -106,6 +129,9 @@
 <script src="js/audio.js"></script>
 <script src="js/render.js"></script>
 <script src="js/ui.js"></script>
+<!-- RoseGarden-only: ties the three save slots to the player's account.
+     Must load after ui.js and before main.js. -->
+<script src="js/rosegarden.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
