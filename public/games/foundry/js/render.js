@@ -89,6 +89,65 @@ R.buildGround = function(S){
       x.stroke();
     }
   }
+  /* ---- the world heals: life radiates from the Core as tiers complete ----
+     radius grows with msIndex; won/freeplay = full bloom. Rebuilt on each
+     milestone (drainEvents → R.buildGround). */
+  /* heal radius per completed tier (tiles): barely creeps in for the first
+     few tiers, then accelerates; full map on victory */
+  const HEAL_R = [0, 2, 4, 6, 8, 11, 14, 17, 20, 24, 28, 33, 38, 45, 53, 63, 70, 78, 100, 120, 140, 158, 1e4];
+  const msDone = S.won || S.freeplay ? HEAL_R.length - 1 : Math.min(S.msIndex || 0, HEAL_R.length - 1);
+  R._heal = null;
+  if (HEAL_R[msDone] > 0){
+    const ccx = S.w / 2, ccy = S.h / 2;
+    const maxD = Math.hypot(ccx, ccy) + 6;
+    const healR = Math.min(HEAL_R[msDone], maxD);
+    R._heal = { cx: ccx, cy: ccy, r: healR };
+    const fade = Math.max(4, healR * .25);
+    const hr = F.makeRng((S.seed ^ 0x51ed270b) >>> 0);
+    for (let ty = 0; ty < S.h; ty++) for (let tx = 0; tx < S.w; tx++){
+      const jitter = (hr() - .5) * 5;                 // ragged organic edge
+      const gr1 = hr(), gr2 = hr();                   // fixed draws → stable pattern per tier
+      const i = ty * S.w + tx;
+      if (S.oreType[i]) continue;                     // never green over ore or oil
+      if (S.water && S.water[i]) continue;            // …or across open water
+      const d = Math.hypot(tx + .5 - ccx, ty + .5 - ccy) + jitter;
+      let h = (healR - d) / fade;
+      if (h <= 0) continue;
+      h = Math.min(1, h);
+      // mossy base wash
+      const v = S.ground[i];
+      x.fillStyle = `rgba(${34 + v * 3},${58 + v * 4},${34 + v * 2},${(.5 + v * .04) * h * .8})`;
+      x.fillRect(tx * g, ty * g, g, g);
+      // sparse low grass
+      if (h > .4 && gr1 < .05){
+        x.strokeStyle = `rgba(${95 + gr2 * 30},${138 + gr2 * 40},${72 + gr2 * 20},${.4 * h})`;
+        x.lineWidth = 1;
+        const bx = tx * g + 2 + gr2 * (g - 4), by = ty * g + g * .7;
+        for (let b = 0; b < 2; b++){
+          x.beginPath();
+          x.moveTo(bx + b * 2, by);
+          x.lineTo(bx + b * 2 + (gr1 * 20 % 1 - .5) * 2, by - 2 - gr2 * 2.5);
+          x.stroke();
+        }
+      }
+      // very rare small flowers deep in the healed zone
+      if (h > .65 && gr1 >= .05 && gr1 < .056){
+        x.fillStyle = gr2 < .5 ? `rgba(216,194,106,${.6 * h})` : `rgba(201,162,201,${.6 * h})`;
+        x.beginPath();
+        x.arc(tx * g + 2 + gr2 * (g - 4), ty * g + 2 + gr1 * 16 % (g - 4), .9 + gr2 * .5, 0, 7);
+        x.fill();
+      }
+    }
+  }
+  /* ---- open water (v3 worlds): dark lakes with shore rims, then decks ---- */
+  if (S.water){
+    for (let ty = 0; ty < S.h; ty++) for (let tx = 0; tx < S.w; tx++){
+      if (S.water[ty * S.w + tx]) paintWaterTile(x, S, tx, ty, g);
+    }
+    for (let ty = 0; ty < S.h; ty++) for (let tx = 0; tx < S.w; tx++){
+      if (S.platform[ty * S.w + tx]) paintPlatformTile(x, tx, ty, g);
+    }
+  }
   // ore patch under-glow (so patches read from far zoom)
   for (let ty = 0; ty < S.h; ty++) for (let tx = 0; tx < S.w; tx++){
     const i = ty * S.w + tx;
@@ -99,6 +158,57 @@ R.buildGround = function(S){
     x.fillRect(tx * g, ty * g, g, g);
   }
   R.groundCanvas = cv;
+};
+
+/* one water tile: darker in the deeps, pale rim along every shore, the
+   occasional static glint (deterministic per tile so rebuilds are stable) */
+function paintWaterTile(x, S, tx, ty, g){
+  const i = ty * S.w + tx;
+  const N = ty > 0        && S.water[i - S.w];
+  const So = ty < S.h - 1 && S.water[i + S.w];
+  const W = tx > 0        && S.water[i - 1];
+  const E = tx < S.w - 1  && S.water[i + 1];
+  x.fillStyle = (N && So && W && E) ? '#0b1722' : '#0e1d2b';
+  x.fillRect(tx * g, ty * g, g, g);
+  x.fillStyle = 'rgba(140,200,220,.18)';
+  if (!N)  x.fillRect(tx * g, ty * g, g, 1);
+  if (!So) x.fillRect(tx * g, ty * g + g - 1, g, 1);
+  if (!W)  x.fillRect(tx * g, ty * g, 1, g);
+  if (!E)  x.fillRect(tx * g + g - 1, ty * g, 1, g);
+  let h2 = (tx * 668265263 + ty * 374761393) >>> 0;
+  h2 = (h2 ^ (h2 >> 13)) * 1274126177 >>> 0;
+  if ((h2 & 15) === 3){
+    x.fillStyle = 'rgba(150,210,230,.10)';
+    x.fillRect(tx * g + ((h2 >> 4) % (g - 4)) + 1, ty * g + ((h2 >> 7) % (g - 3)) + 1, 3, 1);
+  }
+}
+
+/* one platform deck tile painted onto the ground canvas */
+function paintPlatformTile(x, tx, ty, g){
+  const px = tx * g, py = ty * g;
+  x.fillStyle = '#39404e';
+  x.fillRect(px, py, g, g);
+  x.fillStyle = 'rgba(0,0,0,.28)';                       // plank seams
+  x.fillRect(px, py + Math.floor(g / 3), g, 1);
+  x.fillRect(px, py + Math.floor(g * 2 / 3), g, 1);
+  x.fillStyle = 'rgba(255,255,255,.07)';                 // top light
+  x.fillRect(px, py, g, 1);
+  x.strokeStyle = 'rgba(8,10,14,.55)';                   // edge frame
+  x.lineWidth = 1;
+  x.strokeRect(px + .5, py + .5, g - 1, g - 1);
+  x.fillStyle = 'rgba(210,220,235,.25)';                 // corner rivets
+  x.fillRect(px + 1, py + 1, 1, 1); x.fillRect(px + g - 2, py + 1, 1, 1);
+  x.fillRect(px + 1, py + g - 2, 1, 1); x.fillRect(px + g - 2, py + g - 2, 1, 1);
+}
+
+/* patch one tile after a platform is laid or lifted (water map never changes,
+   so the neighbours' shore rims stay valid) */
+R.platTile = function(S, tx, ty){
+  if (!R.groundCanvas) return;
+  const g = R.groundScale;
+  const x = R.groundCanvas.getContext('2d');
+  if (S.platform[ty * S.w + tx]) paintPlatformTile(x, tx, ty, g);
+  else paintWaterTile(x, S, tx, ty, g);
 };
 
 /* patch one tile of the ground canvas (deposit depleted → scar) */
@@ -338,6 +448,98 @@ function drawItemIcon(x, id, s){
       }
       break;
     }
+    case 'module': { // slottable machine insert, glyph per flavour
+      x.fillStyle = '#252b36'; x.strokeStyle = outline;
+      rrect(x, -7 * u, -7 * u, 14 * u, 14 * u, 3 * u); x.fill(); x.stroke();
+      x.strokeStyle = hexA(c1, .9); x.lineWidth = 1.1 * u;
+      rrect(x, -5.2 * u, -5.2 * u, 10.4 * u, 10.4 * u, 2 * u); x.stroke();
+      // contact pins
+      x.fillStyle = '#9aa4b2';
+      for (let i = -1; i <= 1; i++) x.fillRect(i * 4 * u - u, 7 * u, 2 * u, 2 * u);
+      const g2 = it.icon.g;
+      x.fillStyle = c1; x.strokeStyle = c1; x.lineWidth = 1.4 * u; x.lineCap = 'round';
+      if (g2 === 'speed'){        // double chevron »
+        for (const ox of [-2.6, 1.4]){
+          x.beginPath();
+          x.moveTo(ox * u, -3.4 * u); x.lineTo((ox + 3) * u, 0); x.lineTo(ox * u, 3.4 * u);
+          x.stroke();
+        }
+      } else if (g2 === 'eff'){   // leaf / droplet
+        x.beginPath();
+        x.moveTo(0, -3.8 * u);
+        x.quadraticCurveTo(4 * u, -1 * u, 0, 3.8 * u);
+        x.quadraticCurveTo(-4 * u, -1 * u, 0, -3.8 * u);
+        x.closePath(); x.fill();
+      } else if (g2 === 'dur'){   // shield
+        x.beginPath();
+        x.moveTo(0, -3.8 * u);
+        x.lineTo(3.2 * u, -2.2 * u);
+        x.lineTo(3.2 * u, .6 * u);
+        x.quadraticCurveTo(3.2 * u, 2.8 * u, 0, 4 * u);
+        x.quadraticCurveTo(-3.2 * u, 2.8 * u, -3.2 * u, .6 * u);
+        x.lineTo(-3.2 * u, -2.2 * u);
+        x.closePath(); x.stroke();
+      } else {                    // prod: plus
+        x.beginPath();
+        x.moveTo(-3.2 * u, 0); x.lineTo(3.2 * u, 0);
+        x.moveTo(0, -3.2 * u); x.lineTo(0, 3.2 * u);
+        x.stroke();
+      }
+      break;
+    }
+    case 'dust': { // pile of crushed grit
+      x.fillStyle = c2; x.strokeStyle = outline;
+      x.beginPath();
+      x.moveTo(-8 * u, 6 * u);
+      x.quadraticCurveTo(-3 * u, -4 * u, 0, -5 * u);
+      x.quadraticCurveTo(3 * u, -4 * u, 8 * u, 6 * u);
+      x.closePath(); x.fill(); x.stroke();
+      x.fillStyle = c1;
+      x.beginPath();
+      x.moveTo(-5 * u, 6 * u);
+      x.quadraticCurveTo(-1.5 * u, -2.5 * u, 0.5 * u, -3.5 * u);
+      x.quadraticCurveTo(2 * u, -2 * u, 4.5 * u, 6 * u);
+      x.closePath(); x.fill();
+      // stray grains
+      x.fillStyle = c1;
+      for (const [gx, gy, gr] of [[-7.5, 3, 1.1], [7, 1.5, 1.2], [5.5, -3, .9], [-5, -2.5, .9]]){
+        x.beginPath(); x.arc(gx * u, gy * u, gr * u, 0, 7); x.fill(); x.stroke();
+      }
+      break;
+    }
+    case 'flask': { // science pack — stoppered flask of glowing reagent
+      // glass body
+      x.fillStyle = 'rgba(215,235,245,.28)'; x.strokeStyle = outline;
+      x.beginPath();
+      x.moveTo(-2.2 * u, -8 * u); x.lineTo(-2.2 * u, -3 * u);
+      x.lineTo(-6.5 * u, 5.5 * u);
+      x.quadraticCurveTo(-7 * u, 8 * u, -4.5 * u, 8 * u);
+      x.lineTo(4.5 * u, 8 * u);
+      x.quadraticCurveTo(7 * u, 8 * u, 6.5 * u, 5.5 * u);
+      x.lineTo(2.2 * u, -3 * u); x.lineTo(2.2 * u, -8 * u);
+      x.closePath(); x.fill(); x.stroke();
+      // liquid
+      x.fillStyle = c1;
+      x.beginPath();
+      x.moveTo(-4.9 * u, 2.4 * u);
+      x.lineTo(-6.5 * u, 5.5 * u);
+      x.quadraticCurveTo(-7 * u, 8 * u, -4.5 * u, 8 * u);
+      x.lineTo(4.5 * u, 8 * u);
+      x.quadraticCurveTo(7 * u, 8 * u, 6.5 * u, 5.5 * u);
+      x.lineTo(4.9 * u, 2.4 * u);
+      x.closePath(); x.fill();
+      // bubbles + glow
+      x.fillStyle = hexA('#ffffff', .55);
+      x.beginPath(); x.arc(-1.5 * u, 5.4 * u, .9 * u, 0, 7); x.fill();
+      x.beginPath(); x.arc(1.8 * u, 4 * u, .6 * u, 0, 7); x.fill();
+      // cork
+      x.fillStyle = c2; x.strokeStyle = outline;
+      rrect(x, -3 * u, -9.5 * u, 6 * u, 2.6 * u, u); x.fill(); x.stroke();
+      // shine
+      x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = .9 * u;
+      x.beginPath(); x.moveTo(-3.4 * u, 1.5 * u); x.lineTo(-5.2 * u, 5.6 * u); x.stroke();
+      break;
+    }
     case 'hull': {
       x.fillStyle = c2; x.strokeStyle = outline;
       x.beginPath();
@@ -390,11 +592,12 @@ R.makeBuildingIcon = function(key, size){
 /* ==================================================================== */
 
 const FAM_ACCENT = {
-  smelter: '#ff9040', alloy: '#ff6a3a', asm: '#59d6ff', refinery: '#7de08a',
+  smelter: '#ff9040', alloy: '#ff6a3a', asm: '#59d6ff', refinery: '#7de08a', crusher: '#e8c26a',
 };
 
 function drawEntBody(x, e, s, time, S){
   const def = F.BUILDINGS[e.key];
+  if (e.broken){ drawCrumbled(x, e, s, time); return; }
   switch (e.kind){
     case 'belt': drawBelt(x, e, s, time, S); break;
     case 'ubelt': drawTunnel(x, e, s, time, S); break;
@@ -406,17 +609,130 @@ function drawEntBody(x, e, s, time, S){
     case 'gen': drawGen(x, e, s, time, def); break;
     case 'turbine': drawTurbine(x, e, s, time, def); break;
     case 'solar': drawSolar(x, e, s, def); break;
+    case 'acc': drawAcc(x, e, s, time); break;
+    case 'lamp': drawLamp(x, e, s, time, S); break;
     case 'pole': drawPole(x, e, s, time, S); break;
     case 'pump': drawPump(x, e, s, time, def); break;
+    case 'tank': drawTank(x, e, s, def); break;
+    case 'port': drawPortPad(x, e, s, time, S); break;
+    case 'lab': drawLab(x, e, s, time, def); break;
+    case 'beacon': drawBeacon(x, e, s, time, S); break;
     case 'core': drawCore(x, e, s, time, S); break;
+    case 'platform': {
+      // ghost / build-bar art only — placed decks live on the ground canvas
+      x.fillStyle = '#39404e';
+      x.fillRect(0, 0, s, s);
+      x.fillStyle = 'rgba(0,0,0,.28)';
+      x.fillRect(0, s / 3, s, Math.max(1, s * .04));
+      x.fillRect(0, s * 2 / 3, s, Math.max(1, s * .04));
+      x.strokeStyle = 'rgba(8,10,14,.6)';
+      x.lineWidth = Math.max(1, s * .05);
+      x.strokeRect(s * .03, s * .03, s * .94, s * .94);
+      break;
+    }
+  }
+  // slotted-module pips along the top-right edge
+  if (e.mods && e.mods.length){
+    for (let i = 0; i < e.mods.length; i++){
+      const it = F.ITEMS[e.mods[i]];
+      if (!it) continue;
+      x.fillStyle = it.icon.c1;
+      x.strokeStyle = 'rgba(8,10,14,.8)';
+      x.lineWidth = 1;
+      rrect(x, e.w * s - s * .22 - i * s * .18, s * .1, s * .13, s * .13, s * .03);
+      x.fill(); x.stroke();
+    }
   }
   // disconnected from any pole network → blinking red bolt
   if (S && !e.netId &&
-      (def && (def.power || e.kind === 'gen' || e.kind === 'turbine' || e.kind === 'solar'))){
+      (def && (def.power || e.kind === 'gen' || e.kind === 'turbine' || e.kind === 'solar' || e.kind === 'acc'))){
     drawBolt(x, s * .22, s * .24, s * .30, `rgba(255,110,110,${.55 + .35 * Math.sin(time * 5)})`);
   }
 }
 R.drawEntBody = drawEntBody;
+
+/* ---- broken machines: crumbled in on themselves ----
+   The wreck is built from a charred snapshot of the machine's OWN intact
+   art, sliced into shards that slump toward the middle with holes torn
+   out — so every machine crumbles as itself. Seeded by entity id, so each
+   ruin collapses its own way and stays that way. Smoke curls off it. */
+const _wreckSnaps = {};
+function brokenSnap(e, s){
+  const q = Math.max(8, Math.round(s / 8) * 8);   // quantize so zoom can't flood the cache
+  const key = `${e.key}_${e.dir}_${e.recipe || ''}_${q}`;
+  let cv = _wreckSnaps[key];
+  if (cv) return cv;
+  cv = document.createElement('canvas');
+  cv.width = e.w * q; cv.height = e.h * q;
+  const c = cv.getContext('2d');
+  const fake = Object.assign({}, e, { broken: false, active: false, crafting: false, mods: [] });
+  drawEntBody(c, fake, q, 0, null);
+  // char the whole body
+  c.globalCompositeOperation = 'source-atop';
+  c.fillStyle = 'rgba(24,18,14,.55)';
+  c.fillRect(0, 0, cv.width, cv.height);
+  c.globalCompositeOperation = 'source-over';
+  return _wreckSnaps[key] = cv;
+}
+
+function drawCrumbled(x, e, s, time){
+  const W = e.w * s, H = e.h * s;
+  const snap = brokenSnap(e, s);
+  // deterministic per-entity rng — the ruin keeps its shape frame to frame
+  let sd = ((e.id + 1) * 2654435761) >>> 0;
+  const rnd = () => (sd = (sd * 1664525 + 1013904223) >>> 0) / 4294967296;
+  // caved-in dark interior showing through the gaps
+  x.fillStyle = 'rgba(12,10,9,.92)';
+  x.fillRect(W * .07, H * .09, W * .86, H * .85);
+  // shards of the old body, slumped toward the middle
+  const N = 4, cw = W / N, ch = H / N;
+  const sw = snap.width / N, sh = snap.height / N;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++){
+    const r1 = rnd(), r2 = rnd(), r3 = rnd(), r4 = rnd(), r5 = rnd(), r6 = rnd();
+    if (r1 < .16 && !(i === 1 && j === 1)) continue;          // torn-out hole
+    const cx = (i + .5) / N - .5, cy = (j + .5) / N - .5;     // -.5...5 from center
+    const d = Math.hypot(cx, cy);
+    const pull = .08 + r2 * .12;                              // inward collapse
+    const dx = -cx * pull * W + (r5 - .5) * W * .09;          // + sideways scatter
+    const dy = -cy * pull * H + (1 - d) * H * .07 + (r6 - .5) * H * .09;  // middle sinks deepest
+    const rot = (r4 - .5) * .55 * (d + .4);
+    const sc = .82 + r3 * .2;
+    x.save();
+    x.translate(i * cw + cw / 2 + dx, j * ch + ch / 2 + dy);
+    x.rotate(rot);
+    x.scale(sc, sc);
+    x.drawImage(snap, i * sw, j * sh, sw, sh, -cw / 2, -ch / 2, cw, ch);
+    x.restore();
+  }
+  // rubble spilled along the base
+  x.fillStyle = '#26211c';
+  for (let k = 0; k < 3 + N; k++){
+    const rx = (rnd() * .9 + .05) * W, rw = (.06 + rnd() * .09) * s;
+    x.beginPath();
+    x.arc(rx, H - rw * .4, rw, Math.PI, 0);
+    x.fill();
+  }
+  // embers still breathing in the wreck
+  for (let k = 0; k < 3; k++){
+    const ex = (rnd() * .6 + .2) * W, ey = (rnd() * .5 + .3) * H;
+    const a = .18 + .26 * (0.5 + 0.5 * Math.sin(time * (2 + k * .7) + e.id * 1.7 + k * 2.1));
+    x.fillStyle = `rgba(255,130,60,${a.toFixed(3)})`;
+    x.beginPath();
+    x.arc(ex, ey, Math.max(1, s * .045), 0, Math.PI * 2);
+    x.fill();
+  }
+  // smoke curling off (throttled per wreck; only while on screen)
+  if (!e._smk || time > e._smk || time < e._smk - 2){
+    e._smk = time + .35 + Math.random() * .55;
+    R.spawnParticle({
+      x: e.x + .25 + Math.random() * (e.w - .5),
+      y: e.y + .15 + Math.random() * .4,
+      vx: (Math.random() - .5) * .25, vy: -.35 - Math.random() * .35,
+      life: 1.9, maxLife: 1.9, color: 'rgba(64,58,54,.4)',
+      size: .1 + Math.random() * .08, drag: .5,
+    });
+  }
+}
 
 /* small lightning bolt marker */
 function drawBolt(x, bx, by, sz, color){
@@ -494,8 +810,8 @@ function drawBelt(x, e, s, time, S){
   // animated chevrons
   const speed = F.BUILDINGS[e.key].speed * (S ? F.beltMul(S) : 1);
   const phase = (time * speed) % .5;
-  const tier = e.key === 'belt3' ? 2 : e.key === 'belt2' ? 1 : 0;
-  const chevCol = tier === 2 ? 'rgba(150,210,255,.4)' : tier === 1 ? 'rgba(255,200,120,.34)' : 'rgba(255,255,255,.22)';
+  const tier = e.key === 'belt4' ? 3 : e.key === 'belt3' ? 2 : e.key === 'belt2' ? 1 : 0;
+  const chevCol = tier === 3 ? 'rgba(205,170,255,.5)' : tier === 2 ? 'rgba(150,210,255,.4)' : tier === 1 ? 'rgba(255,200,120,.34)' : 'rgba(255,255,255,.22)';
   x.strokeStyle = chevCol;
   x.lineWidth = Math.max(1, s * .06);
   x.lineCap = 'round';
@@ -583,39 +899,85 @@ function drawSplitter(x, e, s, time, S){
   x.fillStyle = '#242b37';
   rrect(x, -s * .3, -s * .3, s * .6, s * .6, s * .08);
   x.fill();
-  // three-way fan arrows
-  x.strokeStyle = 'rgba(255,214,138,.65)';
+  // three-way fan arrows (0=front, -90°=left, +90°=right in local space):
+  // blocked lanes dark red, filtered lanes cyan, ranked lanes brighter the higher their priority
   x.lineWidth = Math.max(1, s * .05);
   x.lineCap = 'round';
-  for (const a of [0, -Math.PI / 2, Math.PI / 2]){
-    x.save(); x.rotate(a);
+  const LANE_A = { front: 0, left: -Math.PI / 2, right: Math.PI / 2 };
+  for (const n of ['front', 'left', 'right']){
+    const blocked = e.exBlock && e.exBlock[n];
+    const p = e.exPrio ? e.exPrio[n] : 0;
+    if (blocked){
+      x.strokeStyle = 'rgba(255,100,100,.6)';
+    } else {
+      x.strokeStyle = (e.exFilt && e.exFilt[n]) ? 'rgba(120,220,255,.9)'
+        : p === 1 ? 'rgba(255,214,138,1)'
+        : p === 2 ? 'rgba(255,214,138,.8)'
+        : p === 3 ? 'rgba(255,214,138,.65)'
+        : 'rgba(255,214,138,.5)';
+    }
+    x.save(); x.rotate(LANE_A[n]);
     x.beginPath();
-    x.moveTo(0, 0); x.lineTo(s * .22, 0);
-    x.moveTo(s * .13, -s * .07); x.lineTo(s * .23, 0); x.lineTo(s * .13, s * .07);
+    if (blocked){
+      x.moveTo(-s * .08, -s * .08); x.lineTo(s * .08, s * .08);
+      x.moveTo(s * .08, -s * .08); x.lineTo(-s * .08, s * .08);
+    } else {
+      x.moveTo(0, 0); x.lineTo(s * .22, 0);
+      x.moveTo(s * .13, -s * .07); x.lineTo(s * .23, 0); x.lineTo(s * .13, s * .07);
+    }
     x.stroke();
     x.restore();
   }
   x.restore();
+  // filter badges, drawn upright over each reserved lane
+  if (e.exFilt){
+    const LANE_D = { front: e.dir, left: (e.dir + 3) & 3, right: (e.dir + 1) & 3 };
+    for (const n in LANE_D){
+      if (!e.exFilt[n]) continue;
+      const d = LANE_D[n];
+      const bx = c + DX[d] * s * .3, by = c + DY[d] * s * .3;
+      const ic = R.itemIcon(e.exFilt[n], Math.max(8, Math.round(s * .4)));
+      x.drawImage(ic, bx - ic.width / 2, by - ic.height / 2);
+    }
+  }
 }
 
 /* ---- chest ---- */
 function drawChest(x, e, s){
   const pad = s * .1;
-  x.fillStyle = '#4a4136';
+  const vault = e.key === 'chest2', tarp = !!F.BUILDINGS[e.key].tarOnly;
+  x.fillStyle = tarp ? '#33302a' : vault ? '#3a4250' : '#4a4136';
   x.strokeStyle = 'rgba(0,0,0,.55)';
   rrect(x, pad, pad, s - pad * 2, s - pad * 2, s * .12);
   x.fill(); x.stroke();
-  x.fillStyle = '#5d5344';
-  rrect(x, pad * 1.5, pad * 1.5, s - pad * 3, (s - pad * 3) * .45, s * .08);
-  x.fill();
-  x.fillStyle = '#c9a86a';
-  x.fillRect(s / 2 - s * .06, s * .32, s * .12, s * .14);
+  if (tarp){
+    // an open brick-lined mouth, black and glossy
+    x.fillStyle = '#12100c';
+    x.beginPath(); x.ellipse(s / 2, s * .44, s * .3, s * .22, 0, 0, 7); x.fill();
+    x.fillStyle = 'rgba(200,200,190,.14)';
+    x.beginPath(); x.ellipse(s * .42, s * .38, s * .1, s * .05, -.5, 0, 7); x.fill();
+  } else {
+    x.fillStyle = vault ? '#4b5567' : '#5d5344';
+    rrect(x, pad * 1.5, pad * 1.5, s - pad * 3, (s - pad * 3) * .45, s * .08);
+    x.fill();
+  }
+  if (vault){
+    // riveted band
+    x.fillStyle = '#96a3b5';
+    for (const rx of [.24, .5, .76]){
+      x.beginPath(); x.arc(s * rx, s * .3, s * .035, 0, 7); x.fill();
+    }
+  }
+  if (!tarp){
+    x.fillStyle = vault ? '#9fc2e8' : '#c9a86a';
+    x.fillRect(s / 2 - s * .06, s * .32, s * .12, s * .14);
+  }
   // fill gauge
-  const cap = F.CHEST_CAP;
+  const cap = F.BUILDINGS[e.key].cap || F.CHEST_CAP;
   const fr = clamp((e.total || 0) / cap, 0, 1);
   x.fillStyle = 'rgba(0,0,0,.4)';
   x.fillRect(pad * 1.6, s - pad * 2.2, s - pad * 3.2, s * .07);
-  x.fillStyle = '#ffd68a';
+  x.fillStyle = tarp ? '#8a8171' : '#ffd68a';
   x.fillRect(pad * 1.6, s - pad * 2.2, (s - pad * 3.2) * fr, s * .07);
   // out arrow
   drawPortArrow(x, e, s);
@@ -629,7 +991,7 @@ function drawPipe(x, e, s, S){
   if (S){
     for (let d = 0; d < 4; d++){
       const n = F.entAt(S, e.x + DX[d], e.y + DY[d]);
-      if (n && (n.kind === 'pipe' || n.kind === 'pump' ||
+      if (n && (n.kind === 'pipe' || n.kind === 'pump' || n.kind === 'tank' ||
         (n.kind === 'machine' && F.BUILDINGS[n.key].fam === 'refinery'))) conn.push(d);
     }
   }
@@ -887,6 +1249,40 @@ function drawMachine(x, e, s, time, def){
       const ic = R.itemIcon(F.RECIPES[e.recipe].out, Math.round(s * .55));
       x.drawImage(ic, cx - s * .27, s * .18);
     }
+  } else if (def.fam === 'crusher'){
+    // grinding drums under a hopper mouth
+    const shake = e.crafting && e.active ? Math.sin(time * 31) * s * .02 : 0;
+    x.fillStyle = '#1b1712';
+    rrect(x, cx - s * .62, cy - s * .55, s * 1.24, s * 1.1, s * .1);
+    x.fill();
+    x.strokeStyle = 'rgba(0,0,0,.5)'; x.stroke();
+    // hopper lips
+    x.fillStyle = '#4a4136';
+    x.beginPath();
+    x.moveTo(cx - s * .62, cy - s * .55); x.lineTo(cx - s * .18, cy - s * .1);
+    x.lineTo(cx - s * .62, cy - s * .1); x.closePath(); x.fill();
+    x.beginPath();
+    x.moveTo(cx + s * .62, cy - s * .55); x.lineTo(cx + s * .18, cy - s * .1);
+    x.lineTo(cx + s * .62, cy - s * .1); x.closePath(); x.fill();
+    // two counter-rotating toothed drums
+    for (const side of [-1, 1]){
+      x.save();
+      x.translate(cx + side * s * .26 + shake * side, cy + s * .18);
+      x.rotate((e.crafting && e.active ? time * 5 : .6) * -side);
+      x.fillStyle = side < 0 ? '#8b96a6' : '#7d8999';
+      x.strokeStyle = 'rgba(0,0,0,.55)';
+      x.beginPath();
+      for (let i = 0; i < 7; i++){
+        x.save(); x.rotate(i / 7 * Math.PI * 2);
+        x.rect(-s * .045, -s * .34, s * .09, s * .09);
+        x.restore();
+      }
+      x.arc(0, 0, s * .27, 0, 7);
+      x.fill(); x.stroke();
+      x.fillStyle = hexA(accent, .9);
+      x.beginPath(); x.arc(0, 0, s * .08, 0, 7); x.fill();
+      x.restore();
+    }
   }
   // progress bar
   if (e.crafting){
@@ -947,14 +1343,15 @@ function drawGen(x, e, s, time, def){
 
 /* ---- turbine ---- */
 function drawTurbine(x, e, s, time, def){
-  chassis(x, e, s, '#ffd76e', 2);
+  const chrome = e.key === 'turbine2';
+  chassis(x, e, s, chrome ? '#8fe0d4' : '#ffd76e', 2);
   const w = e.w * s, h = e.h * s, cx = w / 2, cy = h / 2;
   x.fillStyle = '#1b212c';
   x.beginPath(); x.arc(cx, cy, s * .58, 0, 7); x.fill();
   x.save();
   x.translate(cx, cy);
-  x.rotate(e.load > 0 ? time * (4 + e.load * 14) : 0);
-  x.fillStyle = '#96a3b5';
+  x.rotate(e.load > 0 ? time * ((chrome ? 7 : 4) + e.load * 14) : 0);
+  x.fillStyle = chrome ? '#a9ded7' : '#96a3b5';
   x.strokeStyle = 'rgba(0,0,0,.5)';
   for (let i = 0; i < 5; i++){
     x.save();
@@ -976,18 +1373,30 @@ function drawTurbine(x, e, s, time, def){
 function drawSolar(x, e, s, def){
   const w = e.w * s, h = e.h * s;
   const pad = s * .09;
+  // tower/helios variants get warmer, denser mirror fields
+  const tower = e.key === 'solar2', helios = e.key === 'solar3';
   x.fillStyle = '#232a37';
   x.strokeStyle = 'rgba(0,0,0,.55)';
   rrect(x, pad, pad, w - pad * 2, h - pad * 2, s * .1);
   x.fill(); x.stroke();
-  const cols = 4, rows = 4;
+  const cols = e.w * 2, rows = e.h * 2;
   const cw = (w - pad * 4) / cols, ch = (h - pad * 4) / rows;
   for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++){
     const g = x.createLinearGradient(0, pad * 2 + j * ch, 0, pad * 2 + (j + 1) * ch);
-    g.addColorStop(0, '#274067');
-    g.addColorStop(1, '#1c2c47');
+    if (tower || helios){ g.addColorStop(0, '#3b4f74'); g.addColorStop(1, '#243252'); }
+    else { g.addColorStop(0, '#274067'); g.addColorStop(1, '#1c2c47'); }
     x.fillStyle = g;
     x.fillRect(pad * 2 + i * cw + 1, pad * 2 + j * ch + 1, cw - 2, ch - 2);
+  }
+  if (tower || helios){
+    // central molten-salt collector
+    const cx = w / 2, cy = h / 2;
+    const rg = x.createRadialGradient(cx, cy, 0, cx, cy, s * (helios ? .5 : .34));
+    rg.addColorStop(0, '#fff2c8'); rg.addColorStop(.5, '#ffd76e'); rg.addColorStop(1, 'rgba(255,160,60,0)');
+    x.fillStyle = rg;
+    x.beginPath(); x.arc(cx, cy, s * (helios ? .5 : .34), 0, 7); x.fill();
+    x.fillStyle = '#3d4656'; x.strokeStyle = 'rgba(0,0,0,.55)';
+    x.beginPath(); x.arc(cx, cy, s * .13, 0, 7); x.fill(); x.stroke();
   }
   x.fillStyle = 'rgba(160,210,255,.16)';
   x.beginPath();
@@ -998,18 +1407,124 @@ function drawSolar(x, e, s, def){
   x.closePath(); x.fill();
 }
 
+/* ---- accumulator ---- */
+function drawAcc(x, e, s, time){
+  const pad = s * .12;
+  x.fillStyle = '#2c333f';
+  x.strokeStyle = 'rgba(0,0,0,.55)';
+  rrect(x, pad, pad, s - pad * 2, s - pad * 2, s * .12);
+  x.fill(); x.stroke();
+  // charge cells
+  const fr = clamp((e.charge || 0) / F.ACC_CAP, 0, 1);
+  const cells = 4;
+  for (let i = 0; i < cells; i++){
+    const cf = clamp(fr * cells - i, 0, 1);
+    const cy2 = s - pad * 1.6 - (i + 1) * s * .155;
+    x.fillStyle = 'rgba(0,0,0,.4)';
+    rrect(x, pad * 1.8, cy2, s - pad * 3.6, s * .12, s * .03);
+    x.fill();
+    if (cf > .05){
+      x.fillStyle = e.flow < 0 ? '#ffd76e' : '#6ec6ff';
+      rrect(x, pad * 1.8, cy2, (s - pad * 3.6) * cf, s * .12, s * .03);
+      x.fill();
+    }
+  }
+  // terminals + activity shimmer
+  x.fillStyle = '#8b96a6';
+  x.fillRect(s * .3, pad * .4, s * .1, pad);
+  x.fillRect(s * .6, pad * .4, s * .1, pad);
+  if (e.flow){
+    const a = .35 + .25 * Math.sin(time * 8);
+    x.fillStyle = e.flow > 0 ? `rgba(110,198,255,${a})` : `rgba(255,215,110,${a})`;
+    x.beginPath(); x.arc(s / 2, pad * .9, s * .06, 0, 7); x.fill();
+  }
+}
+
+/* ---- lamp ---- */
+function drawLamp(x, e, s, time, S){
+  const c = s / 2;
+  const sun = S ? F.sunFactor(S) : 1;
+  const lit = !!(S && e.netId && S._netRatio && (S._netRatio[e.netId] || 0) > 0 && sun < .85);
+  // base + stem
+  x.fillStyle = '#2c333f';
+  x.strokeStyle = 'rgba(0,0,0,.55)';
+  x.beginPath(); x.arc(c, c + s * .18, s * .17, 0, 7); x.fill(); x.stroke();
+  x.strokeStyle = '#8b96a6';
+  x.lineWidth = Math.max(1.4, s * .07);
+  x.lineCap = 'round';
+  x.beginPath(); x.moveTo(c, c + s * .18); x.lineTo(c, c - s * .18); x.stroke();
+  // bulb
+  const g = x.createRadialGradient(c, c - s * .26, 0, c, c - s * .26, s * .2);
+  if (lit){
+    g.addColorStop(0, '#fff4d8');
+    g.addColorStop(.6, '#ffd68a');
+    g.addColorStop(1, 'rgba(255,180,90,.25)');
+  } else {
+    g.addColorStop(0, '#39404e');
+    g.addColorStop(1, '#242a35');
+  }
+  x.fillStyle = g;
+  x.strokeStyle = 'rgba(0,0,0,.5)';
+  x.beginPath(); x.arc(c, c - s * .26, s * .15, 0, 7); x.fill(); x.stroke();
+}
+
 /* ---- power pole / pylon ----
    Drawn in fake perspective: base on the tile, mast rising "north";
    wires attach at R.poleTop(). */
 R.poleTop = function(e){
   const pylon = e.key === 'pole2';
-  return [e.x + .5, e.y + .5 - (pylon ? 1.05 : .78)];
+  const sub = e.key === 'pole3';
+  return [e.x + .5, e.y + .5 - (pylon ? 1.05 : sub ? .62 : .78)];
 };
 function drawPole(x, e, s, time, S){
   const c = s / 2;
   const pylon = e.key === 'pole2';
+  const sub = e.key === 'pole3';
   const live = !!(S && S._netSupply && e.netId && S._netSupply[e.netId] > 0);
-  const topY = c - (pylon ? 1.05 : .78) * s;
+  const topY = c - (pylon ? 1.05 : sub ? .62 : .78) * s;
+  if (sub){
+    // substation: squat transformer cabinet with twin bushings
+    x.fillStyle = 'rgba(0,0,0,.3)';
+    x.beginPath(); x.ellipse(c + s * .06, c + s * .12, s * .3, s * .12, 0, 0, 7); x.fill();
+    const g = x.createLinearGradient(0, topY, 0, c + s * .2);
+    g.addColorStop(0, '#3d4656'); g.addColorStop(1, '#272e3a');
+    x.fillStyle = g;
+    x.strokeStyle = 'rgba(0,0,0,.55)';
+    rrect(x, c - s * .3, topY + s * .16, s * .6, (c + s * .2) - (topY + s * .16), s * .07);
+    x.fill(); x.stroke();
+    // cooling fins
+    x.strokeStyle = 'rgba(0,0,0,.4)';
+    x.lineWidth = Math.max(.8, s * .03);
+    for (let i = 1; i <= 3; i++){
+      const fy = topY + s * .16 + i * s * .16;
+      x.beginPath(); x.moveTo(c - s * .26, fy); x.lineTo(c + s * .26, fy); x.stroke();
+    }
+    // hazard chevron plate
+    x.fillStyle = '#c9a84a';
+    rrect(x, c - s * .1, c - s * .04, s * .2, s * .14, s * .03); x.fill();
+    // twin bushings on top
+    const insCol2 = live ? `rgba(120,220,255,${.7 + .25 * Math.sin(time * 3 + e.id)})` : 'rgba(140,150,165,.8)';
+    x.strokeStyle = '#8b96a6';
+    x.lineWidth = Math.max(1.2, s * .06);
+    x.lineCap = 'round';
+    for (const ix of [-s * .16, s * .16]){
+      x.beginPath(); x.moveTo(c + ix, topY + s * .18); x.lineTo(c + ix, topY); x.stroke();
+    }
+    x.fillStyle = insCol2;
+    for (const ix of [-s * .16, s * .16]){
+      x.beginPath(); x.arc(c + ix, topY, Math.max(1.4, s * .055), 0, 7); x.fill();
+    }
+    // live hum glow
+    if (live){
+      x.fillStyle = `rgba(120,220,255,${.06 + .03 * Math.sin(time * 3)})`;
+      x.beginPath(); x.arc(c, c - s * .1, s * .55, 0, 7); x.fill();
+    }
+    if (S && e.links && !e.links.length){
+      x.fillStyle = `rgba(255,214,138,${.35 + .25 * Math.sin(time * 4)})`;
+      x.beginPath(); x.arc(c, topY - s * .12, s * .05, 0, 7); x.fill();
+    }
+    return;
+  }
   // ground shadow + base plate
   x.fillStyle = 'rgba(0,0,0,.3)';
   x.beginPath(); x.ellipse(c + s * .06, c + s * .1, s * .2, s * .1, 0, 0, 7); x.fill();
@@ -1165,6 +1680,254 @@ function drawPump(x, e, s, time, def){
 }
 
 /* ---- THE CORE ---- */
+/* ---- drone depot ---- */
+function drawPortPad(x, e, s, time, S){
+  const w = e.w * s, h = e.h * s, cx = w / 2, cy = h / 2;
+  const pad = s * .08;
+  x.fillStyle = '#2b323d';
+  x.strokeStyle = 'rgba(0,0,0,.55)';
+  rrect(x, pad, pad, w - pad * 2, h - pad * 2, s * .12);
+  x.fill(); x.stroke();
+  // hazard corner chevrons
+  x.fillStyle = 'rgba(255,214,138,.5)';
+  for (const [qx, qy] of [[pad * 1.5, pad * 1.5], [w - pad * 1.5, pad * 1.5], [pad * 1.5, h - pad * 1.5], [w - pad * 1.5, h - pad * 1.5]]){
+    x.beginPath(); x.arc(qx, qy, s * .05, 0, 7); x.fill();
+  }
+  // landing ring
+  x.strokeStyle = e.mode ? 'rgba(110,198,255,.7)' : 'rgba(140,150,165,.4)';
+  x.lineWidth = Math.max(1.4, s * .06);
+  x.beginPath(); x.arc(cx, cy, s * .52, 0, 7); x.stroke();
+  x.beginPath(); x.arc(cx, cy, s * .18, 0, 7); x.stroke();
+  // mode glyph: ▲ export (provide) / ▼ import (request)
+  if (e.mode){
+    x.fillStyle = e.mode === 'provide' ? 'rgba(255,214,138,.95)' : 'rgba(110,198,255,.95)';
+    x.beginPath();
+    if (e.mode === 'provide'){
+      x.moveTo(cx, cy - s * .38); x.lineTo(cx + s * .12, cy - s * .18); x.lineTo(cx - s * .12, cy - s * .18);
+    } else {
+      x.moveTo(cx, cy - s * .18); x.lineTo(cx + s * .12, cy - s * .38); x.lineTo(cx - s * .12, cy - s * .38);
+    }
+    x.closePath(); x.fill();
+  } else {
+    // unconfigured: blinking amber dot
+    x.fillStyle = `rgba(255,180,84,${.4 + .3 * Math.sin(time * 5)})`;
+    x.beginPath(); x.arc(cx, cy, s * .08, 0, 7); x.fill();
+  }
+  // configured-item badge
+  if (e.portItem){
+    const ic = R.itemIcon(e.portItem, Math.max(10, Math.round(s * .42)));
+    x.fillStyle = 'rgba(10,13,18,.75)';
+    x.beginPath(); x.arc(w - s * .3, h - s * .3, s * .26, 0, 7); x.fill();
+    x.drawImage(ic, w - s * .3 - ic.width / 2, h - s * .3 - ic.height / 2);
+  }
+  // parked drones on the pad
+  if (e.drones){
+    let slot = 0;
+    for (const d of e.drones){
+      if (d.st !== 'idle') continue;
+      drawDroneBody(x, cx - s * .28 + slot * s * .56, cy + s * .3, s * .8, time, false);
+      slot++;
+    }
+  }
+  // antenna
+  x.strokeStyle = '#8b96a6';
+  x.lineWidth = Math.max(1, s * .05);
+  x.beginPath(); x.moveTo(s * .22, s * .3); x.lineTo(s * .22, s * .02); x.stroke();
+  x.fillStyle = e.mode ? `rgba(110,198,255,${.5 + .4 * Math.sin(time * 3 + e.id)})` : '#5b6674';
+  x.beginPath(); x.arc(s * .22, s * .02, s * .05, 0, 7); x.fill();
+  // request depots split out every side with a conveyor leading out — mark them
+  if (S && e.mode === 'request' && F.portOutTiles){
+    x.fillStyle = 'rgba(110,198,255,.9)';
+    for (const [px, py, od] of F.portOutTiles(S, e)){
+      // centre of the footprint edge cell bordering this exit, nudged to the rim
+      const lx = (px - e.x), ly = (py - e.y);
+      let ax, ay;
+      if (od === 0){ ax = (lx + .5) * s; ay = s * .12; }
+      else if (od === 2){ ax = (lx + .5) * s; ay = h - s * .12; }
+      else if (od === 1){ ax = w - s * .12; ay = (ly + .5) * s; }
+      else { ax = s * .12; ay = (ly + .5) * s; }
+      const r = s * .12, dx = [0, 1, 0, -1][od], dy = [-1, 0, 1, 0][od];
+      // outward triangle
+      x.beginPath();
+      x.moveTo(ax + dx * r, ay + dy * r);
+      x.lineTo(ax - dx * r * .6 + dy * r * .7, ay - dy * r * .6 + dx * r * .7);
+      x.lineTo(ax - dx * r * .6 - dy * r * .7, ay - dy * r * .6 - dx * r * .7);
+      x.closePath(); x.fill();
+    }
+  }
+}
+
+/* a drone chassis at screen-space center (bx,by); sc ≈ tile px */
+function drawDroneBody(x, bx, by, sc, time, flying){
+  // rotor blurs
+  x.strokeStyle = flying ? 'rgba(200,220,240,.55)' : 'rgba(140,150,165,.5)';
+  x.lineWidth = Math.max(1, sc * .035);
+  for (const [ox, oy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]){
+    const rx = bx + ox * sc * .16, ry = by + oy * sc * .13;
+    x.beginPath();
+    if (flying){
+      const a = time * 26 + ox * 2 + oy;
+      x.moveTo(rx - Math.cos(a) * sc * .1, ry - Math.sin(a) * sc * .05);
+      x.lineTo(rx + Math.cos(a) * sc * .1, ry + Math.sin(a) * sc * .05);
+    } else {
+      x.moveTo(rx - sc * .08, ry); x.lineTo(rx + sc * .08, ry);
+    }
+    x.stroke();
+  }
+  // body
+  x.fillStyle = '#96a3b5';
+  x.strokeStyle = 'rgba(0,0,0,.55)';
+  x.lineWidth = 1;
+  rrect(x, bx - sc * .1, by - sc * .08, sc * .2, sc * .16, sc * .05);
+  x.fill(); x.stroke();
+  x.fillStyle = flying ? '#6ec6ff' : '#4a5261';
+  x.beginPath(); x.arc(bx, by, sc * .04, 0, 7); x.fill();
+}
+R.drawDroneBody = drawDroneBody;
+
+/* ---- reservoir tank ---- */
+function drawTank(x, e, s, def){
+  const w = e.w * s, h = e.h * s, cx = w / 2, cy = h / 2;
+  const pad = s * .08;
+  // footing
+  x.fillStyle = '#272e3a';
+  x.strokeStyle = 'rgba(0,0,0,.55)';
+  rrect(x, pad, pad, w - pad * 2, h - pad * 2, s * .1);
+  x.fill(); x.stroke();
+  // big riveted drum
+  const g = x.createRadialGradient(cx - s * .3, cy - s * .3, 0, cx, cy, s * .95);
+  g.addColorStop(0, '#4b5567');
+  g.addColorStop(.7, '#39414f');
+  g.addColorStop(1, '#272e3a');
+  x.fillStyle = g;
+  x.beginPath(); x.arc(cx, cy, s * .82, 0, 7); x.fill();
+  x.strokeStyle = 'rgba(0,0,0,.6)'; x.lineWidth = 1.4;
+  x.beginPath(); x.arc(cx, cy, s * .82, 0, 7); x.stroke();
+  // seam bands + rivets
+  x.strokeStyle = 'rgba(0,0,0,.35)';
+  x.lineWidth = Math.max(1, s * .04);
+  x.beginPath(); x.arc(cx, cy, s * .58, 0, 7); x.stroke();
+  x.fillStyle = '#8b96a6';
+  for (let i = 0; i < 8; i++){
+    const a = i / 8 * Math.PI * 2 + .4;
+    x.beginPath(); x.arc(cx + Math.cos(a) * s * .7, cy + Math.sin(a) * s * .7, s * .04, 0, 7); x.fill();
+  }
+  // level window: dark slot with oil column
+  x.fillStyle = '#12100c';
+  rrect(x, cx - s * .12, cy - s * .44, s * .24, s * .88, s * .08);
+  x.fill();
+  const fr = clamp(e.fluid / def.cap, 0, 1);
+  if (fr > .02){
+    x.fillStyle = '#3b3320';
+    const lh = s * .84 * fr;
+    rrect(x, cx - s * .09, cy + s * .42 - lh, s * .18, lh, s * .05);
+    x.fill();
+  }
+  // top hatch
+  x.fillStyle = '#5b6674';
+  x.strokeStyle = 'rgba(0,0,0,.5)';
+  x.beginPath(); x.arc(cx, cy - s * .55, s * .11, 0, 7); x.fill(); x.stroke();
+}
+
+/* ---- laboratory ---- */
+function drawLab(x, e, s, time, def){
+  chassis(x, e, s, '#c07ae8', 0);
+  const w = e.w * s, h = e.h * s, cx = w / 2, cy = h / 2;
+  // pack liquid colour follows what's being read
+  const packC = e.workItem && F.ITEMS[e.workItem] ? F.ITEMS[e.workItem].icon.c1 : '#8a7fb8';
+  // glass dome on a plinth
+  x.fillStyle = '#1b212c';
+  x.beginPath(); x.arc(cx, cy, s * .56, 0, 7); x.fill();
+  x.strokeStyle = 'rgba(0,0,0,.55)'; x.lineWidth = s * .05;
+  x.beginPath(); x.arc(cx, cy, s * .56, 0, 7); x.stroke();
+  // swirling reagent
+  const glow = e.active ? .55 + .25 * Math.sin(time * 4) : .18;
+  const rg = x.createRadialGradient(cx, cy, 0, cx, cy, s * .48);
+  rg.addColorStop(0, hexA('#ffffff', glow * .5));
+  rg.addColorStop(.4, hexA(packC, glow));
+  rg.addColorStop(1, hexA(packC, .06));
+  x.fillStyle = rg;
+  x.beginPath(); x.arc(cx, cy, s * .48, 0, 7); x.fill();
+  // orbiting motes while researching
+  if (e.active){
+    x.fillStyle = 'rgba(255,255,255,.85)';
+    for (let i = 0; i < 3; i++){
+      const a = time * (1.6 + i * .5) + i * 2.1;
+      const rr2 = s * (.22 + .1 * i);
+      x.beginPath(); x.arc(cx + Math.cos(a) * rr2, cy + Math.sin(a) * rr2 * .8, s * .04, 0, 7); x.fill();
+    }
+  }
+  // dome shine
+  x.strokeStyle = 'rgba(255,255,255,.35)'; x.lineWidth = Math.max(1, s * .04);
+  x.beginPath(); x.arc(cx - s * .1, cy - s * .1, s * .4, -2.4, -1.2); x.stroke();
+  // read-progress arc around the dome
+  if (e.workItem){
+    x.strokeStyle = hexA('#c07ae8', .95);
+    x.lineWidth = Math.max(1.4, s * .06);
+    x.beginPath(); x.arc(cx, cy, s * .56, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * clamp(e.prog, 0, 1));
+    x.stroke();
+  }
+  // corner flask emblem
+  const fk = R.itemIcon(e.workItem || 'pack1', Math.round(s * .42));
+  x.globalAlpha = e.workItem ? .95 : .4;
+  x.drawImage(fk, s * .12, h - s * .55);
+  x.globalAlpha = 1;
+}
+
+/* ---- beacon ---- */
+function drawBeacon(x, e, s, time, S){
+  chassis(x, e, s, '#59d6ff', 0);
+  const w = e.w * s, h = e.h * s, cx = w / 2, cy = h / 2;
+  const on = !!(e.mods && e.mods.length && e.netId &&
+    S && S._netRatio && (S._netRatio[e.netId] || 0) > 0);
+  // antenna mast + emitter orb
+  x.strokeStyle = '#8b96a6';
+  x.lineWidth = s * .09;
+  x.lineCap = 'round';
+  x.beginPath(); x.moveTo(cx, cy + s * .3); x.lineTo(cx, cy - s * .34); x.stroke();
+  // dish ribs
+  x.strokeStyle = '#5b6674';
+  x.lineWidth = s * .05;
+  for (const a of [-.7, 0, .7]){
+    x.beginPath();
+    x.moveTo(cx, cy - s * .05);
+    x.lineTo(cx + Math.sin(a) * s * .34, cy + s * .28);
+    x.stroke();
+  }
+  const orbC = on ? '#6ec6ff' : '#4a5261';
+  const g = x.createRadialGradient(cx, cy - s * .38, 0, cx, cy - s * .38, s * .18);
+  g.addColorStop(0, on ? '#eaf7ff' : '#6b7686'); g.addColorStop(1, orbC);
+  x.fillStyle = g;
+  x.strokeStyle = 'rgba(0,0,0,.5)';
+  x.beginPath(); x.arc(cx, cy - s * .38, s * .14, 0, 7); x.fill(); x.stroke();
+  // broadcast ripples
+  if (on){
+    const t = (time * .7) % 1;
+    for (const off of [0, .5]){
+      const tt = (t + off) % 1;
+      x.strokeStyle = `rgba(110,198,255,${(1 - tt) * .5})`;
+      x.lineWidth = Math.max(1, s * .04);
+      x.beginPath(); x.arc(cx, cy - s * .38, s * (.16 + tt * .5), 0, 7); x.stroke();
+    }
+  }
+}
+
+/* aura square for a beacon (selection / ghost) */
+R.drawBeaconRange = function(x, S, e, key){
+  const def = F.BUILDINGS[key];
+  const r = def.range;
+  const s = R.tilePx();
+  const [sx, sy] = R.worldToScreen(e.x - r, e.y - r);
+  const size = (def.w + r * 2) * s;
+  x.fillStyle = 'rgba(110,198,255,.06)';
+  x.fillRect(sx, sy, size, size);
+  x.strokeStyle = 'rgba(110,198,255,.5)';
+  x.setLineDash([s * .18, s * .12]);
+  x.lineWidth = 1.5;
+  x.strokeRect(sx, sy, size, size);
+  x.setLineDash([]);
+};
+
 function drawCore(x, e, s, time, S){
   const w = e.w * s, h = e.h * s, cx = w / 2, cy = h / 2;
   const pulse = S ? S.core.pulse : 0;
@@ -1353,6 +2116,20 @@ function emitAmbient(S, dt, vis){
       });
     }
   }
+  // green spores drift over the healed land
+  if (R._heal && R._heal.r > 6 && Math.random() < dt * 5){
+    const [wx0, wy0] = R.screenToWorld(0, 0);
+    const [wx1, wy1] = R.screenToWorld(R.W, R.H);
+    const sx2 = wx0 + Math.random() * (wx1 - wx0);
+    const sy2 = wy0 + Math.random() * (wy1 - wy0);
+    if (Math.hypot(sx2 - R._heal.cx, sy2 - R._heal.cy) < R._heal.r * .85){
+      R.spawnParticle({
+        x: sx2, y: sy2,
+        vx: .04 + Math.random() * .08, vy: -.05 - Math.random() * .08,
+        life: 3.5, maxLife: 3.5, color: 'rgba(150,220,140,.45)', size: .045 + Math.random() * .03, drag: .1,
+      });
+    }
+  }
 }
 
 /* event hooks from UI: place puffs, mine sparks, core absorb */
@@ -1379,6 +2156,19 @@ R.onEvent = function(S, ev){
         });
       }
       break;
+    case 'broken': {
+      // a machine dies: one dark cough of smoke and soot
+      const bdef = F.BUILDINGS[ev.key];
+      for (let i = 0; i < 14; i++){
+        R.spawnParticle({
+          x: ev.x + (bdef ? bdef.w / 2 : .5) + (Math.random() - .5) * (bdef ? bdef.w : 1),
+          y: ev.y + (bdef ? bdef.h / 2 : .5) + (Math.random() - .5) * (bdef ? bdef.h : 1),
+          vx: (Math.random() - .5) * .8, vy: -.4 - Math.random() * .9,
+          life: 1.6, maxLife: 1.6, color: 'rgba(62,56,52,.6)', size: .12 + Math.random() * .08, drag: .6,
+        });
+      }
+      break;
+    }
     case 'handmine':
       for (let i = 0; i < 5; i++){
         R.spawnParticle({
@@ -1428,9 +2218,12 @@ function drawGhost(x, S, ghost, time){
   const s = R.tilePx();
   const [px, py] = R.worldToScreen(ghost.x, ghost.y);
   // pole ghost: coverage square + dashed previews of the links it would form
+  if (def.kind === 'beacon'){
+    R.drawBeaconRange(x, S, { x: ghost.x, y: ghost.y }, ghost.key);
+  }
   if (def.kind === 'pole'){
     R.drawPoleCoverage(x, S, ghost.x, ghost.y, ghost.key);
-    const topA = [ghost.x + .5, ghost.y + .5 - (ghost.key === 'pole2' ? 1.05 : .78)];
+    const topA = [ghost.x + .5, ghost.y + .5 - (ghost.key === 'pole2' ? 1.05 : ghost.key === 'pole3' ? .62 : .78)];
     const [ax, ay] = R.worldToScreen(topA[0], topA[1]);
     x.setLineDash([s * .12, s * .1]);
     x.lineWidth = Math.max(1, s * .04);
@@ -1641,7 +2434,22 @@ R.draw = function(S, dt, U){
     for (const e of vis){
       if ((e.kind === 'belt' || e.kind === 'splitter' || e.kind === 'ubelt') && e.item){
         const [px, py] = R.worldToScreen(e.x, e.y);
-        const [ix, iy] = beltPoint(e, s, clamp(e.t, 0, 1));
+        let ix, iy;
+        // any item at t < 0 is still crossing IN from the previous tile
+        // (a splitter hand-off): glide it straight along its entry line
+        // from that tile's center to this one's edge — no pops, ever
+        const d0 = e.srcDir != null ? e.srcDir : e.dir;
+        if (e.kind === 'splitter'){
+          const t2 = clamp(e.t, -.5, .5);
+          ix = s / 2 + DX[d0] * s * (t2 - .5);
+          iy = s / 2 + DY[d0] * s * (t2 - .5);
+        } else if (e.t < 0){
+          const t2 = Math.max(e.t, -.5);
+          ix = s / 2 + DX[d0] * s * (t2 - .5);
+          iy = s / 2 + DY[d0] * s * (t2 - .5);
+        } else {
+          [ix, iy] = beltPoint(e, s, clamp(e.t, 0, 1));
+        }
         const ic = R.itemIcon(e.item, isz);
         x.save();
         x.shadowColor = 'rgba(0,0,0,.5)';
@@ -1660,6 +2468,164 @@ R.draw = function(S, dt, U){
   emitAmbient(S, dt, vis);
   updateParticles(dt);
   drawParticles(x);
+
+  /* cargo drones in flight (above everything on the ground) */
+  for (const e of S.ents){
+    if (e.kind !== 'port' || !e.drones) continue;
+    for (const d of e.drones){
+      if (d.st === 'idle') continue;
+      const [dx2, dy2] = R.worldToScreen(d.x, d.y);
+      const s3 = R.tilePx();
+      if (dx2 < -40 || dy2 < -40 || dx2 > R.W + 40 || dy2 > R.H + 40) continue;
+      // ground shadow
+      x.fillStyle = 'rgba(0,0,0,.25)';
+      x.beginPath(); x.ellipse(dx2, dy2 + s3 * .55, s3 * .16, s3 * .07, 0, 0, 7); x.fill();
+      const bob = Math.sin(time * 3 + d.x) * s3 * .04;
+      R.drawDroneBody(x, dx2, dy2 + bob, s3, time, true);
+      if (d.cargo > 0 && d.item){
+        const ic = R.itemIcon(d.item, Math.max(8, Math.round(s3 * .34)));
+        x.drawImage(ic, dx2 - ic.width / 2, dy2 + bob + s3 * .12);
+      }
+    }
+  }
+
+  /* night falls: HEAVY dark over the world, warm circles around lit lamps */
+  const sun = F.sunFactor(S);
+  const NIGHT_MAX = .84;
+  const dark = (1 - sun) * NIGHT_MAX;
+  if (dark > .01){
+    const s2 = R.tilePx();
+    /* The darkness lives on its own layer, and lamps punch holes in it —
+       so lamplight REVEALS the ground as it looks by day instead of
+       painting foggy amber over it. Overlapping holes just merge (erasing
+       twice is still erased), so clumps of lamps can never blow out. */
+    if (!R._nightCv) R._nightCv = document.createElement('canvas');
+    const nc = R._nightCv;
+    if (nc.width !== R.W || nc.height !== R.H){ nc.width = R.W; nc.height = R.H; }
+    const nx = nc.getContext('2d');
+    nx.globalCompositeOperation = 'source-over';
+    nx.clearRect(0, 0, R.W, R.H);
+    nx.fillStyle = `rgba(6,9,20,${dark})`;
+    nx.fillRect(0, 0, R.W, R.H);
+    nx.globalCompositeOperation = 'destination-out';
+    const lamps = [];
+    for (const e of S.ents){
+      if (e.kind !== 'lamp') continue;
+      if (!e.netId || !S._netRatio || (S._netRatio[e.netId] || 0) <= 0) continue;
+      const glow = F.BUILDINGS[e.key].glow || 5;
+      const [lx, ly] = R.worldToScreen(e.x + .5, e.y + .24);
+      const rad = glow * s2;
+      if (lx < -rad || ly < -rad || lx > R.W + rad || ly > R.H + rad) continue;
+      lamps.push([lx, ly, rad, e.id]);
+      const hole = nx.createRadialGradient(lx, ly, 0, lx, ly, rad);
+      hole.addColorStop(0, 'rgba(0,0,0,.55)');    // half the dark lifted at the heart…
+      hole.addColorStop(.45, 'rgba(0,0,0,.4)');
+      hole.addColorStop(1, 'rgba(0,0,0,0)');
+      nx.fillStyle = hole;
+      nx.beginPath(); nx.arc(lx, ly, rad, 0, 7); nx.fill();
+    }
+    // the Core itself holds back the dark a little
+    const [ccx2, ccy2] = R.worldToScreen(S.core.x + S.core.w / 2, S.core.y + S.core.h / 2);
+    const crad = 7 * s2;
+    if (ccx2 > -crad && ccy2 > -crad && ccx2 < R.W + crad && ccy2 < R.H + crad){
+      const ch = nx.createRadialGradient(ccx2, ccy2, 0, ccx2, ccy2, crad);
+      ch.addColorStop(0, 'rgba(0,0,0,.4)');
+      ch.addColorStop(1, 'rgba(0,0,0,0)');
+      nx.fillStyle = ch;
+      nx.beginPath(); nx.arc(ccx2, ccy2, crad, 0, 7); nx.fill();
+    }
+    /* the wanderer's lantern: a small glow rides the cursor, fading in and
+       out with the dark. 1/2.5 of a lamp's radius, and its light leans
+       amber over reveal 80:20 (a lamp is 50:50) — company, not utility. */
+    const CURSOR_R = (15 / 2.5) * s2;
+    const mOn = R.mouse && R.mouse.x != null;
+    if (mOn){
+      const hole = nx.createRadialGradient(R.mouse.x, R.mouse.y, 0, R.mouse.x, R.mouse.y, CURSOR_R);
+      hole.addColorStop(0, 'rgba(0,0,0,.22)');
+      hole.addColorStop(.45, 'rgba(0,0,0,.16)');
+      hole.addColorStop(1, 'rgba(0,0,0,0)');
+      nx.fillStyle = hole;
+      nx.beginPath(); nx.arc(R.mouse.x, R.mouse.y, CURSOR_R, 0, 7); nx.fill();
+    }
+    x.drawImage(nc, 0, 0);
+    /* …and half the light given back as warm amber, pooled with
+       per-channel MAX so it never stacks toward white */
+    if (lamps.length || mOn){
+      if (!R._lightCv) R._lightCv = document.createElement('canvas');
+      const lc = R._lightCv;
+      if (lc.width !== R.W || lc.height !== R.H){ lc.width = R.W; lc.height = R.H; }
+      const lx2 = lc.getContext('2d');
+      lx2.clearRect(0, 0, R.W, R.H);
+      lx2.globalCompositeOperation = 'lighten';
+      const k2 = dark / NIGHT_MAX;
+      for (const [lx, ly, rad, id] of lamps){
+        const flicker = .85 + .15 * Math.sin(time * 6 + id * 1.7);
+        const lg = lx2.createRadialGradient(lx, ly, 0, lx, ly, rad);
+        lg.addColorStop(0, `rgba(255,200,110,${.25 * k2 * flicker})`);
+        lg.addColorStop(.5, `rgba(255,180,90,${.12 * k2})`);
+        lg.addColorStop(1, 'rgba(255,160,60,0)');
+        lx2.fillStyle = lg;
+        lx2.beginPath(); lx2.arc(lx, ly, rad, 0, 7); lx2.fill();
+      }
+      if (mOn){
+        const breathe = .9 + .1 * Math.sin(time * 2.2);
+        const cg = lx2.createRadialGradient(R.mouse.x, R.mouse.y, 0, R.mouse.x, R.mouse.y, CURSOR_R);
+        cg.addColorStop(0, `rgba(255,200,110,${.4 * k2 * breathe})`);
+        cg.addColorStop(.5, `rgba(255,180,90,${.19 * k2})`);
+        cg.addColorStop(1, 'rgba(255,160,60,0)');
+        lx2.fillStyle = cg;
+        lx2.beginPath(); lx2.arc(R.mouse.x, R.mouse.y, CURSOR_R, 0, 7); lx2.fill();
+      }
+      x.save();
+      x.globalCompositeOperation = 'lighter';
+      x.drawImage(lc, 0, 0);
+      x.restore();
+    }
+  }
+
+  /* weather — occasional rain showers (screen-space streaks + audio bed) */
+  if (!R.weather){ R.weather = { state: 'clear', t: 16 }; R.wx = []; }
+  R.weather.t -= dt;
+  if (R.weather.t <= 0){
+    R.weather.state = Math.random() < .35 ? 'rain' : 'clear';
+    R.weather.t = 30 + Math.random() * 50;
+    if (F.audio && F.audio.setWeather) F.audio.setWeather(R.weather.state);
+  }
+  if (R.weather.state === 'rain'){
+    for (let i = 0; i < 4 && R.wx.length < 240; i++)
+      R.wx.push({ x: Math.random() * (R.W + 160) - 80, y: -12, vx: 50 + Math.random() * 40, vy: 420 + Math.random() * 160, life: 4 });
+  }
+  if (R.wx && R.wx.length){
+    for (let i = R.wx.length - 1; i >= 0; i--){
+      const p = R.wx[i];
+      p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.life <= 0 || p.y > R.H + 24 || p.x > R.W + 60){ R.wx.splice(i, 1); continue; }
+      x.strokeStyle = 'rgba(150,200,235,.32)';
+      x.lineWidth = 1;
+      x.beginPath(); x.moveTo(p.x, p.y); x.lineTo(p.x - p.vx * .022, p.y - p.vy * .022); x.stroke();
+    }
+  }
+
+  /* healing pulse — a wave of green rolls out from the Core on tier-up */
+  if (R.healPulse){
+    R.healPulse.t += dt;
+    const dur = 3.2;
+    if (R.healPulse.t >= dur) R.healPulse = null;
+    else {
+      const k = R.healPulse.t / dur;
+      const [hx, hy] = R.worldToScreen(S.core.x + S.core.w / 2, S.core.y + S.core.h / 2);
+      const rad = (k * k * .8 + k * .2) * Math.hypot(R.W, R.H) * .75;
+      const col = R.healPulse.gold ? '255,214,110' : '140,220,150';
+      for (const [off, wgt] of [[0, .55], [-.06, .25]]){
+        const rr2 = Math.max(1, rad * (1 + off));
+        x.strokeStyle = `rgba(${col},${(1 - k) * wgt})`;
+        x.lineWidth = Math.max(2, R.tilePx() * .35 * (1 - k));
+        x.beginPath(); x.arc(hx, hy, rr2, 0, 7); x.stroke();
+      }
+      x.fillStyle = `rgba(${col},${(1 - k) * .05})`;
+      x.beginPath(); x.arc(hx, hy, rad, 0, 7); x.fill();
+    }
+  }
 
   /* hover + ghost + belt-drag preview */
   if (U){
@@ -1682,6 +2648,33 @@ R.draw = function(S, dt, U){
       }
     }
     if (U.ghost) drawGhost(x, S, U.ghost, time);
+    // blueprint stamp preview
+    if (U.bpGhost){
+      for (const g of U.bpGhost){
+        const def = F.BUILDINGS[g.key];
+        const [px, py] = R.worldToScreen(g.x, g.y);
+        x.fillStyle = g.ok ? 'rgba(89,214,255,.14)' : 'rgba(255,118,118,.18)';
+        rrect(x, px + 1, py + 1, def.w * s - 2, def.h * s - 2, s * .1);
+        x.fill();
+        x.strokeStyle = g.ok ? 'rgba(89,214,255,.6)' : 'rgba(255,118,118,.7)';
+        x.lineWidth = 1.4;
+        rrect(x, px + 1, py + 1, def.w * s - 2, def.h * s - 2, s * .1);
+        x.stroke();
+      }
+    }
+    // deconstruct / copy marquee
+    if (U.marquee){
+      const mq = U.marquee;
+      const [px0, py0] = R.worldToScreen(mq.x0, mq.y0);
+      const w = (mq.x1 - mq.x0 + 1) * s, h = (mq.y1 - mq.y0 + 1) * s;
+      const red = mq.mode === 'decon';
+      x.fillStyle = red ? 'rgba(255,118,118,.14)' : 'rgba(89,214,255,.12)';
+      x.fillRect(px0, py0, w, h);
+      x.strokeStyle = red ? 'rgba(255,118,118,.85)' : 'rgba(89,214,255,.8)';
+      x.lineWidth = 2; x.setLineDash([s * .2, s * .14]);
+      x.strokeRect(px0, py0, w, h);
+      x.setLineDash([]);
+    }
     if (U.hover && !U.ghost){
       const e = F.entAt(S, U.hover[0], U.hover[1]);
       if (e && e.kind !== 'core'){
@@ -1692,9 +2685,21 @@ R.draw = function(S, dt, U){
         x.stroke();
       }
     }
+    /* selected belt line: every belt in the run glows cyan */
+    if (U.lineSel && U.lineSel.length){
+      x.fillStyle = 'rgba(89,214,255,.14)';
+      x.strokeStyle = 'rgba(89,214,255,.8)';
+      x.lineWidth = Math.max(1, s * .05);
+      for (const b of U.lineSel){
+        const [px, py] = R.worldToScreen(b.x, b.y);
+        x.fillRect(px + 1, py + 1, s - 2, s - 2);
+        x.strokeRect(px + 1.5, py + 1.5, s - 3, s - 3);
+      }
+    }
     if (U.selection){
       const e = U.selection;
       if (e.kind === 'pole') R.drawPoleCoverage(x, S, e.x, e.y, e.key);
+      if (e.kind === 'beacon') R.drawBeaconRange(x, S, e, e.key);
       const [px, py] = R.worldToScreen(e.x, e.y);
       x.strokeStyle = 'rgba(255,180,84,.9)';
       x.lineWidth = 2;
@@ -1715,6 +2720,31 @@ R.draw = function(S, dt, U){
       x.lineTo(px + s * .22, py - s * .92 + bob);
       x.closePath();
       x.fill(); x.stroke();
+    }
+    /* first-problem callout: a labelled arrow pinned to the troubled machine */
+    if (U.callout){
+      const [px, py] = R.worldToScreen(U.callout.x, U.callout.y);
+      const bob = Math.sin(time * 4.5) * s * .1;
+      x.fillStyle = '#ff9a7a';
+      x.strokeStyle = 'rgba(0,0,0,.55)';
+      x.lineWidth = 2;
+      x.beginPath();
+      x.moveTo(px, py - s * .28 + bob);
+      x.lineTo(px - s * .2, py - s * .66 + bob);
+      x.lineTo(px + s * .2, py - s * .66 + bob);
+      x.closePath();
+      x.fill(); x.stroke();
+      x.font = `600 ${Math.max(11, s * .3)}px ${'Rubik, sans-serif'}`;
+      const tw = x.measureText(U.callout.text).width;
+      const bx = px - tw / 2 - 7, by = py - s * .66 + bob - Math.max(20, s * .5);
+      x.fillStyle = 'rgba(14,18,26,.92)';
+      x.strokeStyle = 'rgba(255,154,122,.6)';
+      x.lineWidth = 1;
+      rrect(x, bx, by, tw + 14, Math.max(17, s * .4), 5);
+      x.fill(); x.stroke();
+      x.fillStyle = '#ffc4b0';
+      x.textAlign = 'left'; x.textBaseline = 'middle';
+      x.fillText(U.callout.text, bx + 7, by + Math.max(17, s * .4) / 2 + 1);
     }
   }
 

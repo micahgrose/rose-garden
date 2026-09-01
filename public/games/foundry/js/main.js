@@ -15,15 +15,17 @@ function frame(now){
 
   const S = F.ui.S;
   if (S){
+    const speed = F.ui.speed == null ? 1 : F.ui.speed;   // 0 = paused, 1/2/3 = fast-forward
     if (!S.won || S.freeplay){
-      acc += dt;
+      acc += dt * speed;
       let steps = 0;
-      while (acc >= SIM_DT && steps < 30){
+      const cap = 30 * Math.max(1, speed);
+      while (acc >= SIM_DT && steps < cap){
         F.tick(S, SIM_DT);
         acc -= SIM_DT;
         steps++;
       }
-      if (steps >= 30) acc = 0;
+      if (steps >= cap) acc = 0;
     } else {
       // cinematic: keep the world breathing slowly, no progress
       F.tick(S, SIM_DT);

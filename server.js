@@ -14,8 +14,10 @@ const httpServer = http.createServer(app);
 const io         = new IOServer(httpServer);
 
 // Default 100kb JSON everywhere, except Foundry world saves which can be a few MB.
+// The envelope limit sits above the 8 MB world cap the route enforces, so an
+// oversized world gets a clean JSON error instead of body-parser's 413 page.
 const jsonSmall = express.json();
-const jsonBig   = express.json({ limit: '8mb' });
+const jsonBig   = express.json({ limit: '12mb' });
 app.use((req, res, next) => (req.path === '/api/foundry/save' ? jsonBig : jsonSmall)(req, res, next));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -58,6 +60,16 @@ MongoClient.connect(process.env.MONGODB_URI)
             { $set: { admin: false } }
         );
 
+        // Foundry: one document per (user, slot). The pre-slot schema kept a
+        // single { userId, world } doc per user; those worlds predate the tech
+        // tree, the day/night cycle and the current tiers, so they're dropped
+        // rather than migrated. Matching on `world` means this only ever sees
+        // legacy documents — it's safe to re-run on every boot.
+        const wiped = await db.collection('foundry_saves').deleteMany({ world: { $exists: true } });
+        if (wiped.deletedCount > 0)
+            console.log(`Foundry: cleared ${wiped.deletedCount} pre-slot save(s).`);
+        await db.collection('foundry_saves').createIndex({ userId: 1, slot: 1 }, { unique: true });
+
         // Daily cleanup & warning job
         setInterval(async () => {
             const now = Date.now();
@@ -77,6 +89,7 @@ MongoClient.connect(process.env.MONGODB_URI)
                     await db.collection('users').deleteMany({ _id: { $in: ids } });
                     await db.collection('saves').deleteMany({ userId: { $in: ids } });
                     await db.collection('labyrinth_stats').deleteMany({ userId: { $in: ids } });
+                    await db.collection('foundry_saves').deleteMany({ userId: { $in: ids } });
                     console.log(`Cleanup: removed ${staleNoEmail.length} inactive no-email account(s).`);
                 }
 
@@ -90,6 +103,7 @@ MongoClient.connect(process.env.MONGODB_URI)
                     await db.collection('users').deleteMany({ _id: { $in: ids } });
                     await db.collection('saves').deleteMany({ userId: { $in: ids } });
                     await db.collection('labyrinth_stats').deleteMany({ userId: { $in: ids } });
+                    await db.collection('foundry_saves').deleteMany({ userId: { $in: ids } });
                     console.log(`Cleanup: removed ${staleEmail.length} inactive email account(s).`);
                 }
 
@@ -954,7 +968,7 @@ app.delete('/api/account', requireAuth, async (req, res) => {
     await svRemoveAll({ userId: user._id });
     await db.collection('labyrinth_stats').deleteOne({ userId: user._id });
     await db.collection('wick_saves').deleteOne({ userId: user._id });
-    await db.collection('foundry_saves').deleteOne({ userId: user._id });
+    await db.collection('foundry_saves').deleteMany({ userId: user._id });   // one doc per slot
     res.json({ message: 'Account deleted.' });
 });
 
@@ -1147,28 +1161,65 @@ app.post('/api/wick/save', requireAuth, async (req, res) => {
 });
 
 // ── Foundry ────────────────────────────────────────────
-// One saved factory world per user, kept as an opaque JSON-string blob.
-// updatedAt lets the client resolve local-vs-account conflicts (newest wins).
+// Three named factory worlds per user — one document per (user, slot), so a
+// big world can't push the others past Mongo's per-document ceiling. Each
+// world is an opaque JSON-string blob; updatedAt lets the client resolve
+// local-vs-account conflicts (newest wins).
+const FOUNDRY_MAX_BYTES = 8 * 1024 * 1024;
+const FOUNDRY_SLOTS     = 3;
+
+// Slot index from a JSON body (number) or a URL param (digits). Deliberately
+// strict: Number(null) and Number('') are both 0, and a loose check would let a
+// malformed request silently overwrite the player's first factory.
+function foundrySlot(v) {
+    const n = typeof v === 'number' ? v
+            : (typeof v === 'string' && /^\d+$/.test(v.trim())) ? Number(v)
+            : NaN;
+    return Number.isInteger(n) && n >= 0 && n < FOUNDRY_SLOTS ? n : null;
+}
+
 app.get('/api/foundry/save', requireAuth, async (req, res) => {
-    const doc = await db.collection('foundry_saves').findOne({ userId: uid(req.user.id) });
-    res.json({ world: doc?.world || null, updatedAt: doc?.updatedAt || 0 });
+    const docs = await db.collection('foundry_saves').find({ userId: uid(req.user.id) }).toArray();
+    const slots = new Array(FOUNDRY_SLOTS).fill(null);
+    for (const d of docs) {
+        const slot = foundrySlot(d.slot);
+        if (slot === null) continue;
+        slots[slot] = { name: d.name || 'Foundry', save: d.save, updatedAt: d.updatedAt || 0 };
+    }
+    res.json({ slots });
 });
 
 app.post('/api/foundry/save', requireAuth, async (req, res) => {
-    const { world, updatedAt } = req.body;
-    if (typeof world !== 'string' || world.length > 8 * 1024 * 1024)
+    const slot = foundrySlot(req.body.slot);
+    if (slot === null) return res.status(400).json({ error: 'Invalid slot.' });
+
+    const { save, updatedAt } = req.body;
+    if (typeof save !== 'string' || save.length > FOUNDRY_MAX_BYTES)
         return res.status(400).json({ error: 'Invalid world blob.' });
+
+    const name = typeof req.body.name === 'string' && req.body.name.trim()
+        ? req.body.name.trim().slice(0, 24)
+        : 'Foundry';
     const ts = Number(updatedAt) || Date.now();
+
     await db.collection('foundry_saves').updateOne(
-        { userId: uid(req.user.id) },
-        { $set: { world, updatedAt: ts } },
+        { userId: uid(req.user.id), slot },
+        { $set: { name, save, updatedAt: ts } },
         { upsert: true }
     );
     res.json({ ok: true, updatedAt: ts });
 });
 
+app.delete('/api/foundry/save/:slot', requireAuth, async (req, res) => {
+    const slot = foundrySlot(req.params.slot);
+    if (slot === null) return res.status(400).json({ error: 'Invalid slot.' });
+    await db.collection('foundry_saves').deleteOne({ userId: uid(req.user.id), slot });
+    res.json({ ok: true });
+});
+
+// wipe every slot (also catches a stale pre-slot client, which sent this)
 app.delete('/api/foundry/save', requireAuth, async (req, res) => {
-    await db.collection('foundry_saves').deleteOne({ userId: uid(req.user.id) });
+    await db.collection('foundry_saves').deleteMany({ userId: uid(req.user.id) });
     res.json({ ok: true });
 });
 

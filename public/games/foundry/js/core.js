@@ -50,6 +50,7 @@ F.newState = function(seed){
   return {
     seed: seed >>> 0,
     time: 0,               // sim seconds
+    dayT: 20,              // seconds into the day/night cycle (starts mid-morning)
     tick: 0,
     w: 0, h: 0,            // map size (set by worldgen)
     ground: null,          // Uint8Array terrain variant (visual)
@@ -67,6 +68,12 @@ F.newState = function(seed){
     freeplay: false,
     upgrades: {},          // {upgradeId: rank}
     unlocked: {},          // {buildingKey|recipeKey: true}
+    research: {            // tech tree
+      cur: null,           // techId being researched (or null)
+      done: {},            // {techId: true}
+      prog: {},            // per-tech packs consumed so far {techId: {packId: n}}
+      resv: {},            // packs currently inside working labs {packId: n} (transient-ish)
+    },
     stats: {               // rolling production, window buckets
       made: {},            // lifetime crafted {itemId: n}
       buckets: [],         // per-5s production snapshots
